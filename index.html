@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>My Dashboard</h1>
+        </header>
+
+        <section class="form-section" style="margin-bottom: 2rem; border-color: var(--primary-color);">
+            <header style="margin-bottom: 1.5rem;">
+                <h2 style="font-size: 1.5rem; text-align: center; color: var(--text-primary);">Data Testing</h2>
+            </header>
+            <div class="form-group">
+                <label for="feature-select">Select Feature</label>
+                <select id="feature-select">
+                    <option value="" disabled selected>Select a feature</option>
+                    <option value="aggregate_dashboard.html">Aggregate Data Testing</option>
+                    <option value="create_bulk_data.html">Create Bulk Data</option>
+                    <option value="area_unit_testing/index.html">Area Unit Testing</option>
+                </select>
+            </div>
+
+            <div class="button-group" style="margin-top: 1rem;">
+                <button class="btn-primary" id="proceed-btn" style="width: 100%;">Proceed</button>
+            </div>
+        </section>
+
+
+
+        <section class="form-section">
+            <div class="form-group">
+                <label for="environment">Environment</label>
+                <select id="environment">
+                    <option value="" disabled selected>Select Environment</option>
+                    <!-- Options populated by JS -->
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="tenant">Tenant</label>
+                <select id="tenant" disabled>
+                    <option value="" disabled selected>Select Tenant</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="user">User</label>
+                <div class="user-select-wrapper">
+                    <select id="user" disabled>
+                        <option value="" disabled selected>Select User</option>
+                    </select>
+                    <div class="user-actions" id="user-actions" style="display: none;">
+                        <button id="edit-user-btn" title="Edit User">✏️</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="button-group">
+                <button class="btn-secondary" id="add-user-btn">Add New User</button>
+                <button class="btn-primary" id="login-btn">Login to Application</button>
+            </div>
+        </section>
+    </div>
+
+    <!-- Modal for Add/Edit User -->
+    <div id="user-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h2 id="modal-title">Add New User</h2>
+            <form id="user-form">
+                <input type="hidden" id="user-id">
+
+                <div class="form-group">
+                    <label for="modal-env">Environment</label>
+                    <select id="modal-env" required>
+                        <option value="" disabled selected>Select Environment</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="modal-tenant">Tenant</label>
+                    <div class="tenant-input-group">
+                        <div style="display: flex; gap: 0.5rem;">
+                            <select id="modal-tenant-select" style="flex: 1;">
+                                <option value="" disabled selected>Select Tenant</option>
+                                <option value="new">+ Add New Tenant</option>
+                            </select>
+                            <button type="button" id="delete-tenant-btn" title="Delete Tenant"
+                                style="display: none; padding: 0.5rem; background: #ef4444; border: none; border-radius: 4px; cursor: pointer;">🗑️</button>
+                        </div>
+                        <input type="text" id="modal-tenant-input" placeholder="Enter new tenant name"
+                            style="display: none;">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="modal-username">Username</label>
+                    <input type="text" id="modal-username" placeholder="Enter username" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="modal-password">Password</label>
+                    <input type="password" id="modal-password" placeholder="Enter password" required>
+                </div>
+
+                <div class="modal-footer"
+                    style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem;">
+                    <button type="button" class="btn-secondary" id="modal-delete-user-btn"
+                        style="background: var(--danger-color); display: none;">Delete User</button>
+                    <button type="submit" class="btn-primary" id="modal-submit-btn">Save User</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+
+
+    <script type="module" src="script.js"></script>
+</body>
+
+</html>

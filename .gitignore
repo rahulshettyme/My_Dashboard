@@ -1,0 +1,18 @@
+# Node modules
+node_modules/
+
+# Local utility scripts
+*.bat
+*.cmd
+*.ps1
+extract-zip
+mkdirp
+mime
+browsers
+
+# Logs
+npm-debug.log*
+
+# OS Files
+.DS_Store
+Thumbs.db

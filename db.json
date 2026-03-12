@@ -1,0 +1,315 @@
+{
+  "environment_urls": {
+    "QA1": "https://v2.cropin.co.in",
+    "QA2": "https://sf-v2.cropin.co.in",
+    "QA3": "https://sg-v2.cropin.co.in",
+    "QA4": "https://eu-v2.cropin.co.in",
+    "QA5": "https://af-v2.cropin.co.in",
+    "QA6": "https://ca-v2.cropin.co.in",
+    "QA7": "https://au-v2.cropin.co.in",
+    "QA8": "https://us-v2.cropin.co.in",
+    "UAT1": "https://v2uat.cropin.co.in",
+    "UAT2": "https://sf-v2uat.cropin.co.in",
+    "PROD": "https://cloud.cropin.in"
+  },
+  "environment_api_urls": {
+    "QA1": "https://v2-gcp.cropin.co.in/qa1",
+    "QA2": "https://sf-v2-gcp.cropin.co.in/qa2",
+    "QA3": "https://sg-v2-gcp.cropin.co.in/qa3",
+    "QA4": "https://eu-v2-gcp.cropin.co.in/qa4",
+    "QA5": "https://af-v2-gcp.cropin.co.in/qa5",
+    "QA6": "https://ca-v2-gcp.cropin.co.in/qa6",
+    "QA7": "https://au-v2-gcp.cropin.co.in/qa7",
+    "QA8": "https://us-v2-gcp.cropin.co.in/qa8",
+    "UAT1": "https://v2uat-gcp.cropin.co.in/uat1",
+    "UAT2": "https://sf-v2uat-gcp.cropin.co.in/uat2",
+    "Prod": "https://cloud.cropin.in"
+  },
+  "sso_urls_prefix": {
+    "QA1": "https://v2sso-gcp.cropin.co.in/auth/realms/",
+    "QA2": "https://v2sso-gcp.cropin.co.in/auth/realms/",
+    "QA3": "https://v2sso-gcp.cropin.co.in/auth/realms/",
+    "QA4": "https://v2sso-gcp.cropin.co.in/auth/realms/",
+    "QA5": "https://v2sso-gcp.cropin.co.in/auth/realms/",
+    "QA6": "https://v2sso-gcp.cropin.co.in/auth/realms/",
+    "QA7": "https://v2sso-gcp.cropin.co.in/auth/realms/",
+    "QA8": "https://v2sso-gcp.cropin.co.in/auth/realms/",
+    "UAT1": "https://v2sso-uat-gcp.cropin.co.in/auth/realms/",
+    "UAT2": "https://v2sso-uat-gcp.cropin.co.in/auth/realms/",
+    "PROD": "https://sso.sg.cropin.in/auth/realms/"
+  },
+  "sso_urls_suffix": {
+    "default": "/protocol/openid-connect/token"
+  },
+  "unit_conversion": [
+    {
+      "unit_code": "CARAT",
+      "conversion_factor": "2.2046e-07"
+    },
+    {
+      "unit_code": "MILLIGRAM",
+      "conversion_factor": "1.1023e-09"
+    },
+    {
+      "unit_code": "GRAM",
+      "conversion_factor": "1.1023e-06"
+    },
+    {
+      "unit_code": "KILOGRAM",
+      "conversion_factor": "0.001"
+    },
+    {
+      "unit_code": "OUNCE",
+      "conversion_factor": "3.125e-05"
+    },
+    {
+      "unit_code": "METRIC_TON",
+      "conversion_factor": "1"
+    },
+    {
+      "unit_code": "TON",
+      "conversion_factor": "0.9071847"
+    },
+    {
+      "unit_code": "QUINTAL",
+      "conversion_factor": "0.1"
+    },
+    {
+      "unit_code": "DOSE",
+      "conversion_factor": "0.0135"
+    }
+  ],
+  "users": [
+    {
+      "id": "1765557612453",
+      "environment": "QA1",
+      "tenant": "qazone1",
+      "username": "9128000001",
+      "password": "test"
+    },
+    {
+      "id": "17655592136763621",
+      "environment": "QA1",
+      "tenant": "qazone1",
+      "username": "9128000001",
+      "password": "test"
+    },
+    {
+      "id": "17655592136763338",
+      "environment": "QA1",
+      "tenant": "qazone1",
+      "username": "7625098745",
+      "password": "test"
+    },
+    {
+      "id": "17655592136762534",
+      "environment": "QA1",
+      "tenant": "qazone1",
+      "username": "7259340234",
+      "password": "test"
+    },
+    {
+      "id": "17655592136768612",
+      "environment": "QA1",
+      "tenant": "qa1meteo",
+      "username": "1234560001",
+      "password": "test"
+    },
+    {
+      "id": "17655592136763712",
+      "environment": "QA2",
+      "tenant": "qazone2",
+      "username": "1234560001",
+      "password": "test"
+    },
+    {
+      "id": "1765559213676771",
+      "environment": "QA2",
+      "tenant": "qazone2",
+      "username": "1234560013",
+      "password": "test"
+    },
+    {
+      "id": "17655592136779606",
+      "environment": "QA2",
+      "tenant": "qa2sentinel",
+      "username": "1234560001",
+      "password": "test"
+    },
+    {
+      "id": "17655592136772447",
+      "environment": "QA2",
+      "tenant": "qa2sentinel",
+      "username": "1234560013",
+      "password": "test"
+    },
+    {
+      "id": "17655592136778553",
+      "environment": "QA2",
+      "tenant": "qa2indicesplanet",
+      "username": "1234560001",
+      "password": "test"
+    },
+    {
+      "id": "17655592136779788",
+      "environment": "QA2",
+      "tenant": "qa2indicesplanet",
+      "username": "1234560013",
+      "password": "test"
+    },
+    {
+      "id": "17655592136775596",
+      "environment": "QA2",
+      "tenant": "qa2wt",
+      "username": "1234560001",
+      "password": "test"
+    },
+    {
+      "id": "17655592136776237",
+      "environment": "QA2",
+      "tenant": "qa2wt",
+      "username": "1234560013",
+      "password": "test"
+    },
+    {
+      "id": "17655592136776118",
+      "environment": "QA3",
+      "tenant": "qazone3",
+      "username": "2022080901",
+      "password": "test"
+    },
+    {
+      "id": "17655592136773228",
+      "environment": "QA4",
+      "tenant": "qazone4",
+      "username": "1234560002",
+      "password": "test"
+    },
+    {
+      "id": "17655592136779",
+      "environment": "QA5",
+      "tenant": "qazone5",
+      "username": "1237891001",
+      "password": "test"
+    },
+    {
+      "id": "1765559213677360",
+      "environment": "QA5",
+      "tenant": "qa5meteomatics",
+      "username": "1234560001",
+      "password": "test"
+    },
+    {
+      "id": "17655592136772452",
+      "environment": "QA6",
+      "tenant": "qazone6",
+      "username": "1234567001",
+      "password": "test"
+    },
+    {
+      "id": "17655592136773525",
+      "environment": "QA7",
+      "tenant": "qazone7",
+      "username": "1237890001",
+      "password": "test"
+    },
+    {
+      "id": "17655592136771921",
+      "environment": "QA7",
+      "tenant": "qazone7",
+      "username": "1237890006",
+      "password": "test"
+    },
+    {
+      "id": "17655592136772917",
+      "environment": "QA7",
+      "tenant": "qazone7",
+      "username": "7625098745",
+      "password": "test"
+    },
+    {
+      "id": "17655592136773999",
+      "environment": "QA7",
+      "tenant": "qa7test",
+      "username": "123450001",
+      "password": "test"
+    },
+    {
+      "id": "17655592136775152",
+      "environment": "QA7",
+      "tenant": "qa7test",
+      "username": "1234560003",
+      "password": "test"
+    },
+    {
+      "id": "17655592136775508",
+      "environment": "QA7",
+      "tenant": "qa7test",
+      "username": "7625098745",
+      "password": "test"
+    },
+    {
+      "id": "17655592136773810",
+      "environment": "QA7",
+      "tenant": "qa7sentinelindices",
+      "username": "7777777007",
+      "password": "test"
+    },
+    {
+      "id": "17655592136773006",
+      "environment": "QA7",
+      "tenant": "qa7ibmplanet",
+      "username": "1234560001",
+      "password": "test"
+    },
+    {
+      "id": "17655592136776428",
+      "environment": "QA8",
+      "tenant": "qazone8",
+      "username": "1234560001",
+      "password": "test"
+    },
+    {
+      "id": "17655592136771402",
+      "environment": "QA8",
+      "tenant": "qazone8",
+      "username": "1234560013",
+      "password": "test"
+    },
+    {
+      "id": "17655592136774945",
+      "environment": "QA8",
+      "tenant": "qa8planet",
+      "username": "1234560001",
+      "password": "test"
+    },
+    {
+      "id": "17655592136779694",
+      "environment": "QA8",
+      "tenant": "qa8meteo",
+      "username": "1234560001",
+      "password": "test"
+    },
+    {
+      "id": "17655592136774824",
+      "environment": "PROD",
+      "tenant": "asp",
+      "username": "2022280601",
+      "password": "123123123"
+    },
+    {
+      "id": "17655592136775130",
+      "environment": "PROD",
+      "tenant": "asp",
+      "username": "2022280602",
+      "password": "test"
+    },
+    {
+      "id": "17655592136777396",
+      "environment": "PROD",
+      "tenant": "asp",
+      "username": "1234560013",
+      "password": "test"
+    }
+  ]
+}

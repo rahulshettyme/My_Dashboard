@@ -1,0 +1,166 @@
+/* Light Theme Login Component */
+.login-component-wrapper {
+    background: transparent;
+    padding: 0;
+    border: none;
+    color: #264554;
+    font-family: 'Inter', sans-serif;
+}
+
+.login-component-wrapper h3 {
+    margin-top: 0;
+    margin-bottom: 20px;
+    color: #264554;
+    font-size: 1.2rem;
+    font-weight: 600;
+}
+
+.lc-form-group {
+    margin-bottom: 15px;
+}
+
+.lc-form-group label {
+    display: block;
+    font-size: 0.85em;
+    color: #264554;
+    font-weight: 700;
+    margin-bottom: 5px;
+}
+
+.lc-input {
+    width: 100%;
+    padding: 10px 12px;
+    background: #eef2f6 !important;
+    /* Light blue-gray background */
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 4px;
+    color: #264554 !important;
+    /* Dark text for visibility */
+    caret-color: #264554 !important;
+    font-size: 1rem;
+    box-sizing: border-box;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.lc-input::placeholder {
+    color: #94a3b8 !important;
+    opacity: 1;
+}
+
+.lc-input:focus {
+    border-color: #28a745 !important;
+    background: #fff !important;
+}
+
+.lc-row {
+    display: flex;
+    gap: 15px;
+}
+
+.lc-row .lc-form-group {
+    flex: 1;
+}
+
+.lc-btn {
+    width: 100%;
+    padding: 10px;
+    background: #28a745;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: background 0.2s;
+    margin-top: 10px;
+    font-size: 0.9rem;
+}
+
+.lc-btn:hover {
+    background: #218838;
+}
+
+.lc-btn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+    background: #a5d6a7;
+}
+
+.lc-error {
+    margin-top: 10px;
+    color: #d93025;
+    font-size: 0.9em;
+    text-align: center;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* Custom Dropdown Styles (Light Theme) */
+.lc-custom-dropdown {
+    position: relative;
+    width: 100%;
+}
+
+.lc-dropdown-display {
+    width: 100%;
+    padding: 10px 12px;
+    background: #eef2f6 !important;
+    /* Matches input background */
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 4px;
+    color: #264554;
+    /* Dark text */
+    font-size: 1rem;
+    cursor: pointer;
+    box-sizing: border-box;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.lc-dropdown-display::after {
+    content: "▼";
+    font-size: 0.8em;
+    color: #64748b;
+    /* Dark arrow */
+}
+
+.lc-dropdown-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    width: 100%;
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    z-index: 100;
+    display: none;
+    max-height: 200px;
+    overflow-y: auto;
+    margin-top: 4px;
+}
+
+.lc-dropdown-menu.show {
+    display: block;
+}
+
+.lc-dropdown-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.lc-dropdown-item {
+    padding: 10px 12px;
+    cursor: pointer;
+    color: #264554;
+    transition: background 0.2s;
+}
+
+.lc-dropdown-item:hover {
+    background: rgba(0, 0, 0, 0.05);
+    color: #28a745;
+}

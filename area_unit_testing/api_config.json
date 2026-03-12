@@ -1,0 +1,294 @@
+[
+    {
+        "name": "Farmer List",
+        "endpoint": "/services/farm/api/farmers?sort=lastModifiedDate,desc",
+        "method": "GET",
+        "logicType": "list",
+        "paramType": "query",
+        "staticParams": {
+            "size": 10
+        },
+        "extractions": [
+            {
+                "label": "Area",
+                "path": "declaredArea.count"
+            }
+        ],
+        "idMatchKey": "id"
+    },
+    {
+        "name": "Farmer Search",
+        "endpoint": "/services/farm/api/farmers",
+        "method": "GET",
+        "logicType": "search",
+        "paramType": "path",
+        "extractions": [
+            {
+                "label": "Area",
+                "path": "declaredArea.count"
+            }
+        ]
+    },
+    {
+        "name": "Create Farmer",
+        "endpoint": "/services/farm/api/farmers",
+        "method": "POST",
+        "logicType": "search",
+        "paramType": "path",
+        "payloadType": "file",
+        "payloadPath": "create_farmer.json",
+        "_comment": "payloadType can be 'file' or 'json'. If file, payloadPath is relative to payloads/ folder.",
+        "extractions": []
+    },
+    {
+        "name": "Asset List",
+        "endpoint": "/services/farm/api/assets?sort=lastModifiedDate,desc",
+        "method": "GET",
+        "logicType": "list",
+        "paramType": "query",
+        "staticParams": {
+            "size": 10
+        },
+        "extractions": [
+            {
+                "label": "Usable Area",
+                "path": "usableArea.count"
+            },
+            {
+                "label": "Declared Area",
+                "path": "declaredArea.count"
+            }
+        ],
+        "idMatchKey": "id"
+    },
+    {
+        "name": "Asset Search",
+        "endpoint": "/services/farm/api/assets",
+        "method": "GET",
+        "logicType": "search",
+        "paramType": "path",
+        "extractions": [
+            {
+                "label": "Usable Area",
+                "path": "usableArea.count"
+            },
+            {
+                "label": "Declared Area",
+                "path": "declaredArea.count"
+            }
+        ]
+    },
+    {
+        "name": "Croppable Area",
+        "endpoint": "/services/farm/api/croppable-areas",
+        "method": "GET",
+        "logicType": "search",
+        "paramType": "path",
+        "extractions": [
+            {
+                "label": "Audited Area",
+                "path": "auditedArea.count"
+            },
+            {
+                "label": "Usable Area",
+                "path": "usableArea.count"
+            },
+            {
+                "label": "Declared Area",
+                "path": "declaredArea.count"
+            },
+            {
+                "label": "Audited Area inside areaAudit",
+                "path": "areaAudit.auditedArea"
+            }
+        ]
+    },
+    {
+        "name": "Alert List",
+        "endpoint": "/services/alerts/api/field-alerts?sort=lastModifiedDate,desc",
+        "method": "GET",
+        "logicType": "list",
+        "paramType": "query",
+        "staticParams": {
+            "size": 10
+        },
+        "extractions": [
+            {
+                "label": "Croppable Area Count",
+                "path": "croppableArea.count"
+            },
+            {
+                "label": "Impacted",
+                "path": "impactedArea"
+            },
+            {
+                "label": "Custom Attributes Impacted",
+                "path": "data.customAttributes.impactedArea"
+            }
+        ],
+        "idMatchKey": "id"
+    },
+    {
+        "name": "Alert Search",
+        "endpoint": "/services/alerts/api/field-alerts",
+        "method": "GET",
+        "logicType": "search",
+        "paramType": "path",
+        "extractions": [
+            {
+                "label": "Croppable Area Count",
+                "path": "croppableArea.count"
+            },
+            {
+                "label": "Impacted",
+                "path": "impactedArea"
+            },
+            {
+                "label": "Custom Attributes Impacted",
+                "path": "data.customAttributes.impactedArea"
+            }
+        ]
+    },
+    {
+        "name": "Alert History",
+        "endpoint": "/services/alerts/api/field-alert-histories?sort=lastModifiedDate,desc",
+        "method": "GET",
+        "logicType": "list",
+        "paramType": "query",
+        "staticParams": {
+            "size": 10
+        },
+        "extractions": [
+            {
+                "label": "Croppable Area Count",
+                "path": "croppableArea.count"
+            },
+            {
+                "label": "Impacted",
+                "path": "impactedArea"
+            },
+            {
+                "label": "Custom Attributes Impacted",
+                "path": "data.customAttributes.impactedArea"
+            }
+        ],
+        "idMatchKey": "fieldAlertId"
+    },
+    {
+        "name": "EXT Farmer",
+        "endpoint": "/services/farm/api/ext/farmers?sort=lastModifiedDate,desc",
+        "method": "GET",
+        "logicType": "list",
+        "paramType": "query",
+        "staticParams": {
+            "size": 10
+        },
+        "extractions": [
+            {
+                "label": "Area",
+                "path": "declaredArea.count"
+            }
+        ],
+        "idMatchKey": "id"
+    },
+    {
+        "name": "EXT Asset",
+        "endpoint": "/services/farm/api/ext/asset?sort=lastModifiedDate,desc&size=10",
+        "method": "GET",
+        "logicType": "list",
+        "paramType": "query",
+        "staticParams": {
+            "size": 10
+        },
+        "extractions": [
+            {
+                "label": "Usable Area",
+                "path": "usableArea.count"
+            },
+            {
+                "label": "Declared Area",
+                "path": "declaredArea.count"
+            }
+        ],
+        "idMatchKey": "id"
+    },
+    {
+        "name": "EXT Croppable Area",
+        "endpoint": "/services/farm/api/ext/croppable-areas",
+        "method": "GET",
+        "logicType": "list",
+        "paramType": "query",
+        "staticParams": {
+            "size": 10
+        },
+        "extractions": [
+            {
+                "label": "Audited Area",
+                "path": "auditedArea.count"
+            },
+            {
+                "label": "Usable Area",
+                "path": "usableArea.count"
+            },
+            {
+                "label": "Declared Area",
+                "path": "declaredArea.count"
+            },
+            {
+                "label": "Audited Area inside areaAudit",
+                "path": "areaAudit.auditedArea"
+            }
+        ],
+        "idMatchKey": "id"
+    },
+    {
+        "name": "EXT Alert",
+        "endpoint": "/services/alerts/api/ext/field-alert?sort=lastModifiedDate,desc",
+        "method": "GET",
+        "logicType": "list",
+        "paramType": "query",
+        "staticParams": {
+            "size": 750
+        },
+        "extractions": [
+            {
+                "label": "Croppable Area Count",
+                "path": "croppableArea.count"
+            },
+            {
+                "label": "Impacted",
+                "path": "impactedArea"
+            },
+            {
+                "label": "Custom Attributes Impacted",
+                "path": "data.customAttributes.impactedArea"
+            }
+        ],
+        "idMatchKey": "id"
+    },
+    {
+        "name": "EXT Alert History",
+        "endpoint": "/services/alerts/api/ext/field-alert-history?sort=lastModifiedDate,desc",
+        "method": "GET",
+        "logicType": "list",
+        "paramType": "query",
+        "staticParams": {
+            "size": 750
+        },
+        "extractions": [
+            {
+                "label": "Croppable Area Count",
+                "path": "croppableArea.count"
+            },
+            {
+                "label": "Impacted",
+                "path": "impactedArea"
+            },
+            {
+                "label": "Custom Attributes Impacted",
+                "path": "data.customAttributes.impactedArea"
+            }
+        ],
+        "idMatchKey": "fieldAlertId"
+    }
+]
