@@ -48,6 +48,29 @@ const writeDb = (data) => {
     fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
 };
 
+// Helper to resolve environment URLs case-insensitively
+const resolveEnvUrl = (db, env, type = 'api') => {
+    let urls;
+    if (type === 'api') {
+        urls = db.environment_api_urls || {};
+    } else if (type === 'ui' || type === 'environment_urls') {
+        urls = db.environment_urls || {};
+    } else if (type === 'sso_prefix') {
+        urls = db.sso_urls_prefix || {};
+    } else if (type === 'sso_suffix') {
+        urls = db.sso_urls_suffix || {};
+    } else {
+        urls = db.environment_urls || {};
+    }
+
+    if (!env) return urls['default'] || null;
+    const target = env.toLowerCase();
+    for (const key of Object.keys(urls)) {
+        if (key.toLowerCase() === target) return urls[key];
+    }
+    return urls['default'] || null;
+};
+
 // GET all data
 app.get('/api/db', (req, res) => {
     res.json(readDb());
@@ -150,23 +173,8 @@ app.get('/api/user-aggregate/master/constants', (req, res) => {
     }
 
     const db = readDb();
-    const envApiUrls = db.environment_api_urls || {};
-    const envUrls = db.environment_urls || {};
-
-    let apiBaseUrl = null;
-    let frontendUrl = null;
-    for (const key of Object.keys(envApiUrls)) {
-        if (key.toLowerCase() === environment.toLowerCase()) {
-            apiBaseUrl = envApiUrls[key];
-            break;
-        }
-    }
-    for (const key of Object.keys(envUrls)) {
-        if (key.toLowerCase() === environment.toLowerCase()) {
-            frontendUrl = envUrls[key];
-            break;
-        }
-    }
+    const apiBaseUrl = resolveEnvUrl(db, environment, 'api');
+    const frontendUrl = resolveEnvUrl(db, environment, 'ui');
 
     if (!apiBaseUrl) {
         return res.status(400).json({ error: `Unknown environment: ${environment}` });
@@ -235,23 +243,8 @@ app.get('/api/user-aggregate/farmers', (req, res) => {
     }
 
     const db = readDb();
-    const envApiUrls = db.environment_api_urls || {};
-    const envUrls = db.environment_urls || {};
-
-    let apiBaseUrl = null;
-    let frontendUrl = null;
-    for (const key of Object.keys(envApiUrls)) {
-        if (key.toLowerCase() === environment.toLowerCase()) {
-            apiBaseUrl = envApiUrls[key];
-            break;
-        }
-    }
-    for (const key of Object.keys(envUrls)) {
-        if (key.toLowerCase() === environment.toLowerCase()) {
-            frontendUrl = envUrls[key];
-            break;
-        }
-    }
+    const apiBaseUrl = resolveEnvUrl(db, environment, 'api');
+    const frontendUrl = resolveEnvUrl(db, environment, 'ui');
 
     if (!apiBaseUrl) {
         return res.status(400).json({ error: `Unknown environment: ${environment}` });
@@ -319,15 +312,7 @@ app.get('/api/user-aggregate/farmers/:id', (req, res) => {
     if (!authHeader) return res.status(401).json({ error: 'Missing auth header' });
 
     const db = readDb();
-    const envApiUrls = db.environment_api_urls || {};
-    let apiBaseUrl = null;
-
-    for (const key of Object.keys(envApiUrls)) {
-        if (key.toLowerCase() === environment.toLowerCase()) {
-            apiBaseUrl = envApiUrls[key];
-            break;
-        }
-    }
+    const apiBaseUrl = resolveEnvUrl(db, environment, 'api');
 
     if (!apiBaseUrl) return res.status(400).json({ error: `Unknown environment: ${environment}` });
 
@@ -488,8 +473,7 @@ app.post('/api/launch-incognito', async (req, res) => {
 
             // Get environment from request body (case-insensitive lookup)
             const environment = req.body.environment || '';
-            const envKey = Object.keys(environmentUrls).find(k => k.toLowerCase() === environment.toLowerCase()) || environment;
-            const baseUrl = environmentUrls[envKey];
+            const baseUrl = resolveEnvUrl(dbData, environment, 'ui');
 
             if (!baseUrl) {
                 console.error(`[Puppeteer] No URL found for environment: ${environment}`);
@@ -629,8 +613,7 @@ app.post('/api/user-aggregate/token', async (req, res) => {
     console.log(`[User Aggregate] Available Prefixes:`, Object.keys(ssoPrefixes));
 
     // --- 1. PREFIX ---
-    let tokenPrefix = ssoPrefixes[environment] ||
-        ssoPrefixes[Object.keys(ssoPrefixes).find(k => k.toLowerCase() === environment.toLowerCase())];
+    let tokenPrefix = resolveEnvUrl(db, environment, 'sso_prefix');
 
     if (!tokenPrefix) {
         console.error(`[User Aggregate] SSO Error: No configuration found for environment '${environment}' in db.json (sso_urls_prefix).`);
@@ -638,11 +621,7 @@ app.post('/api/user-aggregate/token', async (req, res) => {
     }
 
     // --- 2. SUFFIX ---
-    let tokenSuffix = ssoSuffixes[environment] ||
-        ssoSuffixes[Object.keys(ssoSuffixes).find(k => k.toLowerCase() === environment.toLowerCase())] ||
-        ssoSuffixes['default'];
-
-    if (!tokenSuffix) tokenSuffix = "/protocol/openid-connect/token";
+    let tokenSuffix = resolveEnvUrl(db, environment, 'sso_suffix') || "/protocol/openid-connect/token";
 
     // Construct Full URL
     const tokenUrl = `${tokenPrefix}${tenant.toLowerCase()}${tokenSuffix}`;
@@ -724,12 +703,8 @@ app.get('/api/user-aggregate/user-info', (req, res) => {
     if (!authHeader || !authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
 
     const db = readDb();
-    const envApiUrls = db.environment_api_urls || {};
-    const envUrls = db.environment_urls || {};
-    let apiBaseUrl = null;
-    let frontendUrl = null;
-    for (const key of Object.keys(envApiUrls)) if (key.toLowerCase() === environment.toLowerCase()) { apiBaseUrl = envApiUrls[key]; break; }
-    for (const key of Object.keys(envUrls)) if (key.toLowerCase() === environment.toLowerCase()) { frontendUrl = envUrls[key]; break; }
+    const apiBaseUrl = resolveEnvUrl(db, environment, 'api');
+    const frontendUrl = resolveEnvUrl(db, environment, 'ui');
 
     if (!apiBaseUrl) return res.status(400).json({ error: 'Unknown environment' });
 
@@ -770,12 +745,8 @@ app.get('/api/user-aggregate/company-info', (req, res) => {
     if (!authHeader || !authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
 
     const db = readDb();
-    const envApiUrls = db.environment_api_urls || {};
-    const envUrls = db.environment_urls || {};
-    let apiBaseUrl = null;
-    let frontendUrl = null;
-    for (const key of Object.keys(envApiUrls)) if (key.toLowerCase() === environment.toLowerCase()) { apiBaseUrl = envApiUrls[key]; break; }
-    for (const key of Object.keys(envUrls)) if (key.toLowerCase() === environment.toLowerCase()) { frontendUrl = envUrls[key]; break; }
+    const apiBaseUrl = resolveEnvUrl(db, environment, 'api');
+    const frontendUrl = resolveEnvUrl(db, environment, 'ui');
 
     const fullUrl = apiBaseUrl + `/services/farm/api/companies/${companyId}`;
     const urlObj = new URL(fullUrl);
@@ -830,26 +801,8 @@ app.get('/api/user-aggregate/projects', (req, res) => {
     // Get environment API URL from db.json (case-insensitive lookup)
     // Using environment_api_urls which has the correct GCP API URLs
     const db = readDb();
-    const envApiUrls = db.environment_api_urls || {};
-    const envUrls = db.environment_urls || {}; // Fallback for origin header
-
-    // Case-insensitive environment lookup for API URL
-    let apiBaseUrl = null;
-    let frontendUrl = null;
-    for (const key of Object.keys(envApiUrls)) {
-        if (key.toLowerCase() === environment.toLowerCase()) {
-            apiBaseUrl = envApiUrls[key];
-            break;
-        }
-    }
-
-    // Get frontend URL for origin/referer headers
-    for (const key of Object.keys(envUrls)) {
-        if (key.toLowerCase() === environment.toLowerCase()) {
-            frontendUrl = envUrls[key];
-            break;
-        }
-    }
+    const apiBaseUrl = resolveEnvUrl(db, environment, 'api');
+    const frontendUrl = resolveEnvUrl(db, environment, 'ui');
 
     if (!apiBaseUrl) {
         return res.status(400).json({ error: `Unknown environment: ${environment}. Please add to environment_api_urls in db.json` });
@@ -990,23 +943,8 @@ app.get('/api/user-aggregate/plots', (req, res) => {
 
     // Get environment API URL from db.json
     const db = readDb();
-    const envApiUrls = db.environment_api_urls || {};
-    const envUrls = db.environment_urls || {};
-
-    let apiBaseUrl = null;
-    let frontendUrl = null;
-    for (const key of Object.keys(envApiUrls)) {
-        if (key.toLowerCase() === environment.toLowerCase()) {
-            apiBaseUrl = envApiUrls[key];
-            break;
-        }
-    }
-    for (const key of Object.keys(envUrls)) {
-        if (key.toLowerCase() === environment.toLowerCase()) {
-            frontendUrl = envUrls[key];
-            break;
-        }
-    }
+    const apiBaseUrl = resolveEnvUrl(db, environment, 'api');
+    const frontendUrl = resolveEnvUrl(db, environment, 'ui');
 
     if (!apiBaseUrl) {
         return res.status(400).json({ error: `Unknown environment: ${environment}` });
@@ -1103,23 +1041,8 @@ app.get('/api/user-aggregate/ca-details', (req, res) => {
     }
 
     const db = readDb();
-    const envApiUrls = db.environment_api_urls || {};
-    const envUrls = db.environment_urls || {};
-
-    let apiBaseUrl = null;
-    let frontendUrl = null;
-    for (const key of Object.keys(envApiUrls)) {
-        if (key.toLowerCase() === environment.toLowerCase()) {
-            apiBaseUrl = envApiUrls[key];
-            break;
-        }
-    }
-    for (const key of Object.keys(envUrls)) {
-        if (key.toLowerCase() === environment.toLowerCase()) {
-            frontendUrl = envUrls[key];
-            break;
-        }
-    }
+    const apiBaseUrl = resolveEnvUrl(db, environment, 'api');
+    const frontendUrl = resolveEnvUrl(db, environment, 'ui');
 
     if (!apiBaseUrl) {
         return res.status(400).json({ error: `Unknown environment: ${environment}` });
@@ -1195,23 +1118,8 @@ app.get('/api/user-aggregate/yield-prediction', (req, res) => {
     }
 
     const db = readDb();
-    const envApiUrls = db.environment_api_urls || {};
-    const envUrls = db.environment_urls || {};
-
-    let apiBaseUrl = null;
-    let frontendUrl = null;
-    for (const key of Object.keys(envApiUrls)) {
-        if (key.toLowerCase() === environment.toLowerCase()) {
-            apiBaseUrl = envApiUrls[key];
-            break;
-        }
-    }
-    for (const key of Object.keys(envUrls)) {
-        if (key.toLowerCase() === environment.toLowerCase()) {
-            frontendUrl = envUrls[key];
-            break;
-        }
-    }
+    const apiBaseUrl = resolveEnvUrl(db, environment, 'api');
+    const frontendUrl = resolveEnvUrl(db, environment, 'ui');
 
     if (!apiBaseUrl) {
         return res.status(400).json({ error: `Unknown environment: ${environment}` });
@@ -1311,23 +1219,8 @@ app.get('/api/user-aggregate/growth-prediction', (req, res) => {
     }
 
     const db = readDb();
-    const envApiUrls = db.environment_api_urls || {};
-    const envUrls = db.environment_urls || {};
-
-    let apiBaseUrl = null;
-    let frontendUrl = null;
-    for (const key of Object.keys(envApiUrls)) {
-        if (key.toLowerCase() === environment.toLowerCase()) {
-            apiBaseUrl = envApiUrls[key];
-            break;
-        }
-    }
-    for (const key of Object.keys(envUrls)) {
-        if (key.toLowerCase() === environment.toLowerCase()) {
-            frontendUrl = envUrls[key];
-            break;
-        }
-    }
+    const apiBaseUrl = resolveEnvUrl(db, environment, 'api');
+    const frontendUrl = resolveEnvUrl(db, environment, 'ui');
 
     if (!apiBaseUrl) {
         return res.status(400).json({ error: `Unknown environment: ${environment}` });
@@ -1351,7 +1244,7 @@ app.get('/api/user-aggregate/sustainability', (req, res) => {
     if (!authHeader) return res.status(401).json({ error: 'Missing authorization' });
 
     const db = readDb();
-    const apiBaseUrl = (db.environment_api_urls || {})[environment.toUpperCase()];
+    const apiBaseUrl = resolveEnvUrl(db, environment, 'api');
     if (!apiBaseUrl) return res.status(400).json({ error: 'Unknown environment' });
 
     const fullUrl = `${apiBaseUrl}/services/farm/api/plot-risk/sustainability/plot?caIds=${caIds}`;
@@ -1407,7 +1300,7 @@ app.get('/api/user-aggregate/growth-stage', (req, res) => {
     if (!authHeader) return res.status(401).json({ error: 'Missing authorization' });
 
     const db = readDb();
-    const apiBaseUrl = (db.environment_api_urls || {})[environment.toUpperCase()];
+    const apiBaseUrl = resolveEnvUrl(db, environment, 'api');
     if (!apiBaseUrl) return res.status(400).json({ error: 'Unknown environment' });
 
     const fullUrl = `${apiBaseUrl}/services/farm/api/plot-risk/growthstage?caIds=${caIds}&size=10&orderBy=DESC&sortBy=date`;
@@ -1468,8 +1361,7 @@ app.get('/api/user-aggregate/harvest-tasks', (req, res) => {
     if (!authHeader) return res.status(401).json({ error: 'Missing authorization' });
 
     const db = readDb();
-    const envApiUrls = db.environment_api_urls || {};
-    const apiBaseUrl = envApiUrls[environment.toUpperCase()] || envApiUrls[environment];
+    const apiBaseUrl = resolveEnvUrl(db, environment, 'api');
 
     if (!apiBaseUrl) return res.status(400).json({ error: `Unknown environment: ${environment}` });
 

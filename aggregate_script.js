@@ -213,6 +213,18 @@ function convertValueToMetricTon(value, unitCode) {
     return val; 
 }
 
+function formatDate(dateStr) {
+    if (!dateStr) return "-";
+    try {
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return "-";
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const year = d.getFullYear();
+        return `${day}-${month}-${year}`;
+    } catch (e) { return "-"; }
+}
+
 function updateUnitLabels(plotData = null) {
     let yieldLabel, harvestLabel, areaLabelLabel;
 
@@ -499,46 +511,37 @@ function processData(rows) {
         const isZero = (h3_min === 0 || h3_min === null) && (h3_max === 0 || h3_max === null) && (y3_min === 0 || y3_min === null) && (y3_max === 0 || y3_max === null);
         const isPredictionAvailable = !isNA && !isZero && row['Harvest Min predicted'] !== undefined;
 
+        // Standard metrics sums - Include ALL plots
+        totalAreaHaSum += areaHa;
+        expHarvestTonSum += h1Ton;
+        reHarvestTonSum += h2Ton;
+
         if (!isPredictionAvailable) {
             if (row['Yield Not Enabled']) {
                 notEnabledPlots.push(caName);
             } else {
                 skippedPlots.push(caName);
             }
-            row._processed = {
-                name: caName,
-                auditedArea: area,
-                areaUnit: aUnit,
-                y1, y2,
-                y3_min: null, y3_max: null,
-                h1, h2,
-                h3_min: null, h3_max: null,
-                noPrediction: true,
-                notEnabled: row['Yield Not Enabled'],
-                harvestUnit: qUnit
-            };
-            return;
         }
 
-        // Sum for aggregate (ONLY IF PREDICTION IS AVAILABLE)
-        totalAreaHaSum += areaHa;
-        expHarvestTonSum += h1Ton;
-        reHarvestTonSum += h2Ton;
-
+        // Add to main prediction list anyway (per user request to consider as 0)
         plotsWithPred.push(caName);
         countWithPrediction++;
 
-        // Predictions are usually in Tonnes/Ha from AI API, but if structured from Login we use them as is
-        // We need them in Tonnes for aggregate sum
-        const h3MinTon = h3_min; // Production from AI API is in Tonnes
-        const h3MaxTon = h3_max;
+        // Predictions are usually in Tonnes/Ha from AI API
+        // If data is not present, use 0
+        const h3MinTon = (h3_min === 'NA' || h3_min === undefined || h3_min === null) ? 0 : h3_min; 
+        const h3MaxTon = (h3_max === 'NA' || h3_max === undefined || h3_max === null) ? 0 : h3_max;
         
         aiHarvestMinTonSum += h3MinTon;
         aiHarvestMaxTonSum += h3MaxTon;
         
         // For weighted yield on aggregate
-        aiYieldMinWeightedSum += y3_min * areaHa;
-        aiYieldMaxWeightedSum += y3_max * areaHa;
+        const y3MinVal = (y3_min === 'NA' || y3_min === undefined || y3_min === null) ? 0 : y3_min;
+        const y3MaxVal = (y3_max === 'NA' || y3_max === undefined || y3_max === null) ? 0 : y3_max;
+
+        aiYieldMinWeightedSum += y3MinVal * areaHa;
+        aiYieldMaxWeightedSum += y3MaxVal * areaHa;
 
         // Build processed object for PLOT LEVEL (Raw values)
         row._processed = {
@@ -546,11 +549,13 @@ function processData(rows) {
             auditedArea: area,
             areaUnit: aUnit,
             y1, y2,
-            y3_min, y3_max,
+            y3_min: y3MinVal, 
+            y3_max: y3MaxVal,
             h1, h2,
-            h3_min, h3_max, // AI predictions are in Tonnes/Ha, will be converted later if needed? 
-            // User said: "Plot level data... show directly in plotHrvestUnit for harvest and plotHrvestUnit / user area unit for yield."
-            // But AI predictions are always in Tonnes. I should convert AI predictions to match plotHarvestUnit for plot level.
+            h3_min: h3MinTon, 
+            h3_max: h3MaxTon,
+            noPrediction: !isPredictionAvailable,
+            notEnabled: row['Yield Not Enabled'] || false,
             harvestUnit: qUnit
         };
     });
@@ -562,7 +567,7 @@ function processData(rows) {
 
     if (totalAreaHaSum > 0) {
         updateElement('agg-total-area', totalAreaHaSum.toFixed(2) + ' Ha');
-        updateElement('agg-plots-count', (countWithPrediction + skippedPlots.length + notEnabledPlots.length).toString());
+        updateElement('agg-plots-count', (plotsWithPrediction.length).toString());
 
         // Aggregate Harvest (Tonnes)
         updateElement('agg-exp-harvest', fmtSmart(expHarvestTonSum));
@@ -1357,6 +1362,9 @@ async function handleLogin() {
     loginError.classList.add('hidden');
 
     try {
+        // Clear previous session data before new login attempt
+        clearAllDataUI();
+
         const response = await fetch(`${baseUrl}/api/user-aggregate/token`, {
             method: 'POST',
             headers: {
@@ -1452,16 +1460,112 @@ async function fetchCompanyInfo(companyId) {
 }
 
 function handleLogout() {
+    clearAllDataUI();
+    document.getElementById('login-form-container').classList.remove('hidden');
+    document.getElementById('session-info').textContent = '-';
+}
+
+function clearAllDataUI() {
+    console.log('[INFO] Clearing all UI data and resetting state.');
+    
+    // 1. Reset Global State
+    globalData = [];
+    plotsList = [];
+    plotsWithPrediction = [];
+    plotsWithoutPrediction = [];
+    plotsNotEnabled = [];
+    plotsData = [];
+    userPrefs = {};
+    companyPrefs = {};
+    selectedProjectIds = [];
+    lastProcessedPlots = [];
+    lastHarvestTasks = [];
+    activeHarvestWindowFilter = null;
+    window.currentGrowthResults = null;
     authToken = null;
     currentEnvironment = null;
     currentTenant = null;
-    projectsList = [];
-    plotsData = [];
-    document.getElementById('login-form-container').classList.remove('hidden');
-    document.getElementById('project-container').classList.add('hidden');
-    document.getElementById('project-select').innerHTML = '<option value="" disabled selected>Select a project</option>';
-    document.getElementById('plot-info').classList.add('hidden');
-    document.getElementById('plot-info').classList.add('hidden');
+
+    // 2. Clear Tables
+    ['all-plots-tbody', 'harvest-window-plots-tbody', 'harvest-status-tbody', 'harvest-window-summary-tbody'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = '';
+    });
+    const growthTableContainer = document.getElementById('growth-table-container');
+    if (growthTableContainer) growthTableContainer.innerHTML = '';
+
+    // 3. Reset Multi-select & Dropdowns
+    const triggerText = document.getElementById('trigger-text');
+    if (triggerText) triggerText.textContent = "Select Projects (Max 5)";
+    
+    const projectListContainer = document.getElementById('projects-dropdown-list');
+    if (projectListContainer) projectListContainer.innerHTML = '';
+    
+    const plotSearch = document.getElementById('plot-search');
+    if (plotSearch) plotSearch.value = '';
+    
+    const plotSelectValue = document.getElementById('plot-select-value');
+    if (plotSelectValue) plotSelectValue.value = '';
+
+    const projectSelect = document.getElementById('project-select');
+    if (projectSelect) projectSelect.innerHTML = '<option value="" disabled selected>Select a project</option>';
+
+    // 4. Hide Sections
+    const sectionsToHide = [
+        'dashboard-content', 'yield-harvest-section', 'growth-data-section', 
+        'growth-info', 'growth-cards-container', 'harvest-status-section', 
+        'harvest-status-results', 'harvest-window-plots-container', 
+        'growth-progression-plots-container', 'plot-info', 'unit-config-section',
+        'base-growth-table-wrapper', 'project-container'
+    ];
+    sectionsToHide.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.add('hidden');
+    });
+
+    const emptyStatesToShow = ['growth-empty-state', 'source-selector'];
+    emptyStatesToShow.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.remove('hidden');
+    });
+
+    // 5. Reset Metrics & Diff Displays
+    clearPlotDisplay();
+    
+    const simpleMetricIds = [
+        'plot-count', 'agg-total-area', 'agg-plots-count', 'agg-exp-harvest', 'agg-re-harvest', 
+        'agg-ai-harvest-min', 'agg-ai-harvest-max', 'agg-exp-yield', 'agg-re-yield', 
+        'agg-ai-yield-min', 'agg-ai-yield-max', 'growth-prog-total', 'growth-prog-harvested', 
+        'harvest-plots-covered', 'harvest-window-range', 'stat-harvest-plots-covered', 'stat-harvest-collected',
+        'growth-status', 'progress-text'
+    ];
+    simpleMetricIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = '-';
+    });
+
+    const diffIds = [
+        'agg-re-harvest-diff', 'agg-ai-harvest-diff-exp', 'agg-ai-harvest-diff-re', 
+        'agg-re-diff', 'agg-ai-diff-exp', 'agg-ai-diff-re', 'agg-card-level'
+    ];
+    diffIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = '';
+    });
+
+    // 6. Destroy Charts
+    if (growthProgressionChartInstance) {
+        growthProgressionChartInstance.destroy();
+        growthProgressionChartInstance = null;
+    }
+    if (harvestWindowChartInstance) {
+        harvestWindowChartInstance.destroy();
+        harvestWindowChartInstance = null;
+    }
+    if (harvestWindowPieChart) {
+        harvestWindowPieChart.destroy();
+        harvestWindowPieChart = null;
+    }
 }
 
 async function loadProjects() {
@@ -1905,17 +2009,6 @@ async function handleLoadGrowthData() {
         return '';
     };
 
-    function formatDate(dateStr) {
-        if (!dateStr) return "-";
-        try {
-            const d = new Date(dateStr);
-            if (isNaN(d.getTime())) return "-";
-            const day = String(d.getDate()).padStart(2, '0');
-            const month = String(d.getMonth() + 1).padStart(2, '0');
-            const year = d.getFullYear();
-            return `${day}-${month}-${year}`;
-        } catch (e) { return "-"; }
-    }
 
     async function processPlotGrowth(plot) {
         try {
@@ -2760,7 +2853,7 @@ function renderHarvestStatus(processedPlots, tasks) {
             // Detail row entry
             allDetailRows.push({
                 name: plotsByCaId[caId] || plot.name || `CA ${caId}`,
-                hDate: task.actualClosedDate ? new Date(task.actualClosedDate).toLocaleDateString() : "-",
+                hDate: task.actualClosedDate ? formatDate(task.actualClosedDate) : "-",
                 hStart: plot.hStart,
                 hEnd: plot.hEnd,
                 qty: qty,
