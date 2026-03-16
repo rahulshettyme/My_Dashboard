@@ -26,6 +26,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Load system unit conversions
     fetchUnitConversions();
+
+    // Add event listener for aggregate toggle
+    document.getElementById('include-no-prediction-agg')?.addEventListener('change', () => {
+        if (globalData && globalData.length > 0) processData(globalData);
+    });
 });
 
 const excelUploadInput = document.getElementById('excel-upload');
@@ -454,6 +459,8 @@ function processData(rows) {
     let expHarvestTonSum = 0, reHarvestTonSum = 0;
     let aiHarvestMinTonSum = 0, aiHarvestMaxTonSum = 0;
     let totalAreaHaSum = 0;
+
+    const includeNoPred = document.getElementById('include-no-prediction-agg')?.checked;
     
     // For calculating AI yield avg/weighted on aggregate
     let aiYieldMinWeightedSum = 0, aiYieldMaxWeightedSum = 0;
@@ -511,10 +518,14 @@ function processData(rows) {
         const isZero = (h3_min === 0 || h3_min === null) && (h3_max === 0 || h3_max === null) && (y3_min === 0 || y3_min === null) && (y3_max === 0 || y3_max === null);
         const isPredictionAvailable = !isNA && !isZero && row['Harvest Min predicted'] !== undefined;
 
-        // Standard metrics sums - Include ALL plots
-        totalAreaHaSum += areaHa;
-        expHarvestTonSum += h1Ton;
-        reHarvestTonSum += h2Ton;
+        if (isPredictionAvailable || includeNoPred) {
+            totalAreaHaSum += areaHa;
+            expHarvestTonSum += h1Ton;
+            reHarvestTonSum += h2Ton;
+            
+            plotsWithPred.push(caName);
+            countWithPrediction++;
+        }
 
         if (!isPredictionAvailable) {
             if (row['Yield Not Enabled']) {
@@ -523,10 +534,6 @@ function processData(rows) {
                 skippedPlots.push(caName);
             }
         }
-
-        // Add to main prediction list anyway (per user request to consider as 0)
-        plotsWithPred.push(caName);
-        countWithPrediction++;
 
         // Predictions are usually in Tonnes/Ha from AI API
         // If data is not present, use 0
@@ -540,8 +547,10 @@ function processData(rows) {
         const y3MinVal = (y3_min === 'NA' || y3_min === undefined || y3_min === null) ? 0 : y3_min;
         const y3MaxVal = (y3_max === 'NA' || y3_max === undefined || y3_max === null) ? 0 : y3_max;
 
-        aiYieldMinWeightedSum += y3MinVal * areaHa;
-        aiYieldMaxWeightedSum += y3MaxVal * areaHa;
+        if (isPredictionAvailable || includeNoPred) {
+            aiYieldMinWeightedSum += y3MinVal * areaHa;
+            aiYieldMaxWeightedSum += y3MaxVal * areaHa;
+        }
 
         // Build processed object for PLOT LEVEL (Raw values)
         row._processed = {
@@ -594,8 +603,7 @@ function processData(rows) {
         calculateDataTestRangeDiff('agg-ai-diff-exp', aiMinYieldAgg, aiMaxYieldAgg, expYieldAgg);
         calculateDataTestRangeDiff('agg-ai-diff-re', aiMinYieldAgg, aiMaxYieldAgg, reYieldAgg);
 
-        const avgPredictedYieldAgg = (aiMinYieldAgg + aiMaxYieldAgg) / 2;
-        calculateDiff('agg-card-level', avgPredictedYieldAgg, reYieldAgg);
+        // Plot Level removed per user request
 
         aggregateRaw = {
             aiMinYield: aiMinYieldAgg,
@@ -1491,6 +1499,9 @@ function clearAllDataUI() {
         const el = document.getElementById(id);
         if (el) el.innerHTML = '';
     });
+    const aggToggle = document.getElementById('include-no-prediction-agg');
+    if (aggToggle) aggToggle.checked = false;
+    
     const growthTableContainer = document.getElementById('growth-table-container');
     if (growthTableContainer) growthTableContainer.innerHTML = '';
 
@@ -2030,8 +2041,10 @@ async function handleLoadGrowthData() {
                 return null;
             }
 
-            const isHarvested = sData.harvested || false;
-            const harvestDate = sData.harvestDate || null;
+            // Robust isHarvested check: true if flag is true OR if a date exists
+            const rawHarvestDate = sData.harvestDate || null;
+            const isHarvested = (sData.harvested || !!rawHarvestDate);
+            const harvestDate = rawHarvestDate;
 
             // 3. Growth Stage API
             const gResp = await fetch(`${baseUrl}/api/user-aggregate/growth-stage?environment=${encodeURIComponent(currentEnvironment)}&caIds=${encodeURIComponent(plot.caId)}`, {
@@ -2099,6 +2112,7 @@ async function handleLoadGrowthData() {
                 expectedHarvestTon: expectedHarvestTon,
                 predictedHarvestTon: predictedHarvestTon,
                 isHarvested: isHarvested ? "Yes" : "No",
+                isConsideredInChart: (!isHarvested && rawHEnd && rawHEnd >= new Date().setHours(0,0,0,0)) ? "Yes" : "No",
                 harvestedDate: formatDate(harvestDate),
                 currentStage: (growth && growth.cropStageName) ? growth.cropStageName : "-",
                 progression: (growth && growth.seasonProgression) ? (parseFloat(growth.seasonProgression) || 0).toFixed(2) : "-",
@@ -2148,6 +2162,8 @@ async function handleLoadGrowthData() {
         renderGrowthTable(growthResults);
         renderGrowthProgressionChart(growthResults);
         renderHarvestWindowChart(growthResults);
+        renderHarvestWindowDailyChart(growthResults);
+
 
         growthCardsContainer.classList.remove('hidden');
         if (growthEmptyState) growthEmptyState.classList.add('hidden');
@@ -2169,21 +2185,31 @@ function renderGrowthTable(results) {
     const container = document.getElementById('growth-table-container');
     if (!container) return;
 
+    const getSortIcon = (col) => {
+        if (growthTableSortCol !== col) return '<i class="fas fa-sort" style="margin-left: 0.5rem; opacity: 0.3;"></i>';
+        return growthTableSortOrder === 'asc' 
+            ? '<i class="fas fa-sort-up" style="margin-left: 0.5rem; color: var(--primary-color);"></i>' 
+            : '<i class="fas fa-sort-down" style="margin-left: 0.5rem; color: var(--primary-color);"></i>';
+    };
+
+    const headerStyle = "padding: 1rem; border-bottom: 2px solid var(--secondary-color); cursor: pointer; user-select: none; transition: background 0.2s;";
+    const hoverEffect = "onmouseover=\"this.style.background='rgba(16, 185, 129, 0.05)'\" onmouseout=\"this.style.background='transparent'\"";
+
     let html = `
         <div class="metrics-grid" style="grid-template-columns: 1fr; margin-top: 1rem;">
             <div class="metric-card" style="padding: 0; overflow-x: auto;">
                 <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
                     <thead>
                         <tr style="background: rgba(16, 185, 129, 0.1); text-align: left;">
-                            <th style="padding: 1rem; border-bottom: 2px solid var(--secondary-color);">Plot Name</th>
-                            <th style="padding: 1rem; border-bottom: 2px solid var(--secondary-color);">Audited Area (Acre)</th>
-                            <th style="padding: 1rem; border-bottom: 2px solid var(--secondary-color);">Expected Harvest (ton)</th>
-                            <th style="padding: 1rem; border-bottom: 2px solid var(--secondary-color);">Is harvested</th>
-                            <th style="padding: 1rem; border-bottom: 2px solid var(--secondary-color);">Harvested Date</th>
-                            <th style="padding: 1rem; border-bottom: 2px solid var(--secondary-color);">Current Stage</th>
-                            <th style="padding: 1rem; border-bottom: 2px solid var(--secondary-color);">Growth progression</th>
-                            <th style="padding: 1rem; border-bottom: 2px solid var(--secondary-color);">Harvest Start Date</th>
-                            <th style="padding: 1rem; border-bottom: 2px solid var(--secondary-color);">Harvest End Date</th>
+                            <th style="${headerStyle}" ${hoverEffect} onclick="handleGrowthTableSort('plotName')">Plot Name ${getSortIcon('plotName')}</th>
+                            <th style="${headerStyle}" ${hoverEffect} onclick="handleGrowthTableSort('auditedArea')">Audited Area ${getSortIcon('auditedArea')}</th>
+                            <th style="${headerStyle}" ${hoverEffect} onclick="handleGrowthTableSort('expectedHarvestTon')">Expected Harvest ${getSortIcon('expectedHarvestTon')}</th>
+                            <th style="${headerStyle}" ${hoverEffect} onclick="handleGrowthTableSort('isHarvested')">Is Harvested ${getSortIcon('isHarvested')}</th>
+                            <th style="${headerStyle}" ${hoverEffect} onclick="handleGrowthTableSort('harvestedDate')">Harvested Date ${getSortIcon('harvestedDate')}</th>
+                            <th style="${headerStyle}" ${hoverEffect} onclick="handleGrowthTableSort('currentStage')">Current Stage ${getSortIcon('currentStage')}</th>
+                            <th style="${headerStyle}" ${hoverEffect} onclick="handleGrowthTableSort('progression')">Progression ${getSortIcon('progression')}</th>
+                            <th style="${headerStyle}" ${hoverEffect} onclick="handleGrowthTableSort('hStart')">Start Date ${getSortIcon('hStart')}</th>
+                            <th style="${headerStyle}" ${hoverEffect} onclick="handleGrowthTableSort('hEnd')">End Date ${getSortIcon('hEnd')}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -2198,12 +2224,12 @@ function renderGrowthTable(results) {
                     <td style="padding: 1rem; font-weight: 600;">${res.plotName}</td>
                     <td style="padding: 1rem;">${(res.auditedArea || 0).toFixed(2)}</td>
                     <td style="padding: 1rem;">${(res.expectedHarvestTon || 0).toFixed(2)}</td>
-                    <td style="padding: 1rem;">${res.isHarvested}</td>
-                    <td style="padding: 1rem;">${res.harvestedDate}</td>
-                    <td style="padding: 1rem;">${res.currentStage}</td>
-                    <td style="padding: 1rem;">${res.progression}</td>
-                    <td style="padding: 1rem;">${res.hStart}</td>
-                    <td style="padding: 1rem;">${res.hEnd}</td>
+                    <td style="padding: 1rem; color: ${res.isHarvested === 'Yes' ? '#10b981' : '#f59e0b'}; font-weight: 500;">${res.isHarvested}</td>
+                    <td style="padding: 1rem;">${res.harvestedDate || '-'}</td>
+                    <td style="padding: 1rem;">${res.currentStage || '-'}</td>
+                    <td style="padding: 1rem;">${res.progression}%</td>
+                    <td style="padding: 1rem;">${res.hStart || '-'}</td>
+                    <td style="padding: 1rem;">${res.hEnd || '-'}</td>
                 </tr>
             `;
         });
@@ -2211,6 +2237,24 @@ function renderGrowthTable(results) {
 
     html += `</tbody></table></div></div>`;
     container.innerHTML = html;
+}
+
+function handleGrowthTableSort(col) {
+    if (growthTableSortCol === col) {
+        growthTableSortOrder = (growthTableSortOrder === 'asc') ? 'desc' : 'asc';
+    } else {
+        growthTableSortCol = col;
+        growthTableSortOrder = 'asc';
+    }
+    updateGrowthTable();
+}
+
+function resetGrowthTable() {
+    growthTableSortCol = 'plotName';
+    growthTableSortOrder = 'asc';
+    const toggle = document.getElementById('hide-harvested-table');
+    if (toggle) toggle.checked = false;
+    updateGrowthTable();
 }
 
 function sortProjectsToggle() {
@@ -2419,6 +2463,11 @@ function renderGrowthProgressionChart(results) {
 }
 
 let harvestWindowChartInstance = null;
+let harvestDailyChartInstance = null;
+
+let growthTableSortCol = 'plotName';
+let growthTableSortOrder = 'asc';
+
 function renderHarvestWindowChart(results) {
     try {
         const pendingPlots = results.filter(r => r.isHarvested !== "Yes" && r.rawHStart);
@@ -2438,34 +2487,65 @@ function renderHarvestWindowChart(results) {
             return;
         }
 
-        const startDates = pendingPlots.map(p => p.rawHStart.getTime());
-        const minDateTs = Math.min(...startDates);
-        const maxDateTs = Math.max(...startDates);
+        const areaUnit = companyPrefs.areaUnits || 'Acre';
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        // Filter for eligible plots to determine the chart's anchor date
+        const eligiblePlots = pendingPlots.filter(p => !p.rawHEnd || p.rawHEnd >= today);
+        
+        if (eligiblePlots.length === 0) {
+            if (coveredEl) coveredEl.textContent = `0 / ${results.length}`;
+            if (rangeEl) rangeEl.textContent = "-";
+            if (harvestWindowChartInstance) {
+                harvestWindowChartInstance.destroy();
+                harvestWindowChartInstance = null;
+            }
+            return;
+        }
+
+        const eligibleStartDates = eligiblePlots.map(p => p.rawHStart.getTime());
+        const minDateTs = Math.min(...eligibleStartDates);
+        const maxDateTs = Math.max(...eligibleStartDates);
         const minDate = new Date(minDateTs);
         const maxDate = new Date(maxDateTs);
         minDate.setHours(0, 0, 0, 0);
 
-        if (coveredEl) coveredEl.textContent = `${pendingPlots.length} / ${results.length}`;
         if (rangeEl) {
             const fmt = (d) => `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
             rangeEl.textContent = `${fmt(minDate)} - ${fmt(maxDate)}`;
         }
 
-        const areaUnit = companyPrefs.areaUnits || 'Acre';
-
         const weeks = {};
+        let filteredPlotsCount = 0;
         pendingPlots.forEach(p => {
             const diffDays = Math.floor((p.rawHStart.getTime() - minDate.getTime()) / (24 * 60 * 60 * 1000));
+            // weekIndex will be 1 or more for plots at or after minDate
             let weekIndex = Math.floor(diffDays / 7) + 1;
-            if (isNaN(weekIndex)) return;
-            if (!weeks[weekIndex]) weeks[weekIndex] = { plots: [], totalHarvest: 0, totalArea: 0 };
-            weeks[weekIndex].plots.push(p);
-            weeks[weekIndex].totalHarvest += (parseFloat(p.expectedHarvestTon) || 0);
-            weeks[weekIndex].totalArea += (parseFloat(p.auditedArea) || 0);
+            
+            // Only group into weeks if it's considered in chart (matches today or future) 
+            // and falls on or after the anchor date (weekIndex >= 1)
+            if (p.isConsideredInChart === "Yes" && weekIndex >= 1) {
+                if (!weeks[weekIndex]) weeks[weekIndex] = { plots: [], totalHarvest: 0, totalArea: 0, chartPlotsCount: 0 };
+                weeks[weekIndex].plots.push(p);
+                weeks[weekIndex].totalHarvest += (parseFloat(p.expectedHarvestTon) || 0);
+                weeks[weekIndex].totalArea += (parseFloat(p.auditedArea) || 0);
+                weeks[weekIndex].chartPlotsCount++;
+                filteredPlotsCount++;
+            }
         });
 
+        if (coveredEl) coveredEl.textContent = `${filteredPlotsCount} / ${results.length}`;
+
         const sortedWeekIndices = Object.keys(weeks).sort((a, b) => a - b);
-        const labels = sortedWeekIndices.map(w => `Week ${w}`);
+        const labels = sortedWeekIndices.map(w => {
+            const startDate = new Date(minDate);
+            startDate.setDate(minDate.getDate() + (w - 1) * 7);
+            const endDate = new Date(startDate);
+            endDate.setDate(startDate.getDate() + 6);
+            const fmt = (d) => `${d.getDate().toString().padStart(2, '0')}-${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+            return [`Week ${w}`, `${fmt(startDate)} to ${fmt(endDate)}` ];
+        });
         const data = sortedWeekIndices.map(w => weeks[w].totalHarvest);
 
         const canvas = document.getElementById('harvestWindowChart');
@@ -2496,7 +2576,7 @@ function renderHarvestWindowChart(results) {
                                 const wData = weeks[sortedWeekIndices[context.dataIndex]];
                                 return [
                                     `Production: ${context.raw.toFixed(2)} Metric Tonnes`,
-                                    `Plots: ${wData.plots.length}`,
+                                    `Plots: ${wData.chartPlotsCount}`,
                                     `Area: ${wData.totalArea.toFixed(2)} ${areaUnit}`
                                 ];
                             }
@@ -2505,7 +2585,7 @@ function renderHarvestWindowChart(results) {
                 },
                 scales: {
                     y: { display: true, beginAtZero: true, grid: { color: 'rgba(255, 255, 255, 0.05)' }, ticks: { color: 'var(--text-secondary)' } },
-                    x: { ticks: { color: '#e2e8f0' }, grid: { display: false } }
+                    x: { ticks: { color: '#e2e8f0', font: { size: 10 } }, grid: { display: false } }
                 },
                 onClick: (e, elements) => {
                     if (elements.length > 0) {
@@ -2527,8 +2607,9 @@ function renderHarvestWindowChart(results) {
                             ctx.font = 'bold 16px "Inter", sans-serif';
                             ctx.fillStyle = '#84cc16';
                             ctx.textAlign = 'center';
-                            ctx.fillText(val.toFixed(2), bar.x, bar.y - 10);
-                            const bubbleText = `${wData.plots.length} Plots, ${wData.totalArea.toFixed(2)} ${areaUnit}`;
+                            if (val > 0) ctx.fillText(val.toFixed(2), bar.x, bar.y - 10);
+                            const bubbleText = `${wData.chartPlotsCount} Plots, ${wData.totalArea.toFixed(2)} ${areaUnit}`;
+
                             ctx.font = '11px "Inter", sans-serif';
                             const textWidth = ctx.measureText(bubbleText).width;
                             const bW = textWidth + 12;
@@ -2623,7 +2704,7 @@ function showHarvestWindowPlots(label, plots) {
                 <td style="padding: 0.75rem; color: var(--text-primary); font-weight: 500;">${p.plotName}</td>
                 <td style="padding: 0.75rem; color: var(--text-secondary);">${(p.auditedArea || 0).toFixed(2)}</td>
                 <td style="padding: 0.75rem; color: var(--text-secondary);">${(p.expectedHarvestTon || 0).toFixed(2)}</td>
-                <td style="padding: 0.75rem; color: var(--text-secondary); font-weight: 500; color: ${p.isHarvested === 'Yes' ? '#10b981' : '#f59e0b'};">${p.isHarvested}</td>
+                <td style="padding: 0.75rem; color: var(--text-secondary); font-weight: 500; color: ${p.isConsideredInChart === 'Yes' ? '#10b981' : '#f59e0b'};">${p.isConsideredInChart || 'Yes'}</td>
                 <td style="padding: 0.75rem; color: var(--text-secondary);">${p.harvestedDate || "-"}</td>
                 <td style="padding: 0.75rem; color: var(--text-secondary);">${p.currentStage || "-"}</td>
                 <td style="padding: 0.75rem; color: var(--text-secondary); font-weight: 600; color: var(--secondary-color);">${p.progression}%</td>
@@ -2638,8 +2719,13 @@ function showHarvestWindowPlots(label, plots) {
     container.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
     // Hide the other drill-down if open
-    const other = document.getElementById('growth-progression-plots-container');
-    if (other) other.classList.add('hidden');
+    const containers = ['growth-progression-plots-container', 'harvest-window-plots-container', 'harvest-window-daily-plots-container'];
+    containers.forEach(id => {
+        if (id !== container.id) {
+            const other = document.getElementById(id);
+            if (other) other.classList.add('hidden');
+        }
+    });
 }
 
 function closeGrowthDrillDown(id) {
@@ -2655,14 +2741,46 @@ function updateGrowthChart() {
         : window.currentGrowthResults;
     renderGrowthProgressionChart(filteredResults);
     renderHarvestWindowChart(filteredResults);
+    renderHarvestWindowDailyChart(filteredResults);
 }
 
 function updateGrowthTable() {
     if (!window.currentGrowthResults) return;
     const hideHarvested = document.getElementById('hide-harvested-table')?.checked;
-    const filteredResults = hideHarvested 
+    let filteredResults = hideHarvested 
         ? window.currentGrowthResults.filter(r => r.isHarvested !== "Yes") 
-        : window.currentGrowthResults;
+        : [...window.currentGrowthResults];
+
+    // Sorting Logic
+    if (growthTableSortCol) {
+        filteredResults.sort((a, b) => {
+            let valA = a[growthTableSortCol];
+            let valB = b[growthTableSortCol];
+
+            // Special handling for labels vs raw values
+            if (growthTableSortCol === 'hStart') { valA = a.rawHStart ? a.rawHStart.getTime() : 0; valB = b.rawHStart ? b.rawHStart.getTime() : 0; }
+            if (growthTableSortCol === 'hEnd') { valA = a.rawHEnd ? a.rawHEnd.getTime() : 0; valB = b.rawHEnd ? b.rawHEnd.getTime() : 0; }
+            if (growthTableSortCol === 'harvestedDate') { 
+                valA = a.harvestedDate === '-' ? 0 : new Date(a.harvestedDate.split('-').reverse().join('-')).getTime();
+                valB = b.harvestedDate === '-' ? 0 : new Date(b.harvestedDate.split('-').reverse().join('-')).getTime();
+            }
+
+            if (typeof valA === 'string') {
+                return growthTableSortOrder === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+            } else {
+                return growthTableSortOrder === 'asc' ? (valA - valB) : (valB - valA);
+            }
+        });
+    }
+
+    // Toggle Clear Filter button visibility
+    const resetBtn = document.getElementById('reset-growth-table-btn');
+    if (resetBtn) {
+        const isDefault = (growthTableSortCol === 'plotName' || growthTableSortCol === 'isHarvested') && growthTableSortOrder === 'asc' && !hideHarvested;
+        if (isDefault) resetBtn.classList.add('hidden');
+        else resetBtn.classList.remove('hidden');
+    }
+
     renderGrowthTable(filteredResults);
 }
 document.getElementById('prediction-filter')?.addEventListener('change', function () {
@@ -2810,10 +2928,32 @@ function renderHarvestStatus(processedPlots, tasks) {
     );
 
     let totalCollectedMetricTon = 0;
+    let collectedForPredictedPlots = 0; // The sum for Harvest Analysis card
+    let collectedPlotCount = 0; // New: count of unique plots contributing
+    const includeNoPred = document.getElementById('include-no-prediction-agg')?.checked;
+    
+    // Separate loop for Aggregate Level "Collected Harvest" - bypasses window/status filtering
+    processedPlots.forEach(plot => {
+        const caId = String(plot.caId);
+        const plotTasks = tasksByPlot[caId];
+        if (!plotTasks) return;
+        
+        const hasPrediction = !plot.noPrediction;
+        if (hasPrediction || includeNoPred) {
+            let plotAdded = false;
+            plotTasks.forEach(task => {
+                const metricTonValue = convertValueToMetricTon(parseFloat(task.qty) || 0, task.unit || '-');
+                collectedForPredictedPlots += metricTonValue;
+                plotAdded = true;
+            });
+            if (plotAdded) collectedPlotCount++;
+        }
+    });
+
     const coveredCaIds = new Set();
     const allDetailRows = [];
 
-    // 2. Process Classification & Aggregation
+    // 2. Process Classification & Aggregation for Harvest Status Tables
     harvestedPlotsWithData.forEach(plot => {
         const caId = String(plot.caId);
         const plotTasks = tasksByPlot[caId];
@@ -2896,6 +3036,16 @@ function renderHarvestStatus(processedPlots, tasks) {
     }
     if (statCollectedEl) {
         statCollectedEl.textContent = `${totalCollectedMetricTon.toFixed(2)} metric ton`;
+    }
+
+    // Update the new Aggregate Level metric
+    const aggCollectedEl = document.getElementById('agg-collected-harvest');
+    const aggCollectedCountEl = document.getElementById('agg-collected-plots-count');
+    if (aggCollectedEl) {
+        aggCollectedEl.textContent = `${collectedForPredictedPlots.toFixed(2)} Tonnes`;
+    }
+    if (aggCollectedCountEl) {
+        aggCollectedCountEl.textContent = collectedPlotCount > 0 ? `(${collectedPlotCount} plots)` : '';
     }
 
     if (filteredRows.length === 0) {
@@ -3088,3 +3238,234 @@ window.updateGrowthChart = updateGrowthChart;
 window.updateGrowthTable = updateGrowthTable;
 window.closeGrowthDrillDown = closeGrowthDrillDown;
 window.handleLoadHarvestStatus = handleLoadHarvestStatus;
+
+function renderHarvestWindowDailyChart(results) {
+    try {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const eligiblePlots = results.filter(r => r.isConsideredInChart === "Yes" && r.rawHStart);
+        console.log(`[DEBUG] Rendering Daily Harvest Chart with ${eligiblePlots.length} eligible plots`);
+        
+        if (harvestDailyChartInstance) {
+            harvestDailyChartInstance.destroy();
+            harvestDailyChartInstance = null;
+        }
+
+        const coveredEl = document.getElementById('harvest-daily-plots-covered');
+        const rangeEl = document.getElementById('harvest-daily-window-range');
+
+        // Create 8 day buckets
+        const dailyBuckets = [];
+        for (let i = 0; i < 8; i++) {
+            const d = new Date(today);
+            d.setDate(today.getDate() + i);
+            dailyBuckets.push({
+                date: d,
+                dateStr: `${d.getDate().toString().padStart(2, '0')}-${(d.getMonth() + 1).toString().padStart(2, '0')}`,
+                dayLabel: `Day ${i + 1}`,
+                plots: [],
+                totalHarvest: 0,
+                totalArea: 0
+            });
+        }
+
+        let filteredCount = 0;
+        const eightDaysLater = new Date(today);
+        eightDaysLater.setDate(today.getDate() + 8);
+
+        eligiblePlots.forEach(p => {
+            const start = new Date(p.rawHStart);
+            start.setHours(0,0,0,0);
+
+            let targetIndex = -1;
+            if (start <= today) {
+                targetIndex = 0; // Active plots go to Day 1
+            } else {
+                const diffTime = start.getTime() - today.getTime();
+                const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                if (diffDays < 8) {
+                    targetIndex = diffDays;
+                }
+            }
+
+            if (targetIndex !== -1) {
+                const bucket = dailyBuckets[targetIndex];
+                bucket.plots.push(p);
+                bucket.totalHarvest += (parseFloat(p.expectedHarvestTon) || 0);
+                bucket.totalArea += (parseFloat(p.auditedArea) || 0);
+                filteredCount++;
+            }
+        });
+
+        if (coveredEl) coveredEl.textContent = `${filteredCount} / ${results.length}`;
+        if (rangeEl) {
+            const lastDay = dailyBuckets[7].date;
+            const fmt = (d) => `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
+            rangeEl.textContent = `${fmt(today)} - ${fmt(lastDay)}`;
+        }
+
+        const areaUnit = companyPrefs.areaUnits || 'Acre';
+        const labels = dailyBuckets.map(b => [b.dateStr, b.dayLabel]);
+        const data = dailyBuckets.map(b => b.totalHarvest);
+
+        const canvas = document.getElementById('harvestDailyChart');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+
+        harvestDailyChartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Expected Production (Metric Tonnes)',
+                    data: data,
+                    backgroundColor: '#3b82f6',
+                    barThickness: 45,
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                layout: { padding: { top: 70 } },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const b = dailyBuckets[context.dataIndex];
+                                return [
+                                    `Production: ${context.raw.toFixed(2)} Metric Tonnes`,
+                                    `Plots: ${b.plots.length}`,
+                                    `Area: ${b.totalArea.toFixed(2)} ${areaUnit}`
+                                ];
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: { display: true, beginAtZero: true, grid: { color: 'rgba(255, 255, 255, 0.05)' }, ticks: { color: 'var(--text-secondary)' } },
+                    x: { ticks: { color: '#e2e8f0', font: { size: 10 } }, grid: { display: false } }
+                },
+                onClick: (e, elements) => {
+                    if (elements.length > 0) {
+                        const index = elements[0].index;
+                        const b = dailyBuckets[index];
+                        showHarvestWindowDailyPlots(`${b.dateStr} (${b.dayLabel})`, b.plots);
+                    }
+                }
+            },
+            plugins: [{
+                id: 'harvestDailyCustomLabels',
+                afterDatasetsDraw: (chart) => {
+                    const ctx = chart.ctx;
+                    chart.data.datasets.forEach((dataset, i) => {
+                        const meta = chart.getDatasetMeta(i);
+                        meta.data.forEach((bar, index) => {
+                            const val = dataset.data[index];
+                            const b = dailyBuckets[index];
+                            ctx.font = 'bold 14px "Inter", sans-serif';
+                            ctx.fillStyle = '#3b82f6';
+                            ctx.textAlign = 'center';
+                            if (val > 0) ctx.fillText(val.toFixed(2), bar.x, bar.y - 10);
+                            
+                            const bubbleText = `${b.plots.length} Plots, ${b.totalArea.toFixed(2)} ${areaUnit}`;
+                            ctx.font = '10px "Inter", sans-serif';
+                            const textWidth = ctx.measureText(bubbleText).width;
+                            const bW = textWidth + 10;
+                            const bH = 22;
+                            const bX = bar.x - (bW / 2);
+                            const bY = bar.y - 50;
+                            ctx.fillStyle = '#f8fafc';
+                            ctx.beginPath();
+                            if (ctx.roundRect) ctx.roundRect(bX, bY, bW, bH, 4);
+                            else ctx.rect(bX, bY, bW, bH);
+                            ctx.fill();
+                            ctx.beginPath();
+                            ctx.moveTo(bar.x - 4, bY + bH);
+                            ctx.lineTo(bar.x + 4, bY + bH);
+                            ctx.lineTo(bar.x, bY + bH + 5);
+                            ctx.closePath();
+                            ctx.fill();
+                            ctx.fillStyle = '#1e293b';
+                            ctx.textAlign = 'center';
+                            ctx.textBaseline = 'middle';
+                            ctx.fillText(bubbleText, bar.x, bY + (bH / 2));
+                        });
+                    });
+                }
+            }]
+        });
+
+        const container = document.getElementById('harvest-window-daily-plots-container');
+        if (container) container.classList.add('hidden');
+
+    } catch (err) {
+        console.error('[ERROR] Problem rendering Daily Harvest Chart:', err);
+    }
+}
+
+function showHarvestWindowDailyPlots(label, plots) {
+    const container = document.getElementById('harvest-window-daily-plots-container');
+    const tbody = document.getElementById('harvest-window-daily-plots-tbody');
+    const title = document.getElementById('harvest-window-daily-plots-title');
+
+    if (!container || !tbody || !title) return;
+
+    title.textContent = `Plots on ${label}: (${plots.length})`;
+    
+    tbody.innerHTML = '';
+    if (plots.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" style="padding: 1rem; text-align: center; color: var(--text-secondary);">No plots on this day.</td></tr>';
+    } else {
+        plots.forEach(p => {
+            const tr = document.createElement('tr');
+            tr.style.borderBottom = '1px solid var(--border-color)';
+            tr.innerHTML = `
+                <td style="padding: 0.75rem; color: var(--text-primary); font-weight: 500;">${p.plotName}</td>
+                <td style="padding: 0.75rem; color: var(--text-secondary);">${(p.auditedArea || 0).toFixed(2)}</td>
+                <td style="padding: 0.75rem; color: var(--text-secondary);">${(p.expectedHarvestTon || 0).toFixed(2)}</td>
+                <td style="padding: 0.75rem; color: var(--text-secondary); font-weight: 500; color: ${p.isConsideredInChart === 'Yes' ? '#10b981' : '#f59e0b'};">${p.isConsideredInChart || 'Yes'}</td>
+                <td style="padding: 0.75rem; color: var(--text-secondary);">${p.harvestedDate || "-"}</td>
+                <td style="padding: 0.75rem; color: var(--text-secondary);">${p.currentStage || "-"}</td>
+                <td style="padding: 0.75rem; color: var(--text-secondary); font-weight: 600; color: var(--secondary-color);">${p.progression}%</td>
+                <td style="padding: 0.75rem; color: var(--text-secondary);">${p.hStart || "-"}</td>
+                <td style="padding: 0.75rem; color: var(--text-secondary);">${p.hEnd || "-"}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+    
+    container.classList.remove('hidden');
+    container.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+    // Hide the other drill-downs if open
+    containers.forEach(id => {
+        const other = document.getElementById(id);
+        if (other) other.classList.add('hidden');
+    });
+}
+
+// --- Expose functions globally for HTML onclick handlers ---
+window.showSourceTab = showSourceTab;
+window.handleLogin = handleLogin;
+window.handleLogout = handleLogout;
+window.toggleMultiSelect = toggleMultiSelect;
+window.sortProjectsToggle = sortProjectsToggle;
+window.handleLoadPlots = handleLoadPlots;
+window.navigatePlot = navigatePlot;
+window.showAllPlotsModal = showAllPlotsModal;
+window.closeAllPlotsModal = closeAllPlotsModal;
+window.handleLoadGrowthData = handleLoadGrowthData;
+window.closeGrowthDrillDown = closeGrowthDrillDown;
+window.handleLoadHarvestStatus = handleLoadHarvestStatus;
+window.clearHarvestFilter = clearHarvestFilter;
+window.toggleGrowthTableVisibility = toggleGrowthTableVisibility;
+window.resetGrowthTable = resetGrowthTable;
+window.exportToExcel = exportToExcel;
+window.sortTable = sortTable;
+window.handleGrowthTableSort = handleGrowthTableSort;
+window.showHarvestWindowDailyPlots = showHarvestWindowDailyPlots;
+window.showHarvestWindowPlots = showHarvestWindowPlots;
+window.showGrowthProgressionPlots = showGrowthProgressionPlots;

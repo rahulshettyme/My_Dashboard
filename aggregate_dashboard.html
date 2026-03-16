@@ -469,9 +469,15 @@
             <!-- 1. Aggregate Section -->
             <section class="dashboard-section">
                 <h2 class="section-title">1. Aggregate Level</h2>
-                <div style="margin-bottom: 1rem; color: var(--text-secondary); font-size: 0.95rem;">
-                    <span style="margin-right: 2rem;">Total Area: <span id="agg-total-area">-</span></span>
-                    <span>Data available plots: <span id="agg-plots-count">-</span></span>
+                <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 1rem;">
+                    <div style="color: var(--text-secondary); font-size: 0.95rem;">
+                        <span style="margin-right: 2rem;">Total Area: <span id="agg-total-area">-</span></span>
+                        <span>Data available plots: <span id="agg-plots-count">-</span></span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.6rem; background: rgba(255, 255, 255, 0.05); padding: 0.4rem 0.8rem; border-radius: 6px; border: 1px solid var(--border-color);">
+                        <input type="checkbox" id="include-no-prediction-agg" style="cursor: pointer; width: 16px; height: 16px;">
+                        <label for="include-no-prediction-agg" style="font-size: 0.85rem; color: var(--text-primary); cursor: pointer; user-select: none;">Include no prediction plots</label>
+                    </div>
                 </div>
                 <div class="cards-row">
                     <!-- Yield Analysis -->
@@ -515,12 +521,7 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="metric-row">
-                            <div>
-                                <div class="metric-label">Plot Level</div>
-                            </div>
-                            <div class="metric-value"><span class="sub-text" id="agg-card-level">-</span></div>
-                        </div>
+                        <!-- Plot Level removed per user request -->
                     </div>
 
                     <!-- Harvest Analysis -->
@@ -562,6 +563,16 @@
                                 <div class="sub-text" id="agg-ai-harvest-diff-re">
                                     <span class="value-green">↑ 0%</span> - <span class="value-green">↑ 0%</span>
                                 </div>
+                            </div>
+                        </div>
+                        <div class="metric-row" id="agg-collected-harvest-row" style="margin-top: 1rem; padding-top: 1rem; border-top: 1px dashed var(--border-color);">
+                            <div>
+                                <div class="metric-label" style="color: #10b981;">Collected Harvest</div>
+                                <span class="sub-text">(Predicted-available plots)</span>
+                            </div>
+                            <div class="metric-value" style="color: #10b981;">
+                                <span id="agg-collected-harvest">-</span>
+                                <span id="agg-collected-plots-count" style="font-size: 0.85rem; font-weight: 400; opacity: 0.8; margin-left: 0.3rem;"></span>
                             </div>
                         </div>
                     </div>
@@ -798,7 +809,7 @@
                 <div class="analysis-card" style="margin-top: 1.5rem;">
                     <div style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: flex-start;">
                         <h3 style="margin: 0; font-size: 1.25rem; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem;">
-                            Growth project data - Harvest window
+                            Growth project data - Harvest window - Weekly
                             <i class="fas fa-info-circle" style="font-size: 0.9rem; color: var(--text-secondary); cursor: help;" title="Displays expected harvest grouped by harvest start week"></i>
                         </h3>
                     </div>
@@ -841,7 +852,7 @@
                                     <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Plot Name</th>
                                     <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Audited Area (Acre)</th>
                                     <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Expected Harvest (Metric Tonnes)</th>
-                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Is Harvested</th>
+                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Is considered in Chart</th>
                                     <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Harvested Date</th>
                                     <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Current Stage</th>
                                     <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Growth Progression</th>
@@ -850,6 +861,68 @@
                                 </tr>
                             </thead>
                             <tbody id="harvest-window-plots-tbody">
+                                <!-- dynamic -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- NEW: Harvest Window - Daily Chart Section -->
+                <div class="analysis-card" style="margin-top: 1.5rem;">
+                    <div style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: flex-start;">
+                        <h3 style="margin: 0; font-size: 1.25rem; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem;">
+                            Growth project data - Harvest window - Daily
+                            <i class="fas fa-info-circle" style="font-size: 0.9rem; color: var(--text-secondary); cursor: help;" title="Displays expected harvest grouped by day for the next 8 days"></i>
+                        </h3>
+                    </div>
+
+                    <!-- Harvest Window Summary Cards -->
+                    <div style="display: flex; gap: 1rem; margin-bottom: 2rem; justify-content: center;">
+                        <div style="background: rgba(255, 255, 255, 0.03); padding: 1.25rem 2rem; border-radius: 16px; border: 1px solid var(--border-color); text-align: center; min-width: 200px;">
+                            <div id="harvest-daily-plots-covered" style="font-size: 1.5rem; font-weight: 700; color: var(--secondary-color); margin-bottom: 0.25rem;">- / -</div>
+                            <div style="font-size: 0.85rem; color: var(--text-secondary); font-weight: 500;">Plots Covered</div>
+                        </div>
+                        <div style="background: rgba(255, 255, 255, 0.03); padding: 1.25rem 2rem; border-radius: 16px; border: 1px solid var(--border-color); text-align: center; min-width: 200px;">
+                            <div id="harvest-daily-window-range" style="font-size: 1.15rem; font-weight: 700; color: #3b82f6; margin-bottom: 0.25rem;">-</div>
+                            <div style="font-size: 0.85rem; color: var(--text-secondary); font-weight: 500;">Harvest Window (8 Days)</div>
+                        </div>
+                    </div>
+                    
+                    <div style="position: relative; height: 350px; width: 100%;">
+                        <canvas id="harvestDailyChart"></canvas>
+                    </div>
+                    <div id="harvest-daily-chart-legend" style="display: flex; gap: 1.5rem; margin-top: 1rem; font-size: 0.85rem; color: var(--text-secondary); justify-content: center;">
+                        <div style="display: flex; align-items: center; gap: 0.4rem;">
+                            <span style="width: 12px; height: 12px; border-radius: 2px; background: #3b82f6;"></span>
+                            Expected Production (Metric Tonnes)
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Harvest Window Drill-down - Daily -->
+                <div id="harvest-window-daily-plots-container" class="hidden" style="margin-top: 1.5rem; background: var(--card-bg); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border-color);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <h4 id="harvest-window-daily-plots-title" style="margin: 0; color: var(--text-primary);">Plots in Harvest Day</h4>
+                        <button onclick="closeGrowthDrillDown('harvest-window-daily-plots-container')" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.25rem; padding: 0.25rem 0.5rem; border-radius: 4px; transition: all 0.2s;" title="Close Table">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div style="max-height: 400px; overflow-y: auto;">
+                        <table class="plots-table" style="width: 100%;">
+                            <thead>
+                                <tr>
+                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Plot Name</th>
+                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Audited Area (Acre)</th>
+                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Expected Harvest (Metric Tonnes)</th>
+                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Is considered in Chart</th>
+                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Harvested Date</th>
+                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Current Stage</th>
+                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Growth Progression</th>
+                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Harvest Start Date</th>
+                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Harvest End Date</th>
+                                </tr>
+                            </thead>
+                            <tbody id="harvest-window-daily-plots-tbody">
                                 <!-- dynamic -->
                             </tbody>
                         </table>
@@ -960,6 +1033,9 @@
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
                     <h3 style="margin: 0; font-size: 1.1rem; font-weight: 600; color: var(--text-primary);">Base Plot Data - Detail Table</h3>
                     <div style="display: flex; align-items: center; gap: 1rem;" id="growth-table-controls-container">
+                        <button id="reset-growth-table-btn" onclick="resetGrowthTable()" class="hidden" style="background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); padding: 0.4rem 0.8rem; border-radius: 6px; font-size: 0.8rem; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; transition: all 0.2s;">
+                            <i class="fas fa-times-circle"></i> Clear Filter/Sort
+                        </button>
                         <label style="color: var(--text-secondary); font-size: 0.9rem; display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
                             <input type="checkbox" id="hide-harvested-table" onchange="updateGrowthTable()"> Hide Harvested Plots
                         </label>
