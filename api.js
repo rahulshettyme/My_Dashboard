@@ -2,7 +2,7 @@ const API_BASE = (window.location.hostname === 'localhost' || window.location.ho
     ? 'http://localhost:3000/api' 
     : window.location.origin + '/api';
 
-export const api = {
+const api = {
     async getDb() {
         const response = await fetch(`${API_BASE}/db`);
         return response.json();

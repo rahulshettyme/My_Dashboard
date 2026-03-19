@@ -734,10 +734,16 @@
                 <h2 style="font-size: 1.75rem; font-weight: 700; color: var(--text-primary); margin: 0; display: flex; align-items: center; gap: 0.75rem;">
                     <i class="fas fa-seedling" style="color: var(--secondary-color);"></i> Growth
                 </h2>
-                <button id="load-growth-data-btn" onclick="handleLoadGrowthData()" disabled
-                    style="padding: 0.7rem 1.5rem; background: var(--secondary-color); opacity: 0.5; color: white; border: none; border-radius: 8px; cursor: not-allowed; transition: all 0.3s; font-weight: 700; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);">
-                    🌱 Load Growth Data
-                </button>
+                <div style="display: flex; gap: 1rem;">
+                    <button id="export-pdf-btn" onclick="exportDashboardToPDF()" class="export-btn" disabled
+                        style="background: #ef4444; padding: 0.7rem 1.5rem; border-radius: 8px; font-weight: 700; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2); display: flex; align-items: center; gap: 0.5rem; opacity: 0.5; cursor: not-allowed;">
+                        <i class="fas fa-file-pdf"></i> Export PDF
+                    </button>
+                    <button id="load-growth-data-btn" onclick="handleLoadGrowthData()" disabled
+                        style="padding: 0.7rem 1.5rem; background: var(--secondary-color); opacity: 0.5; color: white; border: none; border-radius: 8px; cursor: not-allowed; transition: all 0.3s; font-weight: 700; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);">
+                        🌱 Load Growth Data
+                    </button>
+                </div>
             </div>
             
             <div id="growth-info" class="hidden" style="margin-bottom: 1.5rem; padding: 1rem; background: rgba(99, 102, 241, 0.1); border-radius: 8px;">
@@ -852,8 +858,8 @@
                                     <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Plot Name</th>
                                     <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Audited Area (Acre)</th>
                                     <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Expected Harvest (Metric Tonnes)</th>
-                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Is considered in Chart</th>
-                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Harvested Date</th>
+
+
                                     <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Current Stage</th>
                                     <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Growth Progression</th>
                                     <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Harvest Start Date</th>
@@ -914,8 +920,8 @@
                                     <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Plot Name</th>
                                     <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Audited Area (Acre)</th>
                                     <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Expected Harvest (Metric Tonnes)</th>
-                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Is considered in Chart</th>
-                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Harvested Date</th>
+
+
                                     <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Current Stage</th>
                                     <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Growth Progression</th>
                                     <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Harvest Start Date</th>
@@ -1219,7 +1225,11 @@
         </div>
     </div>
 
-    <script type="module" src="aggregate_script.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="api.js"></script>
+    <script src="components/export_manager.js"></script>
+    <script src="aggregate_script.js"></script>
 </body>
 
 </html>

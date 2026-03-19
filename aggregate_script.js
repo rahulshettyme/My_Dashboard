@@ -1,4 +1,8 @@
-import { api } from './api.js';
+// Chart Instances (Global)
+var growthProgressionChartInstance = null;
+var harvestWindowChartInstance = null;
+var harvestDailyChartInstance = null;
+var harvestWindowPieChart = null;
 
 document.addEventListener('DOMContentLoaded', () => {
     // Auto-detect production environment
@@ -115,6 +119,7 @@ var paginationState = {
     sortBy: '',
     sortOrder: 'asc'
 };
+
 // -----------------------------------------
 
 // =============================================
@@ -733,88 +738,6 @@ function closeAllPlotsModal() {
     document.body.style.overflow = '';
 }
 
-function exportToExcel() {
-    const yieldLabel = 'Tonne/Ha';
-    const harvestLabel = 'Tonne';
-
-    const exportData = [];
-    exportData.push([
-        'Plot Name',
-        'Audited Area (Ha)',
-        `Expected Harvest (${harvestLabel})`,
-        `Re-estimated Harvest (${harvestLabel})`,
-        `Predicted Harvest Min (${harvestLabel})`,
-        `Predicted Harvest Avg (${harvestLabel})`,
-        `Predicted Harvest Max (${harvestLabel})`,
-        `Expected Yield (${yieldLabel})`,
-        `Re-estimated Yield (${yieldLabel})`,
-        `Predicted Yield Min (${yieldLabel})`,
-        `Predicted Yield Avg (${yieldLabel})`,
-        `Predicted Yield Max (${yieldLabel})`
-    ]);
-
-    globalData.forEach(row => {
-        if (!row._processed) return;
-        const d = row._processed;
-
-        if (showPredictionAvailable && d.noPrediction) return;
-        if (!showPredictionAvailable && !d.noPrediction) return;
-
-        const qUnit = (d.harvestUnit || 'kgs').toLowerCase();
-        const aUnit = (d.areaUnit || 'ha').toLowerCase();
-        const massFactor = MASS_CONVERSIONS[qUnit] || MASS_CONVERSIONS.kgs;
-        const areaFactor = AREA_CONVERSIONS[aUnit] || AREA_CONVERSIONS.ha;
-
-        const h1Ton = d.h1 / massFactor;
-        const h2Ton = d.h2 / massFactor;
-        const areaHa = d.auditedArea / areaFactor;
-        const y1TonHa = areaHa > 0 ? h1Ton / areaHa : 0;
-        const y2TonHa = areaHa > 0 ? h2Ton / areaHa : 0;
-
-        let predHarvestMin = d.h3_min;
-        let predHarvestMax = d.h3_max;
-        let predHarvestAvg = (predHarvestMin + predHarvestMax) / 2;
-
-        let predYieldMin = d.y3_min;
-        let predYieldMax = d.y3_max;
-        let predYieldAvg = (predYieldMin + predYieldMax) / 2;
-
-        if (d.noPrediction || d.notEnabled) {
-            predHarvestMin = predHarvestMax = predHarvestAvg = 'NA';
-            predYieldMin = predYieldMax = predYieldAvg = 'NA';
-        } else {
-            predHarvestMin = parseFloat(predHarvestMin.toFixed(2));
-            predHarvestMax = parseFloat(predHarvestMax.toFixed(2));
-            predHarvestAvg = parseFloat(predHarvestAvg.toFixed(2));
-            predYieldMin = parseFloat(predYieldMin.toFixed(2));
-            predYieldMax = parseFloat(predYieldMax.toFixed(2));
-            predYieldAvg = parseFloat(predYieldAvg.toFixed(2));
-        }
-
-        exportData.push([
-            d.name,
-            parseFloat(areaHa.toFixed(2)),
-            parseFloat(h1Ton.toFixed(2)),
-            parseFloat(h2Ton.toFixed(2)),
-            predHarvestMin,
-            predHarvestAvg,
-            predHarvestMax,
-            parseFloat(y1TonHa.toFixed(2)),
-            parseFloat(y2TonHa.toFixed(2)),
-            predYieldMin,
-            predYieldAvg,
-            predYieldMax
-        ]);
-    });
-
-    const ws = XLSX.utils.aoa_to_sheet(exportData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'All Plots Data');
-
-    const timestamp = new Date().toISOString().slice(0, 10);
-    const filename = `AllPlotsData_${timestamp}.xlsx`;
-    XLSX.writeFile(wb, filename);
-}
 
 function filterTableData(query) {
     paginationState.searchQuery = query.toLowerCase();
@@ -2178,6 +2101,13 @@ async function handleLoadGrowthData() {
         loadBtn.disabled = false;
         loadBtn.innerHTML = '🌱 Load Growth Data';
         loadBtn.style.opacity = '1';
+        
+        const exportBtn = document.getElementById('export-pdf-btn');
+        if (exportBtn) {
+            exportBtn.disabled = false;
+            exportBtn.style.opacity = '1';
+            exportBtn.style.cursor = 'pointer';
+        }
     }
 }
 
@@ -2270,7 +2200,6 @@ document.getElementById('login-password')?.addEventListener('keypress', function
 });
 
 // --- Growth Progression Chart Logic ---
-let growthProgressionChartInstance = null;
 
 const drawValuesPlugin = {
     id: 'drawValues',
@@ -2462,17 +2391,12 @@ function renderGrowthProgressionChart(results) {
     }
 }
 
-let harvestWindowChartInstance = null;
-let harvestDailyChartInstance = null;
 
 let growthTableSortCol = 'plotName';
 let growthTableSortOrder = 'asc';
 
 function renderHarvestWindowChart(results) {
     try {
-        const pendingPlots = results.filter(r => r.isHarvested !== "Yes" && r.rawHStart);
-        console.log(`[DEBUG] Rendering Harvest Window Chart with ${pendingPlots.length} pending plots`);
-        
         if (harvestWindowChartInstance) {
             harvestWindowChartInstance.destroy();
             harvestWindowChartInstance = null;
@@ -2481,72 +2405,87 @@ function renderHarvestWindowChart(results) {
         const coveredEl = document.getElementById('harvest-plots-covered');
         const rangeEl = document.getElementById('harvest-window-range');
 
-        if (pendingPlots.length === 0) {
-            if (coveredEl) coveredEl.textContent = `0 / ${results.length}`;
-            if (rangeEl) rangeEl.textContent = "-";
-            return;
-        }
-
         const areaUnit = companyPrefs.areaUnits || 'Acre';
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
-        // Filter for eligible plots to determine the chart's anchor date
-        const eligiblePlots = pendingPlots.filter(p => !p.rawHEnd || p.rawHEnd >= today);
         
-        if (eligiblePlots.length === 0) {
+        // 1. Define "Current Week" (Monday to Sunday)
+        const now = new Date();
+        const dayOfWeek = now.getDay(); // 0 (Sun) to 6 (Sat)
+        const diffToMon = (dayOfWeek === 0 ? -6 : 1 - dayOfWeek);
+        const currentWeekMon = new Date(now);
+        currentWeekMon.setDate(now.getDate() + diffToMon);
+        currentWeekMon.setHours(0, 0, 0, 0);
+
+        // 2. Group all plots into Monday-based weeks
+        const weeksMap = {};
+        let filteredPlotsCount = 0;
+
+        results.forEach(p => {
+            if (p.isHarvested === "Yes" || !p.rawHStart || !p.rawHEnd) return;
+            if (p.rawHEnd < currentWeekMon) return; // User Request: Ignore if end date before this Monday
+
+            let plotStart = new Date(p.rawHStart);
+            plotStart.setHours(0, 0, 0, 0);
+
+            let weekMon;
+            if (plotStart < currentWeekMon) {
+                // In-progress: Force into Current Week
+                weekMon = new Date(currentWeekMon);
+            } else {
+                const pDay = plotStart.getDay();
+                const pDiffToMon = (pDay === 0 ? -6 : 1 - pDay);
+                weekMon = new Date(plotStart);
+                weekMon.setDate(plotStart.getDate() + pDiffToMon);
+            }
+            weekMon.setHours(0, 0, 0, 0);
+
+            const weekKey = weekMon.toISOString().split('T')[0];
+            if (!weeksMap[weekKey]) {
+                weeksMap[weekKey] = { 
+                    monday: weekMon,
+                    plots: [], 
+                    totalHarvest: 0, 
+                    totalArea: 0, 
+                    chartPlotsCount: 0 
+                };
+            }
+            weeksMap[weekKey].plots.push(p);
+            weeksMap[weekKey].totalHarvest += (parseFloat(p.expectedHarvestTon) || 0);
+            weeksMap[weekKey].totalArea += (parseFloat(p.auditedArea) || 0);
+            weeksMap[weekKey].chartPlotsCount++;
+            filteredPlotsCount++;
+        });
+
+        // 3. Select the first 8 available weeks starting from Current Week
+        const sortedWeeks = Object.keys(weeksMap)
+            .filter(key => key >= currentWeekMon.toISOString().split('T')[0])
+            .sort()
+            .slice(0, 8);
+
+        if (sortedWeeks.length === 0) {
             if (coveredEl) coveredEl.textContent = `0 / ${results.length}`;
             if (rangeEl) rangeEl.textContent = "-";
-            if (harvestWindowChartInstance) {
-                harvestWindowChartInstance.destroy();
-                harvestWindowChartInstance = null;
-            }
             return;
         }
-
-        const eligibleStartDates = eligiblePlots.map(p => p.rawHStart.getTime());
-        const minDateTs = Math.min(...eligibleStartDates);
-        const maxDateTs = Math.max(...eligibleStartDates);
-        const minDate = new Date(minDateTs);
-        const maxDate = new Date(maxDateTs);
-        minDate.setHours(0, 0, 0, 0);
-
-        if (rangeEl) {
-            const fmt = (d) => `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
-            rangeEl.textContent = `${fmt(minDate)} - ${fmt(maxDate)}`;
-        }
-
-        const weeks = {};
-        let filteredPlotsCount = 0;
-        pendingPlots.forEach(p => {
-            const diffDays = Math.floor((p.rawHStart.getTime() - minDate.getTime()) / (24 * 60 * 60 * 1000));
-            // weekIndex will be 1 or more for plots at or after minDate
-            let weekIndex = Math.floor(diffDays / 7) + 1;
-            
-            // Only group into weeks if it's considered in chart (matches today or future) 
-            // and falls on or after the anchor date (weekIndex >= 1)
-            if (p.isConsideredInChart === "Yes" && weekIndex >= 1) {
-                if (!weeks[weekIndex]) weeks[weekIndex] = { plots: [], totalHarvest: 0, totalArea: 0, chartPlotsCount: 0 };
-                weeks[weekIndex].plots.push(p);
-                weeks[weekIndex].totalHarvest += (parseFloat(p.expectedHarvestTon) || 0);
-                weeks[weekIndex].totalArea += (parseFloat(p.auditedArea) || 0);
-                weeks[weekIndex].chartPlotsCount++;
-                filteredPlotsCount++;
-            }
-        });
 
         if (coveredEl) coveredEl.textContent = `${filteredPlotsCount} / ${results.length}`;
 
-        const sortedWeekIndices = Object.keys(weeks).sort((a, b) => a - b);
-        const labels = sortedWeekIndices.map(w => {
-            const startDate = new Date(minDate);
-            startDate.setDate(minDate.getDate() + (w - 1) * 7);
-            const endDate = new Date(startDate);
-            endDate.setDate(startDate.getDate() + 6);
+        const labels = sortedWeeks.map((key, index) => {
+            const b = weeksMap[key];
+            const sunday = new Date(b.monday);
+            sunday.setDate(b.monday.getDate() + 6);
             const fmt = (d) => `${d.getDate().toString().padStart(2, '0')}-${(d.getMonth() + 1).toString().padStart(2, '0')}`;
-            return [`Week ${w}`, `${fmt(startDate)} to ${fmt(endDate)}` ];
+            return [`Week ${index + 1}`, `${fmt(b.monday)} to ${fmt(sunday)}` ];
         });
-        const data = sortedWeekIndices.map(w => weeks[w].totalHarvest);
+        const data = sortedWeeks.map(key => weeksMap[key].totalHarvest);
+
+        if (rangeEl) {
+            const first = weeksMap[sortedWeeks[0]].monday;
+            const lastMon = weeksMap[sortedWeeks[sortedWeeks.length - 1]].monday;
+            const lastSun = new Date(lastMon);
+            lastSun.setDate(lastMon.getDate() + 6);
+            const fmtLong = (d) => `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
+            rangeEl.textContent = `${fmtLong(first)} - ${fmtLong(lastSun)}`;
+        }
 
         const canvas = document.getElementById('harvestWindowChart');
         if (!canvas) return;
@@ -2573,7 +2512,7 @@ function renderHarvestWindowChart(results) {
                     tooltip: {
                         callbacks: {
                             label: function(context) {
-                                const wData = weeks[sortedWeekIndices[context.dataIndex]];
+                                const wData = weeksMap[sortedWeeks[context.dataIndex]];
                                 return [
                                     `Production: ${context.raw.toFixed(2)} Metric Tonnes`,
                                     `Plots: ${wData.chartPlotsCount}`,
@@ -2590,8 +2529,8 @@ function renderHarvestWindowChart(results) {
                 onClick: (e, elements) => {
                     if (elements.length > 0) {
                         const index = elements[0].index;
-                        const wIdx = sortedWeekIndices[index];
-                        showHarvestWindowPlots(`Week ${wIdx}`, weeks[wIdx].plots);
+                        const key = sortedWeeks[index];
+                        showHarvestWindowPlots(`Week ${index + 1}`, weeksMap[key].plots);
                     }
                 }
             },
@@ -2603,7 +2542,7 @@ function renderHarvestWindowChart(results) {
                         const meta = chart.getDatasetMeta(i);
                         meta.data.forEach((bar, index) => {
                             const val = dataset.data[index];
-                            const wData = weeks[sortedWeekIndices[index]];
+                            const wData = weeksMap[sortedWeeks[index]];
                             ctx.font = 'bold 16px "Inter", sans-serif';
                             ctx.fillStyle = '#84cc16';
                             ctx.textAlign = 'center';
@@ -2695,7 +2634,7 @@ function showHarvestWindowPlots(label, plots) {
     
     tbody.innerHTML = '';
     if (plots.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" style="padding: 1rem; text-align: center; color: var(--text-secondary);">No plots in this week.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" style="padding: 1rem; text-align: center; color: var(--text-secondary);">No plots in this week.</td></tr>';
     } else {
         plots.forEach(p => {
             const tr = document.createElement('tr');
@@ -2704,8 +2643,6 @@ function showHarvestWindowPlots(label, plots) {
                 <td style="padding: 0.75rem; color: var(--text-primary); font-weight: 500;">${p.plotName}</td>
                 <td style="padding: 0.75rem; color: var(--text-secondary);">${(p.auditedArea || 0).toFixed(2)}</td>
                 <td style="padding: 0.75rem; color: var(--text-secondary);">${(p.expectedHarvestTon || 0).toFixed(2)}</td>
-                <td style="padding: 0.75rem; color: var(--text-secondary); font-weight: 500; color: ${p.isConsideredInChart === 'Yes' ? '#10b981' : '#f59e0b'};">${p.isConsideredInChart || 'Yes'}</td>
-                <td style="padding: 0.75rem; color: var(--text-secondary);">${p.harvestedDate || "-"}</td>
                 <td style="padding: 0.75rem; color: var(--text-secondary);">${p.currentStage || "-"}</td>
                 <td style="padding: 0.75rem; color: var(--text-secondary); font-weight: 600; color: var(--secondary-color);">${p.progression}%</td>
                 <td style="padding: 0.75rem; color: var(--text-secondary);">${p.hStart || "-"}</td>
@@ -3060,8 +2997,6 @@ function renderHarvestStatus(processedPlots, tasks) {
     renderHarvestWindowStatus(windowAggregates, processedPlots);
 }
 
-let harvestWindowPieChart = null;
-
 function renderHarvestWindowStatus(aggregates, processedPlots) {
     const container = document.getElementById('harvest-window-status-container');
     const tbody = document.getElementById('harvest-window-summary-tbody');
@@ -3218,34 +3153,15 @@ window.toggleGrowthTableVisibility = function() {
     }
 };
 
-window.showSourceTab = showSourceTab;
-window.handleLogin = handleLogin;
-window.handleLogout = handleLogout;
-window.generateDataFromAPI = generateDataFromAPI;
-window.sortProjectsToggle = sortProjectsToggle;
-window.toggleMultiSelect = toggleMultiSelect;
-window.handleLoadPlots = handleLoadPlots;
-window.handleLoadGrowthData = handleLoadGrowthData;
-window.navigatePlot = navigatePlot;
-window.sortTable = sortTable;
-window.exportToExcel = exportToExcel;
-window.nextPage = nextPage;
-window.prevPage = prevPage;
-window.changeRowsPerPage = changeRowsPerPage;
-window.closeAllPlotsModal = closeAllPlotsModal;
-window.showAllPlotsModal = showAllPlotsModal;
-window.updateGrowthChart = updateGrowthChart;
-window.updateGrowthTable = updateGrowthTable;
-window.closeGrowthDrillDown = closeGrowthDrillDown;
-window.handleLoadHarvestStatus = handleLoadHarvestStatus;
 
 function renderHarvestWindowDailyChart(results) {
     try {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        const now = new Date();
+        const tomorrow = new Date(now);
+        tomorrow.setDate(now.getDate() + 1);
+        tomorrow.setHours(0, 0, 0, 0);
 
-        const eligiblePlots = results.filter(r => r.isConsideredInChart === "Yes" && r.rawHStart);
-        console.log(`[DEBUG] Rendering Daily Harvest Chart with ${eligiblePlots.length} eligible plots`);
+        console.log(`[DEBUG] Rendering Daily Harvest Chart`);
         
         if (harvestDailyChartInstance) {
             harvestDailyChartInstance.destroy();
@@ -3255,59 +3171,68 @@ function renderHarvestWindowDailyChart(results) {
         const coveredEl = document.getElementById('harvest-daily-plots-covered');
         const rangeEl = document.getElementById('harvest-daily-window-range');
 
-        // Create 8 day buckets
-        const dailyBuckets = [];
-        for (let i = 0; i < 8; i++) {
-            const d = new Date(today);
-            d.setDate(today.getDate() + i);
-            dailyBuckets.push({
-                date: d,
-                dateStr: `${d.getDate().toString().padStart(2, '0')}-${(d.getMonth() + 1).toString().padStart(2, '0')}`,
-                dayLabel: `Day ${i + 1}`,
-                plots: [],
-                totalHarvest: 0,
-                totalArea: 0
-            });
-        }
-
+        // Group plots by Date
+        const dailyMap = {};
         let filteredCount = 0;
-        const eightDaysLater = new Date(today);
-        eightDaysLater.setDate(today.getDate() + 8);
 
-        eligiblePlots.forEach(p => {
-            const start = new Date(p.rawHStart);
-            start.setHours(0,0,0,0);
+        results.forEach(p => {
+            if (p.isHarvested === "Yes" || !p.rawHStart || !p.rawHEnd) return;
+            if (p.rawHEnd < tomorrow) return; // User Request: Ignore if end date is today or earlier
 
-            let targetIndex = -1;
-            if (start <= today) {
-                targetIndex = 0; // Active plots go to Day 1
+            let start = new Date(p.rawHStart);
+            start.setHours(0, 0, 0, 0);
+
+            let targetDate;
+            if (start < tomorrow) {
+                // In-progress: Force into Tomorrow
+                targetDate = new Date(tomorrow);
             } else {
-                const diffTime = start.getTime() - today.getTime();
-                const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-                if (diffDays < 8) {
-                    targetIndex = diffDays;
-                }
+                targetDate = start;
             }
 
-            if (targetIndex !== -1) {
-                const bucket = dailyBuckets[targetIndex];
-                bucket.plots.push(p);
-                bucket.totalHarvest += (parseFloat(p.expectedHarvestTon) || 0);
-                bucket.totalArea += (parseFloat(p.auditedArea) || 0);
-                filteredCount++;
+            const key = targetDate.toISOString().split('T')[0];
+            if (!dailyMap[key]) {
+                dailyMap[key] = {
+                    date: targetDate,
+                    plots: [],
+                    totalHarvest: 0,
+                    totalArea: 0
+                };
             }
+            dailyMap[key].plots.push(p);
+            dailyMap[key].totalHarvest += (parseFloat(p.expectedHarvestTon) || 0);
+            dailyMap[key].totalArea += (parseFloat(p.auditedArea) || 0);
+            filteredCount++;
         });
 
+        // Get sorted list of dates that have data, starting from Tomorrow
+        const sortedDates = Object.keys(dailyMap)
+            .filter(key => key >= tomorrow.toISOString().split('T')[0])
+            .sort()
+            .slice(0, 7);
+
+        if (sortedDates.length === 0) {
+            if (coveredEl) coveredEl.textContent = `0 / ${results.length}`;
+            if (rangeEl) rangeEl.textContent = "-";
+            return;
+        }
+
         if (coveredEl) coveredEl.textContent = `${filteredCount} / ${results.length}`;
+        
         if (rangeEl) {
-            const lastDay = dailyBuckets[7].date;
+            const first = dailyMap[sortedDates[0]].date;
+            const last = dailyMap[sortedDates[sortedDates.length - 1]].date;
             const fmt = (d) => `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
-            rangeEl.textContent = `${fmt(today)} - ${fmt(lastDay)}`;
+            rangeEl.textContent = `${fmt(first)} - ${fmt(last)}`;
         }
 
         const areaUnit = companyPrefs.areaUnits || 'Acre';
-        const labels = dailyBuckets.map(b => [b.dateStr, b.dayLabel]);
-        const data = dailyBuckets.map(b => b.totalHarvest);
+        const labels = sortedDates.map((key, index) => {
+            const b = dailyMap[key];
+            const dateStr = `${b.date.getDate().toString().padStart(2, '0')}-${(b.date.getMonth() + 1).toString().padStart(2, '0')}`;
+            return [dateStr, `Day ${index + 1}`];
+        });
+        const data = sortedDates.map(key => dailyMap[key].totalHarvest);
 
         const canvas = document.getElementById('harvestDailyChart');
         if (!canvas) return;
@@ -3334,7 +3259,7 @@ function renderHarvestWindowDailyChart(results) {
                     tooltip: {
                         callbacks: {
                             label: function(context) {
-                                const b = dailyBuckets[context.dataIndex];
+                                const b = dailyMap[sortedDates[context.dataIndex]];
                                 return [
                                     `Production: ${context.raw.toFixed(2)} Metric Tonnes`,
                                     `Plots: ${b.plots.length}`,
@@ -3351,8 +3276,9 @@ function renderHarvestWindowDailyChart(results) {
                 onClick: (e, elements) => {
                     if (elements.length > 0) {
                         const index = elements[0].index;
-                        const b = dailyBuckets[index];
-                        showHarvestWindowDailyPlots(`${b.dateStr} (${b.dayLabel})`, b.plots);
+                        const key = sortedDates[index];
+                        const b = dailyMap[key];
+                        showHarvestWindowDailyPlots(`${key} (Day ${index + 1})`, b.plots);
                     }
                 }
             },
@@ -3364,7 +3290,7 @@ function renderHarvestWindowDailyChart(results) {
                         const meta = chart.getDatasetMeta(i);
                         meta.data.forEach((bar, index) => {
                             const val = dataset.data[index];
-                            const b = dailyBuckets[index];
+                            const b = dailyMap[sortedDates[index]];
                             ctx.font = 'bold 14px "Inter", sans-serif';
                             ctx.fillStyle = '#3b82f6';
                             ctx.textAlign = 'center';
@@ -3417,7 +3343,7 @@ function showHarvestWindowDailyPlots(label, plots) {
     
     tbody.innerHTML = '';
     if (plots.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" style="padding: 1rem; text-align: center; color: var(--text-secondary);">No plots on this day.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" style="padding: 1rem; text-align: center; color: var(--text-secondary);">No plots on this day.</td></tr>';
     } else {
         plots.forEach(p => {
             const tr = document.createElement('tr');
@@ -3426,8 +3352,6 @@ function showHarvestWindowDailyPlots(label, plots) {
                 <td style="padding: 0.75rem; color: var(--text-primary); font-weight: 500;">${p.plotName}</td>
                 <td style="padding: 0.75rem; color: var(--text-secondary);">${(p.auditedArea || 0).toFixed(2)}</td>
                 <td style="padding: 0.75rem; color: var(--text-secondary);">${(p.expectedHarvestTon || 0).toFixed(2)}</td>
-                <td style="padding: 0.75rem; color: var(--text-secondary); font-weight: 500; color: ${p.isConsideredInChart === 'Yes' ? '#10b981' : '#f59e0b'};">${p.isConsideredInChart || 'Yes'}</td>
-                <td style="padding: 0.75rem; color: var(--text-secondary);">${p.harvestedDate || "-"}</td>
                 <td style="padding: 0.75rem; color: var(--text-secondary);">${p.currentStage || "-"}</td>
                 <td style="padding: 0.75rem; color: var(--text-secondary); font-weight: 600; color: var(--secondary-color);">${p.progression}%</td>
                 <td style="padding: 0.75rem; color: var(--text-secondary);">${p.hStart || "-"}</td>
@@ -3441,9 +3365,12 @@ function showHarvestWindowDailyPlots(label, plots) {
     container.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
     // Hide the other drill-downs if open
+    const containers = ['growth-progression-plots-container', 'harvest-window-plots-container', 'harvest-window-daily-plots-container'];
     containers.forEach(id => {
-        const other = document.getElementById(id);
-        if (other) other.classList.add('hidden');
+        if (id !== container.id) {
+            const other = document.getElementById(id);
+            if (other) other.classList.add('hidden');
+        }
     });
 }
 
@@ -3463,7 +3390,8 @@ window.handleLoadHarvestStatus = handleLoadHarvestStatus;
 window.clearHarvestFilter = clearHarvestFilter;
 window.toggleGrowthTableVisibility = toggleGrowthTableVisibility;
 window.resetGrowthTable = resetGrowthTable;
-window.exportToExcel = exportToExcel;
+window.exportToExcel = () => exportToExcel(globalData, MASS_CONVERSIONS, AREA_CONVERSIONS, showPredictionAvailable);
+window.exportDashboardToPDF = exportDashboardToPDF;
 window.sortTable = sortTable;
 window.handleGrowthTableSort = handleGrowthTableSort;
 window.showHarvestWindowDailyPlots = showHarvestWindowDailyPlots;
