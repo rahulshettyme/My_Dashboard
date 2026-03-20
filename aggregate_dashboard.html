@@ -281,6 +281,7 @@
             font-size: 0.8rem;
         }
     </style>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect x='10' y='50' width='15' height='40' rx='2' fill='%236366f1'/%3E%3Crect x='35' y='30' width='15' height='60' rx='2' fill='%23818cf8'/%3E%3Crect x='60' y='10' width='15' height='80' rx='2' fill='%23c084fc'/%3E%3Cpath d='M75 10 Q90 10 90 25 Q90 40 75 40 Q60 40 60 25 Q60 10 75 10 Z' fill='%2310b981'/%3E%3C/svg%3E">
 </head>
 
 <body>
@@ -366,10 +367,16 @@
                         <div
                             style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
                             <h3 style="color: var(--text-primary); margin: 0;">📁 Select Project</h3>
-                            <button onclick="handleLogout()"
-                                style="padding: 0.5rem 1rem; background: transparent; border: 1px solid var(--border-color); color: var(--text-secondary); border-radius: 6px; cursor: pointer; font-size: 0.85rem;">
-                                Logout
-                            </button>
+                            <div style="display: flex; gap: 0.75rem; align-items: center;">
+                                <button id="export-pdf-btn" onclick="exportDashboardToPDF()" class="export-btn" disabled
+                                    style="padding: 0.5rem 1rem; background: #ef4444; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 600; display: flex; align-items: center; gap: 0.4rem; opacity: 0.5; transition: all 0.3s; box-shadow: 0 4px 10px rgba(239, 68, 68, 0.2);">
+                                    <i class="fas fa-file-pdf"></i> Export Full Report (PDF)
+                                </button>
+                                <button onclick="handleLogout()"
+                                    style="padding: 0.5rem 1rem; background: transparent; border: 1px solid var(--border-color); color: var(--text-secondary); border-radius: 6px; cursor: pointer; font-size: 0.85rem;">
+                                    Logout
+                                </button>
+                            </div>
                         </div>
                         <div style="margin-bottom: 1rem; color: var(--text-secondary); font-size: 0.9rem;">
                             <span id="session-info"></span>
@@ -735,10 +742,6 @@
                     <i class="fas fa-seedling" style="color: var(--secondary-color);"></i> Growth
                 </h2>
                 <div style="display: flex; gap: 1rem;">
-                    <button id="export-pdf-btn" onclick="exportDashboardToPDF()" class="export-btn" disabled
-                        style="background: #ef4444; padding: 0.7rem 1.5rem; border-radius: 8px; font-weight: 700; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2); display: flex; align-items: center; gap: 0.5rem; opacity: 0.5; cursor: not-allowed;">
-                        <i class="fas fa-file-pdf"></i> Export PDF
-                    </button>
                     <button id="load-growth-data-btn" onclick="handleLoadGrowthData()" disabled
                         style="padding: 0.7rem 1.5rem; background: var(--secondary-color); opacity: 0.5; color: white; border: none; border-radius: 8px; cursor: not-allowed; transition: all 0.3s; font-weight: 700; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);">
                         🌱 Load Growth Data
@@ -1227,9 +1230,9 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="api.js"></script>
-    <script src="components/export_manager.js"></script>
-    <script src="aggregate_script.js"></script>
+    <script type="module" src="api.js"></script>
+    <script src="components/export_manager.js" defer></script>
+    <script src="aggregate_script.js" defer></script>
 </body>
 
 </html>

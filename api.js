@@ -53,3 +53,7 @@ const api = {
         return response.json();
     }
 };
+
+window.api = api;
+
+export { api };

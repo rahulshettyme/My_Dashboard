@@ -10,6 +10,8 @@ async function exportToExcel(globalData, MASS_CONVERSIONS, AREA_CONVERSIONS, sho
     const exportData = [];
     exportData.push([
         'Plot Name',
+        'Is Harvested',
+        'Harvested Date',
         'Audited Area (Ha)',
         `Expected Harvest (${harvestLabel})`,
         `Re-estimated Harvest (${harvestLabel})`,
@@ -62,6 +64,8 @@ async function exportToExcel(globalData, MASS_CONVERSIONS, AREA_CONVERSIONS, sho
 
         exportData.push([
             d.name || d.plotName,
+            d.isHarvested || d.harvestStatus || (d.harvested ? 'Yes' : 'No') || '-',
+            d.harvestedDate || d.actualHarvestDate || '-',
             parseFloat(areaHa.toFixed(2)),
             parseFloat(h1Ton.toFixed(2)),
             parseFloat(h2Ton.toFixed(2)),
@@ -107,7 +111,12 @@ async function exportDashboardToPDF() {
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
 
     try {
-        const doc = new jsPDF('p', 'mm', 'a4');
+        const doc = new jspdf.jsPDF({
+            orientation: 'p',
+            unit: 'mm',
+            format: 'a4',
+            compress: true
+        });
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
         const margin = 15;
@@ -123,7 +132,7 @@ async function exportDashboardToPDF() {
         // --- PAGE 1: OVERVIEW ---
         doc.setFontSize(24);
         doc.setTextColor(16, 185, 129); // Emerald-500
-        doc.text("Growth Project Analysis", pageWidth / 2, 60, { align: 'center' });
+        doc.text("Aggregate Data Testing", pageWidth / 2, 60, { align: 'center' });
         
         doc.setFontSize(12);
         doc.setTextColor(71, 85, 105);
@@ -134,13 +143,16 @@ async function exportDashboardToPDF() {
         doc.text("Selected Projects:", margin, py);
         doc.setFont(undefined, 'normal');
         
-        const projectNames = Array.from(document.querySelectorAll('#project-select option:checked')).map(el => el.text).join(', ');
-        const splitProjects = doc.splitTextToSize(projectNames || "None", pageWidth - 2 * margin);
+        // Fix: Properly scrape project names from the custom multi-select checkboxes
+        const projectNames = Array.from(document.querySelectorAll('#projects-dropdown-list input:checked'))
+            .map(cb => cb.nextElementSibling.textContent).join(', ') || 'None';
+            
+        const splitProjects = doc.splitTextToSize(projectNames, pageWidth - 2 * margin);
         doc.text(splitProjects, margin, py + 7);
         py += 10 + (splitProjects.length * 7);
 
         doc.setFont(undefined, 'bold');
-        doc.text(`Total Plots Evaluated: ${window.currentGrowthResults ? window.currentGrowthResults.length : 0}`, margin, py);
+        doc.text(`Total Plots Selected: ${document.getElementById('plot-count')?.textContent || '0'}`, margin, py);
 
         // --- PAGE 2: AGGREGATED TABLES ---
         doc.addPage();
@@ -159,9 +171,10 @@ async function exportDashboardToPDF() {
             expected: document.getElementById('agg-exp-yield')?.textContent || '-',
             field: document.getElementById('agg-re-yield')?.textContent || '-',
             fieldDiff: document.getElementById('agg-re-diff')?.textContent || '',
-            predicted: `${document.getElementById('agg-app-yield-min')?.textContent || '-'} - ${document.getElementById('agg-app-yield-max')?.textContent || '-'}`,
-            pDiffExp: document.getElementById('agg-app-diff-exp')?.textContent || '',
-            pDiffField: document.getElementById('agg-app-diff-re')?.textContent || '',
+            // Fix: Use correct 'ai' IDs
+            predicted: `${document.getElementById('agg-ai-yield-min')?.textContent || '-'} - ${document.getElementById('agg-ai-yield-max')?.textContent || '-'}`,
+            pDiffExp: document.getElementById('agg-ai-diff-exp')?.textContent || '',
+            pDiffRe: document.getElementById('agg-ai-diff-re')?.textContent || '',
             cardLevel: document.getElementById('agg-card-level')?.textContent || '-'
         };
 
@@ -169,10 +182,11 @@ async function exportDashboardToPDF() {
             expected: document.getElementById('agg-exp-harvest')?.textContent || '-',
             field: document.getElementById('agg-re-harvest')?.textContent || '-',
             fieldDiff: document.getElementById('agg-re-harvest-diff')?.textContent || '',
-            predicted: `${document.getElementById('agg-app-harvest-min')?.textContent || '-'} - ${document.getElementById('agg-app-harvest-max')?.textContent || '-'}`,
-            pDiffExp: document.getElementById('agg-app-harvest-diff-exp')?.textContent || '',
-            pDiffField: document.getElementById('agg-app-harvest-diff-re')?.textContent || '',
-            collected: document.getElementById('agg-collected-harvest')?.textContent || '-'
+            // Fix: Use correct 'ai' IDs
+            predicted: `${document.getElementById('agg-ai-harvest-min')?.textContent || '-'} - ${document.getElementById('agg-ai-harvest-max')?.textContent || '-'}`,
+            pDiffExp: document.getElementById('agg-ai-harvest-diff-exp')?.textContent || '',
+            pDiffRe: document.getElementById('agg-ai-harvest-diff-re')?.textContent || '',
+            collected: document.getElementById('stat-harvest-collected')?.textContent || '-'
         };
 
         const createTableHTML = (title, data, isYield) => `
@@ -191,9 +205,13 @@ async function exportDashboardToPDF() {
                         <td style="padding: 10px; color: #94a3b8;">Predicted Range</td>
                         <td style="padding: 10px; text-align: right; font-weight: bold; color: #818cf8;">${data.predicted}</td>
                     </tr>
-                    <tr style="border-bottom: 10px solid #334155;">
+                    <tr style="border-bottom: 1px solid #334155;">
                         <td style="padding: 10px; color: #94a3b8;">Predicted vs Expected</td>
                         <td style="padding: 10px; text-align: right; color: #10b981;">${data.pDiffExp}</td>
+                    </tr>
+                    <tr style="border-bottom: 10px solid #334155;">
+                        <td style="padding: 10px; color: #94a3b8;">Predicted vs Re-estimated</td>
+                        <td style="padding: 10px; text-align: right; color: #10b981;">${data.pDiffRe}</td>
                     </tr>
                     ${isYield ? `
                         <tr>
@@ -217,37 +235,82 @@ async function exportDashboardToPDF() {
         `;
         document.body.appendChild(tempDiv);
 
-        const tableCanvas = await html2canvas(tempDiv, { backgroundColor: '#0f172a', scale: 2 });
-        const tableImgData = tableCanvas.toDataURL('image/png');
+        const tableCanvas = await html2canvas(tempDiv, { backgroundColor: '#0f172a', scale: 1.2 });
+        const tableImgData = tableCanvas.toDataURL('image/jpeg', 0.8);
         const imgProps = doc.getImageProperties(tableImgData);
         const pdfWidth = pageWidth - 2 * margin;
         const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-        doc.addImage(tableImgData, 'PNG', margin, 35, pdfWidth, pdfHeight);
+        doc.addImage(tableImgData, 'JPEG', margin, 35, pdfWidth, pdfHeight);
         document.body.removeChild(tempDiv);
 
-        // --- CHART PAGES ---
-        const charts = [
-            { id: 'growthProgressionChart', title: 'Growth Progression Distribution' },
-            { id: 'harvestWindowChart', title: 'Weekly Harvest Window' },
-            { id: 'harvestDailyChart', title: 'Daily Harvest Window' },
-            { id: 'harvest-window-pie-chart', title: 'Harvest Status Alignment' }
+        // --- CHART PAGES (Consolidated) ---
+        const groups = [
+            {
+                title: "Growth Progression & Harvest Status",
+                charts: [
+                    { id: 'growthProgressionChart', label: '1. Growth Progression Distribution' },
+                    { id: 'harvest-status-results', label: '2. Harvest Status' }
+                ]
+            },
+            {
+                title: "Harvest Windows (Weekly & Daily)",
+                charts: [
+                    { id: 'harvestWindowChart', label: '1. Weekly Harvest Window' },
+                    { id: 'harvestDailyChart', label: '2. Daily Harvest Window' }
+                ]
+            }
         ];
 
-        for (const chartInfo of charts) {
-            const chartCanvas = document.getElementById(chartInfo.id);
-            if (!chartCanvas) continue;
-            
+        for (const group of groups) {
             doc.addPage();
-            addPageHeader(chartInfo.title);
-            
-            const chartImgData = chartCanvas.toDataURL('image/png');
-            doc.addImage(chartImgData, 'PNG', margin, 40, pageWidth - 2 * margin, 100);
-            
-            // Add legend/details if relevant
-            if (chartInfo.id === 'harvestWindowChart') {
+            addPageHeader(group.title);
+            let currentY = 40;
+
+            for (const chartSec of group.charts) {
+                const el = document.getElementById(chartSec.id);
+                if (!el) continue;
+
+                const container = (chartSec.id === 'harvest-status-results') ? el : (el.closest('.analysis-card') || el.closest('.metric-card') || el.parentElement);
+                if (!container) continue;
+
+                // Capture the container
+                const canvas = await html2canvas(container, { 
+                    backgroundColor: '#1e1e2e', 
+                    scale: 1.2,
+                    onclone: (clonedDoc) => {
+                        if (chartSec.id === 'harvest-status-results') {
+                            const cards = clonedDoc.querySelectorAll('.analysis-card');
+                            cards.forEach(card => {
+                                if (card.textContent.includes('Plot Harvest Status')) {
+                                    card.style.display = 'none';
+                                }
+                            });
+                        }
+                    }
+                });
+
+                const imgData = canvas.toDataURL('image/jpeg', 0.8);
+                const cProps = doc.getImageProperties(imgData);
+                const cWidth = pageWidth - 2 * margin;
+                const cHeight = (cProps.height * cWidth) / cProps.width;
+                
+                // Scale down slightly to fit two charts comfortably
+                const drawHeight = Math.min(cHeight, 105); 
+                
                 doc.setFontSize(10);
-                doc.setTextColor(148, 163, 184);
-                doc.text("Aggregation: Monday to Sunday | Range: Next 8 Available Weeks", pageWidth / 2, 150, { align: 'center' });
+                doc.setTextColor(100, 116, 139);
+                doc.text(chartSec.label, margin, currentY - 2);
+
+                doc.addImage(imgData, 'JPEG', margin, currentY, cWidth, drawHeight);
+                currentY += drawHeight + 15; // Gap between charts
+
+                if (chartSec.id === 'harvestWindowChart') {
+                    doc.setFontSize(8.5);
+                    doc.setTextColor(148, 163, 184);
+                    if (currentY < pageHeight - 5) {
+                       doc.text("Aggregation: Monday to Sunday | Range: Next 8 Available Weeks", pageWidth / 2, currentY - 8, { align: 'center' });
+                    }
+                }
             }
         }
 
@@ -256,50 +319,75 @@ async function exportDashboardToPDF() {
             doc.addPage();
             addPageHeader("Base Plot Data Table");
             
-            const tableHeaders = ["Plot Name", "Area", "Exp Harvest", "Stage", "Prog %", "H-Start", "H-End"];
+            const tableHeaders = ["Plot Name", "Audited Area", "Expected Harvest", "Is Harvested", "Harvested Date", "Current Stage", "Progression", "Start Date", "End Date"];
             const tableRows = window.currentGrowthResults.map(p => [
                 p.plotName,
                 (p.auditedArea || 0).toFixed(2),
                 (p.expectedHarvestTon || 0).toFixed(2),
+                p.isHarvested || "-",
+                p.harvestedDate || "-",
                 p.currentStage || "-",
-                p.progression + "%",
+                (p.progression || 0) + "%",
                 p.hStart || "-",
                 p.hEnd || "-"
             ]);
 
-            doc.setFontSize(9);
-            let tx = margin;
+            doc.setFontSize(7);
+            const colWidths = [35, 12, 25, 12, 18, 28, 15, 18, 18]; // Total 181
             let ty = 40;
-            const colWidths = [45, 20, 25, 30, 20, 25, 25];
 
-            // Draw Headers
-            doc.setFont(undefined, 'bold');
-            tableHeaders.forEach((h, i) => {
-                doc.text(h, tx, ty);
-                tx += colWidths[i];
-            });
-            doc.line(margin, ty + 2, pageWidth - margin, ty + 2);
-            ty += 8;
+            const drawHeaders = (y) => {
+                doc.setFont(undefined, 'bold');
+                doc.setFontSize(7);
+                doc.setTextColor(30, 41, 59);
+                let tx = margin;
+                let maxHeight = 0;
+                
+                // First pass: find max header height
+                const linesPerHeader = tableHeaders.map((h, i) => {
+                    const lines = doc.splitTextToSize(h, colWidths[i] - 1);
+                    maxHeight = Math.max(maxHeight, lines.length * 4);
+                    return lines;
+                });
+
+                // Second pass: draw
+                tableHeaders.forEach((h, i) => {
+                    doc.text(linesPerHeader[i], tx, y);
+                    tx += colWidths[i];
+                });
+                
+                doc.line(margin, y + maxHeight - 2, pageWidth - margin, y + maxHeight - 2);
+                return maxHeight;
+            };
+
+            // Initial headers
+            const headerHeight = drawHeaders(ty);
+            ty += headerHeight + 2;
 
             // Draw Rows
             doc.setFont(undefined, 'normal');
+            doc.setTextColor(30, 41, 59);
             tableRows.forEach((row, rowIndex) => {
                 if (ty > pageHeight - 20) {
                     doc.addPage();
                     addPageHeader("Base Plot Data Table (Cont.)");
-                    ty = 40;
-                    doc.setFont(undefined, 'bold');
-                    let ctx = margin;
-                    tableHeaders.forEach((h, i) => { doc.text(h, ctx, ty); ctx += colWidths[i]; });
-                    doc.line(margin, ty + 2, pageWidth - margin, ty + 2);
-                    ty += 8;
+                    const hOffset = drawHeaders(45);
+                    ty = 45 + hOffset + 2;
                     doc.setFont(undefined, 'normal');
+                    doc.setTextColor(30, 41, 59);
                 }
                 
                 let rtx = margin;
                 row.forEach((cell, i) => {
                     const cellStr = String(cell);
-                    const truncated = doc.truncateText(cellStr, colWidths[i] - 2);
+                    const maxWidth = colWidths[i] - 2;
+                    let truncated = cellStr;
+                    if (doc.getTextWidth(truncated) > maxWidth) {
+                        while (doc.getTextWidth(truncated + "...") > maxWidth && truncated.length > 0) {
+                            truncated = truncated.slice(0, -1);
+                        }
+                        truncated += "...";
+                    }
                     doc.text(truncated, rtx, ty);
                     rtx += colWidths[i];
                 });
