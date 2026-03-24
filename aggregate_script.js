@@ -1,5 +1,6 @@
 // Chart Instances (Global)
 var growthProgressionChartInstance = null;
+var growthStageChartInstance = null;
 var harvestWindowChartInstance = null;
 var harvestDailyChartInstance = null;
 var harvestWindowPieChart = null;
@@ -1492,6 +1493,10 @@ function clearAllDataUI() {
         growthProgressionChartInstance.destroy();
         growthProgressionChartInstance = null;
     }
+    if (growthStageChartInstance) {
+        growthStageChartInstance.destroy();
+        growthStageChartInstance = null;
+    }
     if (harvestWindowChartInstance) {
         harvestWindowChartInstance.destroy();
         harvestWindowChartInstance = null;
@@ -2084,6 +2089,7 @@ async function handleLoadGrowthData() {
 
         renderGrowthTable(growthResults);
         renderGrowthProgressionChart(growthResults);
+        renderGrowthStageChart(growthResults);
         renderHarvestWindowChart(growthResults);
         renderHarvestWindowDailyChart(growthResults);
 
@@ -2391,6 +2397,195 @@ function renderGrowthProgressionChart(results) {
     }
 }
 
+// --- Growth Stage Chart Logic (NEW) ---
+
+function renderGrowthStageChart(results) {
+    try {
+        console.log(`[DEBUG] Rendering Stage Chart with ${results.length} plots`);
+        
+        const STAGE_ORDER = ["Emergence", "Tuber Initiation", "Tuber Bulking", "Harvested"];
+        
+        // Initialize bins
+        const bins = STAGE_ORDER.map(label => ({
+            label: label,
+            plots: [],
+            totalArea: 0
+        }));
+
+        results.forEach(res => {
+            let stage = res.currentStage;
+            if (res.isHarvested === "Yes") {
+                stage = "Harvested";
+            }
+
+            // Find correct bin
+            let bin = bins.find(b => b.label.toLowerCase() === (stage || "").toLowerCase());
+            
+            // Fallback for unknown stages? User requested specific order.
+            // If it's not one of the major ones, maybe skip or add to a misc? 
+            // For now, only handle requested ones.
+            if (bin) {
+                bin.plots.push(res);
+                bin.totalArea += (parseFloat(res.auditedArea) || 0);
+            } else if (stage && stage !== "-") {
+                console.warn(`[WARN] Unknown stage: ${stage} for plot ${res.plotName}`);
+            }
+        });
+
+        const areaUnit = (companyPrefs.areaUnits || 'ha').toLowerCase().includes('acre') ? 'Acre' : 'Ha';
+
+        const canvas = document.getElementById('growthStageChart');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        
+        if (growthStageChartInstance) {
+            growthStageChartInstance.destroy();
+        }
+
+        growthStageChartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: bins.map(b => b.label),
+                datasets: [{
+                    label: 'Plots',
+                    data: bins.map(b => b.plots.length),
+                    backgroundColor: [
+                        '#22d3ee', // Emergence (Cyan)
+                        '#818cf8', // Tuber Initiation (Indigo)
+                        '#c084fc', // Tuber Bulking (Purple)
+                        '#10b981'  // Harvested (Green)
+                    ],
+                    barThickness: 60,
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                layout: { padding: { top: 70 } },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const b = bins[context.dataIndex];
+                                return [
+                                    'Plots: ' + context.raw,
+                                    'Area: ' + b.totalArea.toFixed(2) + ' ' + areaUnit
+                                ];
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: { 
+                        display: true, 
+                        beginAtZero: true,
+                        grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                        ticks: { color: 'var(--text-secondary)', stepSize: 1 }
+                    },
+                    x: {
+                        ticks: { color: '#e2e8f0', font: { size: 14 } },
+                        grid: { display: false }
+                    }
+                },
+                onClick: (e, elements) => {
+                    if (elements.length > 0) {
+                        const index = elements[0].index;
+                        showGrowthStagePlots(bins[index].label, bins[index].plots);
+                    }
+                }
+            },
+            plugins: [
+                drawValuesPlugin,
+                {
+                    id: 'stageCustomLabels',
+                    afterDatasetsDraw: (chart) => {
+                        const ctx = chart.ctx;
+                        chart.data.datasets.forEach((dataset, i) => {
+                            const meta = chart.getDatasetMeta(i);
+                            meta.data.forEach((bar, index) => {
+                                const bData = bins[index];
+                                if (bData.plots.length === 0) return;
+
+                                const bubbleText = `${bData.plots.length} Plots, ${bData.totalArea.toFixed(2)} ${areaUnit}`;
+                                ctx.font = '11px "Inter", sans-serif';
+                                const textWidth = ctx.measureText(bubbleText).width;
+                                const bW = textWidth + 12;
+                                const bH = 26;
+                                const bX = bar.x - (bW / 2);
+                                const bY = bar.y - 65; 
+
+                                ctx.fillStyle = '#f8fafc';
+                                ctx.beginPath();
+                                if (ctx.roundRect) ctx.roundRect(bX, bY, bW, bH, 4);
+                                else ctx.rect(bX, bY, bW, bH);
+                                ctx.fill();
+
+                                ctx.beginPath();
+                                ctx.moveTo(bar.x - 4, bY + bH);
+                                ctx.lineTo(bar.x + 4, bY + bH);
+                                ctx.lineTo(bar.x, bY + bH + 5);
+                                ctx.closePath();
+                                ctx.fill();
+
+                                ctx.fillStyle = '#1e293b';
+                                ctx.textAlign = 'center';
+                                ctx.textBaseline = 'middle';
+                                ctx.fillText(bubbleText, bar.x, bY + (bH / 2));
+                            });
+                        });
+                    }
+                }
+            ]
+        });
+
+        // Hide container initially
+        const plotsContainer = document.getElementById('growth-stage-plots-container');
+        if (plotsContainer) plotsContainer.classList.add('hidden');
+
+    } catch (err) {
+        console.error('[ERROR] Problem rendering Stage Chart:', err);
+    }
+}
+
+function showGrowthStagePlots(label, plots) {
+    const container = document.getElementById('growth-stage-plots-container');
+    const tbody = document.getElementById('growth-stage-plots-tbody');
+    const title = document.getElementById('growth-stage-plots-title');
+
+    if (!container || !tbody || !title) return;
+
+    title.textContent = `Plots in Stage: ${label} (${plots.length})`;
+    
+    tbody.innerHTML = '';
+    if (plots.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" style="padding: 1rem; text-align: center; color: var(--text-secondary);">No plots in this stage.</td></tr>';
+    } else {
+        plots.forEach(p => {
+            const tr = document.createElement('tr');
+            tr.style.borderBottom = '1px solid var(--border-color)';
+            tr.innerHTML = `
+                <td style="padding: 0.75rem; color: var(--text-primary); font-weight: 500;">${p.plotName}</td>
+                <td style="padding: 0.75rem; color: var(--text-secondary);">${(p.auditedArea || 0).toFixed(2)}</td>
+                <td style="padding: 0.75rem; color: var(--text-secondary);">${(p.expectedHarvestTon || 0).toFixed(2)}</td>
+                <td style="padding: 0.75rem; color: var(--text-secondary); font-weight: 500; color: ${p.isHarvested === 'Yes' ? '#10b981' : '#f59e0b'};">${p.isHarvested}</td>
+                <td style="padding: 0.75rem; color: var(--text-secondary);">${p.harvestedDate || "-"}</td>
+                <td style="padding: 0.75rem; color: var(--text-secondary);">${p.currentStage || "-"}</td>
+                <td style="padding: 0.75rem; color: var(--text-secondary); font-weight: 600; color: var(--secondary-color);">${p.progression}%</td>
+                <td style="padding: 0.75rem; color: var(--text-secondary);">${p.hStart || "-"}</td>
+                <td style="padding: 0.75rem; color: var(--text-secondary);">${p.hEnd || "-"}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+    
+    container.classList.remove('hidden');
+    container.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    
+    // Removed: Hide other drill-downs to allow coexistence
+}
+
 
 let growthTableSortCol = 'plotName';
 let growthTableSortOrder = 'asc';
@@ -2618,9 +2813,7 @@ function showGrowthProgressionPlots(label, plots) {
     container.classList.remove('hidden');
     container.scrollIntoView({ behavior: 'smooth', block: 'center' });
     
-    // Hide the other drill-down if open
-    const other = document.getElementById('harvest-window-plots-container');
-    if (other) other.classList.add('hidden');
+    // Removed: Hide other drill-down to allow coexistence
 }
 
 function showHarvestWindowPlots(label, plots) {
@@ -2677,6 +2870,7 @@ function updateGrowthChart() {
         ? window.currentGrowthResults.filter(r => r.isHarvested !== "Yes") 
         : window.currentGrowthResults;
     renderGrowthProgressionChart(filteredResults);
+    renderGrowthStageChart(filteredResults);
     renderHarvestWindowChart(filteredResults);
     renderHarvestWindowDailyChart(filteredResults);
 }

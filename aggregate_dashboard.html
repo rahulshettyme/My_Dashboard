@@ -798,18 +798,59 @@
                                 <tr>
                                     <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Plot Name</th>
                                     <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Audited Area (Acre)</th>
-                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Expected Harvest (Metric Tonnes)</th>
+                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Expected Harvest (Ton)</th>
                                     <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Is Harvested</th>
-                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Harvested Date</th>
-                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Current Stage</th>
-                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Growth Progression</th>
-                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Harvest Start Date</th>
-                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Harvest End Date</th>
+                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Date</th>
+                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Stage</th>
+                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Prog %</th>
+                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">H-Start</th>
+                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">H-End</th>
                                 </tr>
                             </thead>
-                            <tbody id="growth-progression-plots-tbody">
-                                <!-- dynamic -->
-                            </tbody>
+                            <tbody id="growth-progression-plots-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Stage Window Chart Section (NEW) -->
+                <div class="analysis-card" style="margin-top: 1.5rem;">
+                    <div style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: flex-start;">
+                        <h3 style="margin: 0; font-size: 1.25rem; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem;">
+                            Growth project data - Stage window 
+                            <i class="fas fa-info-circle" style="font-size: 0.9rem; color: var(--text-secondary); cursor: help;" title="Displays plots grouped by their current growth stage"></i>
+                        </h3>
+                    </div>
+                    
+                    <div style="position: relative; height: 300px; width: 100%;">
+                        <canvas id="growthStageChart"></canvas>
+                    </div>
+                </div>
+
+
+                <!-- Stage Window Drill-down (NEW) -->
+                <div id="growth-stage-plots-container" class="hidden" style="margin-top: 1.5rem; background: var(--card-bg); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border-color);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <h4 id="growth-stage-plots-title" style="margin: 0; color: var(--text-primary);">Plots in Stage</h4>
+                        <button onclick="closeGrowthDrillDown('growth-stage-plots-container')" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.25rem; padding: 0.25rem 0.5rem; border-radius: 4px; transition: all 0.2s;" title="Close Table">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div style="max-height: 400px; overflow-y: auto;">
+                        <table class="plots-table" style="width: 100%;">
+                            <thead>
+                                <tr>
+                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Plot Name</th>
+                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Audited Area (Acre)</th>
+                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Expected Harvest (Ton)</th>
+                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Is Harvested</th>
+                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Date</th>
+                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Stage</th>
+                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Prog %</th>
+                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">H-Start</th>
+                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">H-End</th>
+                                </tr>
+                            </thead>
+                            <tbody id="growth-stage-plots-tbody"></tbody>
                         </table>
                     </div>
                 </div>
@@ -861,8 +902,6 @@
                                     <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Plot Name</th>
                                     <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Audited Area (Acre)</th>
                                     <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Expected Harvest (Metric Tonnes)</th>
-
-
                                     <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Current Stage</th>
                                     <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Growth Progression</th>
                                     <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Harvest Start Date</th>
@@ -923,8 +962,6 @@
                                     <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Plot Name</th>
                                     <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Audited Area (Acre)</th>
                                     <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Expected Harvest (Metric Tonnes)</th>
-
-
                                     <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Current Stage</th>
                                     <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Growth Progression</th>
                                     <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Harvest Start Date</th>
