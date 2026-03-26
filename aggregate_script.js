@@ -2869,10 +2869,14 @@ function updateGrowthChart() {
     const filteredResults = hideHarvested 
         ? window.currentGrowthResults.filter(r => r.isHarvested !== "Yes") 
         : window.currentGrowthResults;
+    
+    // Only Progression chart should be filtered per user request
     renderGrowthProgressionChart(filteredResults);
-    renderGrowthStageChart(filteredResults);
-    renderHarvestWindowChart(filteredResults);
-    renderHarvestWindowDailyChart(filteredResults);
+    
+    // Stage, Harvest Window (Weekly), and Harvest Window (Daily) should show all data
+    renderGrowthStageChart(window.currentGrowthResults);
+    renderHarvestWindowChart(window.currentGrowthResults);
+    renderHarvestWindowDailyChart(window.currentGrowthResults);
 }
 
 function updateGrowthTable() {
