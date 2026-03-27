@@ -2614,7 +2614,6 @@ function renderHarvestWindowChart(results) {
 
         // 2. Group all plots into Monday-based weeks
         const weeksMap = {};
-        let filteredPlotsCount = 0;
 
         results.forEach(p => {
             if (p.isHarvested === "Yes" || !p.rawHStart || !p.rawHEnd) return;
@@ -2649,7 +2648,6 @@ function renderHarvestWindowChart(results) {
             weeksMap[weekKey].totalHarvest += (parseFloat(p.expectedHarvestTon) || 0);
             weeksMap[weekKey].totalArea += (parseFloat(p.auditedArea) || 0);
             weeksMap[weekKey].chartPlotsCount++;
-            filteredPlotsCount++;
         });
 
         // 3. Select the first 8 available weeks starting from Current Week
@@ -2657,6 +2655,12 @@ function renderHarvestWindowChart(results) {
             .filter(key => key >= currentWeekMon.toISOString().split('T')[0])
             .sort()
             .slice(0, 8);
+
+        // Recalculate filteredPlotsCount to sum only plots shown in the chart (first 8 weeks)
+        let filteredPlotsCount = 0;
+        sortedWeeks.forEach(key => {
+            filteredPlotsCount += weeksMap[key].plots.length;
+        });
 
         if (sortedWeeks.length === 0) {
             if (coveredEl) coveredEl.textContent = `0 / ${results.length}`;
@@ -3447,7 +3451,6 @@ function renderHarvestWindowDailyChart(results) {
 
         // Group plots by Date
         const dailyMap = {};
-        let filteredCount = 0;
 
         results.forEach(p => {
             if (p.isHarvested === "Yes" || !p.rawHStart || !p.rawHEnd) return;
@@ -3476,7 +3479,6 @@ function renderHarvestWindowDailyChart(results) {
             dailyMap[key].plots.push(p);
             dailyMap[key].totalHarvest += (parseFloat(p.expectedHarvestTon) || 0);
             dailyMap[key].totalArea += (parseFloat(p.auditedArea) || 0);
-            filteredCount++;
         });
 
         // Get sorted list of dates that have data, starting from Tomorrow
@@ -3484,6 +3486,12 @@ function renderHarvestWindowDailyChart(results) {
             .filter(key => key >= tomorrow.toISOString().split('T')[0])
             .sort()
             .slice(0, 7);
+
+        // Recalculate filteredCount to sum only plots shown in the chart (first 7 days)
+        let filteredCount = 0;
+        sortedDates.forEach(key => {
+            filteredCount += dailyMap[key].plots.length;
+        });
 
         if (sortedDates.length === 0) {
             if (coveredEl) coveredEl.textContent = `0 / ${results.length}`;
