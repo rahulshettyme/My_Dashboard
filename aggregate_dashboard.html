@@ -572,9 +572,9 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="metric-row" id="agg-collected-harvest-row" style="margin-top: 1rem; padding-top: 1rem; border-top: 1px dashed var(--border-color);">
+                        <div class="metric-row" id="agg-collected-harvest-row" onclick="toggleCollectedHarvestDrillDown()" style="margin-top: 1rem; padding-top: 1rem; border-top: 1px dashed var(--border-color); cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='rgba(16, 185, 129, 0.05)'" onmouseout="this.style.background='transparent'">
                             <div>
-                                <div class="metric-label" style="color: #10b981;">Collected Harvest</div>
+                                <div class="metric-label" style="color: #10b981;">Collected Harvest <i class="fas fa-chevron-down" style="font-size: 0.8rem; margin-left: 0.3rem; opacity: 0.7;"></i></div>
                                 <span class="sub-text">(Predicted-available plots)</span>
                             </div>
                             <div class="metric-value" style="color: #10b981;">
@@ -582,6 +582,31 @@
                                 <span id="agg-collected-plots-count" style="font-size: 0.85rem; font-weight: 400; opacity: 0.8; margin-left: 0.3rem;"></span>
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                <!-- Collected Harvest Drill-down Table -->
+                <div id="collected-harvest-drilldown-container" class="hidden" style="margin-top: 1.5rem; background: var(--card-bg); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border-color);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <h4 id="collected-harvest-drilldown-title" style="margin: 0; color: var(--text-primary);">Collected Harvest Details</h4>
+                        <button onclick="document.getElementById('collected-harvest-drilldown-container').classList.add('hidden')" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.25rem; padding: 0.25rem 0.5rem; border-radius: 4px; transition: all 0.2s;" title="Close Table">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div style="max-height: 500px; overflow-y: auto;">
+                        <table class="plots-table" style="width: 100%; border-collapse: collapse;">
+                            <thead>
+                                <tr style="text-align: left; position: sticky; top: 0; background: var(--card-bg); z-index: 5;">
+                                    <th style="padding: 0.75rem; border-bottom: 2px solid var(--secondary-color);">Description</th>
+                                    <th style="padding: 0.75rem; border-bottom: 2px solid var(--secondary-color); text-align: center;">Quantity</th>
+                                    <th style="padding: 0.75rem; border-bottom: 2px solid var(--secondary-color); text-align: center;">Unit</th>
+                                    <th style="padding: 0.75rem; border-bottom: 2px solid var(--secondary-color); text-align: right;">Metric Tonnes</th>
+                                </tr>
+                            </thead>
+                            <tbody id="collected-harvest-drilldown-tbody">
+                                <!-- Populated by JS -->
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </section>

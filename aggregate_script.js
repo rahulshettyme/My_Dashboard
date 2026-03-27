@@ -64,6 +64,7 @@ var unitConversions = []; // Store system reference factors
 var activeHarvestWindowFilter = null; // 'Before Window', 'Within Window', 'Post Window'
 var lastProcessedPlots = [];
 var lastHarvestTasks = [];
+var lastCollectedHarvestDetails = []; // New: Details for Collected Harvest drill-down
 
 // --- Login State (from script.js) ---
 var loginState = {
@@ -2047,7 +2048,8 @@ async function handleLoadGrowthData() {
                 hStart: (growth && growth.harvestWindowStartDate) ? formatDate(growth.harvestWindowStartDate) : "-",
                 hEnd: (growth && growth.harvestWindowEndDate) ? formatDate(growth.harvestWindowEndDate) : "-",
                 rawHStart: rawHStart,
-                rawHEnd: rawHEnd
+                rawHEnd: rawHEnd,
+                noPrediction: yieldInfo && yieldInfo._processed ? yieldInfo._processed.noPrediction : true
             };
 
         } catch (error) {
@@ -3067,6 +3069,9 @@ function renderHarvestStatus(processedPlots, tasks) {
     let collectedPlotCount = 0; // New: count of unique plots contributing
     const includeNoPred = document.getElementById('include-no-prediction-agg')?.checked;
     
+    // Reset drill-down details
+    lastCollectedHarvestDetails = [];
+
     // Separate loop for Aggregate Level "Collected Harvest" - bypasses window/status filtering
     processedPlots.forEach(plot => {
         const caId = String(plot.caId);
@@ -3076,12 +3081,31 @@ function renderHarvestStatus(processedPlots, tasks) {
         const hasPrediction = !plot.noPrediction;
         if (hasPrediction || includeNoPred) {
             let plotAdded = false;
+            let plotTotal = 0;
+            let taskDetails = [];
+
             plotTasks.forEach(task => {
                 const metricTonValue = convertValueToMetricTon(parseFloat(task.qty) || 0, task.unit || '-');
                 collectedForPredictedPlots += metricTonValue;
+                plotTotal += metricTonValue;
                 plotAdded = true;
+                
+                taskDetails.push({
+                    qty: task.qty,
+                    unit: task.unit,
+                    date: task.actualClosedDate ? formatDate(task.actualClosedDate) : "-",
+                    metricTon: metricTonValue
+                });
             });
-            if (plotAdded) collectedPlotCount++;
+
+            if (plotAdded) {
+                collectedPlotCount++;
+                lastCollectedHarvestDetails.push({
+                    name: plotsByCaId[caId] || plot.plotName || `Plot ${caId}`,
+                    totalMetricTon: plotTotal,
+                    tasks: taskDetails
+                });
+            }
         }
     });
 
@@ -3193,6 +3217,58 @@ function renderHarvestStatus(processedPlots, tasks) {
 
     // 4. Update Summary Visualization
     renderHarvestWindowStatus(windowAggregates, processedPlots);
+}
+
+function toggleCollectedHarvestDrillDown() {
+    const container = document.getElementById('collected-harvest-drilldown-container');
+    if (!container) return;
+
+    if (container.classList.contains('hidden')) {
+        renderCollectedHarvestDrillDown();
+        container.classList.remove('hidden');
+        container.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else {
+        container.classList.add('hidden');
+    }
+}
+
+function renderCollectedHarvestDrillDown() {
+    const tbody = document.getElementById('collected-harvest-drilldown-tbody');
+    const title = document.getElementById('collected-harvest-drilldown-title');
+    if (!tbody || !title) return;
+
+    title.textContent = `Collected Harvest Details (${lastCollectedHarvestDetails.length} plots)`;
+    tbody.innerHTML = '';
+
+    if (lastCollectedHarvestDetails.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 2rem; color: var(--text-secondary);">No collected harvest data available for predicted plots.</td></tr>';
+        return;
+    }
+
+    lastCollectedHarvestDetails.forEach(plot => {
+        // Plot Header Row
+        const headerTr = document.createElement('tr');
+        headerTr.style.background = 'rgba(16, 185, 129, 0.1)';
+        headerTr.style.borderBottom = '2px solid var(--secondary-color)';
+        headerTr.innerHTML = `
+            <td colspan="3" style="padding: 0.75rem; font-weight: 700; color: var(--text-primary);">${plot.name}</td>
+            <td style="padding: 0.75rem; text-align: right; font-weight: 700; color: var(--secondary-color);">${plot.totalMetricTon.toFixed(2)} Tonnes</td>
+        `;
+        tbody.appendChild(headerTr);
+
+        // Task Detail Rows
+        plot.tasks.forEach(task => {
+            const taskTr = document.createElement('tr');
+            taskTr.style.borderBottom = '1px solid var(--border-color)';
+            taskTr.innerHTML = `
+                <td style="padding: 0.5rem 1.5rem; color: var(--text-secondary);">Harvest Date: ${task.date}</td>
+                <td style="padding: 0.5rem; text-align: center; color: var(--text-primary);">${task.qty}</td>
+                <td style="padding: 0.5rem; text-align: center; color: var(--text-secondary);">${task.unit}</td>
+                <td style="padding: 0.5rem; text-align: right; color: var(--text-secondary);">${task.metricTon.toFixed(2)} Tonnes</td>
+            `;
+            tbody.appendChild(taskTr);
+        });
+    });
 }
 
 function renderHarvestWindowStatus(aggregates, processedPlots) {
@@ -3595,3 +3671,4 @@ window.handleGrowthTableSort = handleGrowthTableSort;
 window.showHarvestWindowDailyPlots = showHarvestWindowDailyPlots;
 window.showHarvestWindowPlots = showHarvestWindowPlots;
 window.showGrowthProgressionPlots = showGrowthProgressionPlots;
+window.toggleCollectedHarvestDrillDown = toggleCollectedHarvestDrillDown;
