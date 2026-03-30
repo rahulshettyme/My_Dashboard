@@ -237,6 +237,24 @@ function formatDate(dateStr) {
     } catch (e) { return "-"; }
 }
 
+const getVal = (row, keys) => {
+    if (!row) return 0;
+    for (let k of keys) {
+        const foundKey = Object.keys(row).find(rk => rk.toLowerCase().includes(k.toLowerCase()));
+        if (foundKey && !isNaN(parseFloat(row[foundKey]))) return parseFloat(row[foundKey]);
+    }
+    return 0;
+};
+
+const getTextVal = (row, keys) => {
+    if (!row) return '';
+    for (let k of keys) {
+        const foundKey = Object.keys(row).find(rk => rk.toLowerCase().includes(k.toLowerCase()));
+        if (foundKey) return row[foundKey];
+    }
+    return '';
+};
+
 function updateUnitLabels(plotData = null) {
     let yieldLabel, harvestLabel, areaLabelLabel;
 
@@ -622,6 +640,11 @@ function processData(rows) {
             expHarvest: expHarvestTonSum,
             reHarvest: reHarvestTonSum
         };
+    }
+
+    // User Request: Sync Growth data if it was already loaded (decoupled flow)
+    if (typeof syncGrowthWithYield === 'function') {
+        syncGrowthWithYield();
     }
 }
 
@@ -1910,8 +1933,45 @@ async function handleLoadGrowthData() {
         return;
     }
     if (plotsData.length === 0) {
-        alert("Please load Yield & Harvest data first to identify the plots.");
-        return;
+        // User Request: Remove strict dependency. Auto-load plots if not present but projects are selected.
+        const projectId = selectedProjectIds.join(',');
+        const plotInfo = document.getElementById('plot-info');
+        const plotCount = document.getElementById('plot-count');
+        const plotLoading = document.getElementById('plot-loading');
+
+        if (plotInfo) plotInfo.classList.remove('hidden');
+        if (plotLoading) plotLoading.classList.remove('hidden');
+        if (plotCount) plotCount.textContent = 'Identifying plots...';
+
+        const baseUrl = getServerUrl();
+        try {
+            console.log(`[DEBUG] Decoupled Flow: Auto-fetching plots for Project ID: ${projectId}`);
+            const response = await fetch(`${baseUrl}/api/user-aggregate/plots?environment=${encodeURIComponent(currentEnvironment)}&projectId=${encodeURIComponent(projectId)}`, {
+                headers: {
+                    'Authorization': `Bearer ${authToken}`,
+                    'ngrok-skip-browser-warning': 'true'
+                }
+            });
+
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'Failed to load plots');
+
+            plotsData = data.plots || [];
+            if (plotCount) plotCount.textContent = plotsData.length;
+            console.log(`[DEBUG] Decoupled Flow: Loaded ${plotsData.length} plots`);
+
+            if (plotsData.length === 0) {
+                alert("No plots found for the selected projects.");
+                return;
+            }
+        } catch (error) {
+            console.error('Error auto-loading plots for growth:', error);
+            if (plotCount) plotCount.textContent = 'Error';
+            alert(`Failed to identify plots: ${error.message}`);
+            return;
+        } finally {
+            if (plotLoading) plotLoading.classList.add('hidden');
+        }
     }
 
     const loadBtn = document.getElementById('load-growth-data-btn');
@@ -1932,22 +1992,6 @@ async function handleLoadGrowthData() {
 
     const growthResults = [];
     const BATCH_SIZE = 5;
-
-    // Robust extraction helpers (same as in processData)
-    const getVal = (row, keys) => {
-        for (let k of keys) {
-            const foundKey = Object.keys(row).find(rk => rk.toLowerCase().includes(k.toLowerCase()));
-            if (foundKey && !isNaN(parseFloat(row[foundKey]))) return parseFloat(row[foundKey]);
-        }
-        return 0;
-    };
-    const getTextVal = (row, keys) => {
-        for (let k of keys) {
-            const foundKey = Object.keys(row).find(rk => rk.toLowerCase().includes(k.toLowerCase()));
-            if (foundKey) return row[foundKey];
-        }
-        return '';
-    };
 
 
     async function processPlotGrowth(plot) {
@@ -1998,14 +2042,17 @@ async function handleLoadGrowthData() {
                 });
             }
 
-            const rawExpHarvest = yieldInfo ? (yieldInfo['Expected Harvest'] !== undefined ? yieldInfo['Expected Harvest'] : getVal(yieldInfo, ['expected harvest', 'exp_harvest'])) : 0;
-            const auditedArea = yieldInfo ? (yieldInfo['Audited Area'] !== undefined ? yieldInfo['Audited Area'] : (parseFloat(getTextVal(yieldInfo, ['audited area', 'area'])) || 0)) : 0;
+            const rawExpHarvest = yieldInfo ? (yieldInfo['Expected Harvest'] !== undefined ? yieldInfo['Expected Harvest'] : getVal(yieldInfo, ['expected harvest', 'exp_harvest'])) : "NA";
+            const auditedArea = yieldInfo ? (yieldInfo['Audited Area'] !== undefined ? yieldInfo['Audited Area'] : (parseFloat(getTextVal(yieldInfo, ['audited area', 'area'])) || 0)) : "NA";
             const harvestUnit = yieldInfo ? (yieldInfo['plotHarvestUnit'] || getTextVal(yieldInfo, ['plotharvestunit', 'unit']) || '').toLowerCase() : '';
 
             // Unit Logic: Use dynamic conversion for Expected Harvest (assumed in plot units)
-            const expectedHarvestTon = convertValueToMetricTon(rawExpHarvest, harvestUnit);
+            let expectedHarvestTon = "NA";
+            if (rawExpHarvest !== "NA") {
+                expectedHarvestTon = convertValueToMetricTon(rawExpHarvest, harvestUnit);
+            }
             
-            let predictedHarvestTon = 0;
+            let predictedHarvestTon = "NA";
             if (yieldInfo) {
                 if (yieldInfo._processed && yieldInfo._processed.h3_min !== null) {
                     // AI Predictions in _processed are ALREADY normalized to Tonnes
@@ -2018,7 +2065,9 @@ async function handleLoadGrowthData() {
                     // If these come from AI API, they are in Tonnes. If from Excel, they are in harvestUnit.
                     // We check if values look like Tonnes or if they were likely converted.
                     // To be safe, use the same logic as in processData: assume Tonnes for AI results.
-                    predictedHarvestTon = (rawPredMin + rawPredMax) / 2; 
+                    if (rawPredMin !== undefined && rawPredMax !== undefined) {
+                      predictedHarvestTon = (rawPredMin + rawPredMax) / 2; 
+                    }
                 }
             }
 
@@ -2119,6 +2168,79 @@ async function handleLoadGrowthData() {
     }
 }
 
+// =============================================
+// SYNC GROWTH DATA WITH YIELD DATA (Decoupled Flow)
+// =============================================
+function syncGrowthWithYield() {
+    if (!window.currentGrowthResults || !globalData || globalData.length === 0) return;
+    
+    console.log(`[DEBUG] Syncing ${window.currentGrowthResults.length} growth plots with ${globalData.length} yield records`);
+    
+    window.currentGrowthResults.forEach(res => {
+        // Find yield-related data in globalData using robust string-based ID mapping
+        let yieldInfo = globalData.find(d => {
+            const dId = String(d.caId || d['CA ID'] || d['CA_ID'] || '').trim().replace(/^0+/, '');
+            const pId = String(res.caId || '').trim().replace(/^0+/, '');
+            return dId !== '' && dId === pId;
+        });
+
+        if (!yieldInfo) {
+            yieldInfo = globalData.find(d => {
+                const dName = String(d['Plot Name'] || d['CA Name'] || d.name || '').trim().toLowerCase();
+                const pName = String(res.plotName || '').trim().toLowerCase();
+                return dName !== '' && dName === pName;
+            });
+        }
+
+        if (yieldInfo) {
+            const rawExpHarvest = yieldInfo['Expected Harvest'] !== undefined ? yieldInfo['Expected Harvest'] : getVal(yieldInfo, ['expected harvest', 'exp_harvest']);
+            const auditedArea = yieldInfo['Audited Area'] !== undefined ? yieldInfo['Audited Area'] : (parseFloat(getTextVal(yieldInfo, ['audited area', 'area'])) || 0);
+            const harvestUnit = (yieldInfo['plotHarvestUnit'] || getTextVal(yieldInfo, ['plotharvestunit', 'unit']) || '').toLowerCase();
+
+            res.auditedArea = auditedArea;
+            if (rawExpHarvest !== "NA") {
+                res.expectedHarvestTon = convertValueToMetricTon(rawExpHarvest, harvestUnit);
+            } else {
+                res.expectedHarvestTon = "NA";
+            }
+            
+            if (yieldInfo._processed && yieldInfo._processed.h3_min !== null && !yieldInfo._processed.noPrediction) {
+                // AI Predictions in _processed are ALREADY normalized to Tonnes
+                res.predictedHarvestTon = (yieldInfo._processed.h3_min + yieldInfo._processed.h3_max) / 2;
+            } else {
+                // Fallback to raw keys if _processed is missing or has no prediction
+                const rawPredMin = yieldInfo['Harvest Min predicted'] !== undefined ? yieldInfo['Harvest Min predicted'] : getVal(yieldInfo, ['harvest min predicted', 'min predicted harvest', 'predicted harvest min']);
+                const rawPredMax = yieldInfo['Harvest Max predicted'] !== undefined ? yieldInfo['Harvest Max predicted'] : getVal(yieldInfo, ['harvest max predicted', 'max predicted harvest', 'predicted harvest max']);
+                
+                if (rawPredMin !== undefined && rawPredMax !== undefined && rawPredMin !== 0 && rawPredMax !== 0) {
+                    res.predictedHarvestTon = (rawPredMin + rawPredMax) / 2; 
+                } else {
+                    res.predictedHarvestTon = "NA";
+                }
+            }
+            res.noPrediction = yieldInfo && yieldInfo._processed ? yieldInfo._processed.noPrediction : (res.predictedHarvestTon === "NA");
+        }
+    });
+
+    console.log('[DEBUG] Growth-Yield Sync Complete. Re-rendering components...');
+
+    // Re-render components
+    renderGrowthTable(window.currentGrowthResults);
+    renderGrowthProgressionChart(window.currentGrowthResults);
+    renderGrowthStageChart(window.currentGrowthResults);
+    renderHarvestWindowChart(window.currentGrowthResults);
+    renderHarvestWindowDailyChart(window.currentGrowthResults);
+
+    // Also update Harvest Status if it's already rendered
+    const harvestStatusResults = document.getElementById('harvest-status-results');
+    if (harvestStatusResults && !harvestStatusResults.classList.contains('hidden')) {
+        if (typeof lastHarvestTasks !== 'undefined' && lastHarvestTasks.length > 0) {
+             console.log('[DEBUG] Syncing Harvest Status view...');
+             renderHarvestStatus(window.currentGrowthResults, lastHarvestTasks);
+        }
+    }
+}
+
 function renderGrowthTable(results) {
     const container = document.getElementById('growth-table-container');
     if (!container) return;
@@ -2160,8 +2282,8 @@ function renderGrowthTable(results) {
             html += `
                 <tr style="border-bottom: 1px solid var(--border-color);">
                     <td style="padding: 1rem; font-weight: 600;">${res.plotName}</td>
-                    <td style="padding: 1rem;">${(res.auditedArea || 0).toFixed(2)}</td>
-                    <td style="padding: 1rem;">${(res.expectedHarvestTon || 0).toFixed(2)}</td>
+                    <td style="padding: 1rem;">${res.auditedArea === "NA" ? "NA" : (parseFloat(res.auditedArea) || 0).toFixed(2)}</td>
+                    <td style="padding: 1rem;">${res.expectedHarvestTon === "NA" ? "NA" : (parseFloat(res.expectedHarvestTon) || 0).toFixed(2)}</td>
                     <td style="padding: 1rem; color: ${res.isHarvested === 'Yes' ? '#10b981' : '#f59e0b'}; font-weight: 500;">${res.isHarvested}</td>
                     <td style="padding: 1rem;">${res.harvestedDate || '-'}</td>
                     <td style="padding: 1rem;">${res.currentStage || '-'}</td>
@@ -2285,7 +2407,9 @@ function renderGrowthProgressionChart(results) {
             else binIdx = 4;
 
             bins[binIdx].plots.push(res);
-            bins[binIdx].totalArea += (parseFloat(res.auditedArea) || 0);
+            if (res.auditedArea !== "NA") {
+                bins[binIdx].totalArea += (parseFloat(res.auditedArea) || 0);
+            }
         });
 
         const areaUnit = companyPrefs.areaUnits || 'Acre';
@@ -2355,7 +2479,8 @@ function renderGrowthProgressionChart(results) {
                                 const bData = bins[index];
                                 if (bData.plots.length === 0) return;
 
-                                const bubbleText = `${bData.plots.length} Plots, ${bData.totalArea.toFixed(2)} ${areaUnit}`;
+                                const areaVal = bData.totalArea === 0 && bData.plots.every(p => p.auditedArea === "NA") ? "NA" : bData.totalArea.toFixed(2);
+                                const bubbleText = `${bData.plots.length} Plots, ${areaVal} ${areaUnit}`;
                                 ctx.font = '11px "Inter", sans-serif';
                                 const textWidth = ctx.measureText(bubbleText).width;
                                 const bW = textWidth + 12;
@@ -2428,7 +2553,9 @@ function renderGrowthStageChart(results) {
             // For now, only handle requested ones.
             if (bin) {
                 bin.plots.push(res);
-                bin.totalArea += (parseFloat(res.auditedArea) || 0);
+                if (res.auditedArea !== "NA") {
+                    bin.totalArea += (parseFloat(res.auditedArea) || 0);
+                }
             } else if (stage && stage !== "-") {
                 console.warn(`[WARN] Unknown stage: ${stage} for plot ${res.plotName}`);
             }
@@ -2510,7 +2637,8 @@ function renderGrowthStageChart(results) {
                                 const bData = bins[index];
                                 if (bData.plots.length === 0) return;
 
-                                const bubbleText = `${bData.plots.length} Plots, ${bData.totalArea.toFixed(2)} ${areaUnit}`;
+                                const areaVal = bData.totalArea === 0 && bData.plots.every(p => p.auditedArea === "NA") ? "NA" : bData.totalArea.toFixed(2);
+                                const bubbleText = `${bData.plots.length} Plots, ${areaVal} ${areaUnit}`;
                                 ctx.font = '11px "Inter", sans-serif';
                                 const textWidth = ctx.measureText(bubbleText).width;
                                 const bW = textWidth + 12;
@@ -2569,8 +2697,8 @@ function showGrowthStagePlots(label, plots) {
             tr.style.borderBottom = '1px solid var(--border-color)';
             tr.innerHTML = `
                 <td style="padding: 0.75rem; color: var(--text-primary); font-weight: 500;">${p.plotName}</td>
-                <td style="padding: 0.75rem; color: var(--text-secondary);">${(p.auditedArea || 0).toFixed(2)}</td>
-                <td style="padding: 0.75rem; color: var(--text-secondary);">${(p.expectedHarvestTon || 0).toFixed(2)}</td>
+                <td style="padding: 0.75rem; color: var(--text-secondary);">${p.auditedArea === "NA" ? "NA" : (parseFloat(p.auditedArea) || 0).toFixed(2)}</td>
+                <td style="padding: 0.75rem; color: var(--text-secondary);">${p.expectedHarvestTon === "NA" ? "NA" : (parseFloat(p.expectedHarvestTon) || 0).toFixed(2)}</td>
                 <td style="padding: 0.75rem; color: var(--text-secondary); font-weight: 500; color: ${p.isHarvested === 'Yes' ? '#10b981' : '#f59e0b'};">${p.isHarvested}</td>
                 <td style="padding: 0.75rem; color: var(--text-secondary);">${p.harvestedDate || "-"}</td>
                 <td style="padding: 0.75rem; color: var(--text-secondary);">${p.currentStage || "-"}</td>
@@ -2645,8 +2773,12 @@ function renderHarvestWindowChart(results) {
                 };
             }
             weeksMap[weekKey].plots.push(p);
-            weeksMap[weekKey].totalHarvest += (parseFloat(p.expectedHarvestTon) || 0);
-            weeksMap[weekKey].totalArea += (parseFloat(p.auditedArea) || 0);
+            if (p.expectedHarvestTon !== "NA") {
+                weeksMap[weekKey].totalHarvest += (parseFloat(p.expectedHarvestTon) || 0);
+            }
+            if (p.auditedArea !== "NA") {
+                weeksMap[weekKey].totalArea += (parseFloat(p.auditedArea) || 0);
+            }
             weeksMap[weekKey].chartPlotsCount++;
         });
 
@@ -2747,8 +2879,12 @@ function renderHarvestWindowChart(results) {
                             ctx.font = 'bold 16px "Inter", sans-serif';
                             ctx.fillStyle = '#84cc16';
                             ctx.textAlign = 'center';
-                            if (val > 0) ctx.fillText(val.toFixed(2), bar.x, bar.y - 10);
-                            const bubbleText = `${wData.chartPlotsCount} Plots, ${wData.totalArea.toFixed(2)} ${areaUnit}`;
+                            
+                            const prodText = wData.totalHarvest === 0 && wData.plots.every(p => p.expectedHarvestTon === "NA") ? "NA" : val.toFixed(2);
+                            if (val > 0 || prodText === "NA") ctx.fillText(prodText, bar.x, bar.y - 10);
+                            
+                            const areaVal = wData.totalArea === 0 && wData.plots.every(p => p.auditedArea === "NA") ? "NA" : wData.totalArea.toFixed(2);
+                            const bubbleText = `${wData.chartPlotsCount} Plots, ${areaVal} ${areaUnit}`;
 
                             ctx.font = '11px "Inter", sans-serif';
                             const textWidth = ctx.measureText(bubbleText).width;
@@ -2803,8 +2939,8 @@ function showGrowthProgressionPlots(label, plots) {
             tr.style.borderBottom = '1px solid var(--border-color)';
             tr.innerHTML = `
                 <td style="padding: 0.75rem; color: var(--text-primary); font-weight: 500;">${p.plotName}</td>
-                <td style="padding: 0.75rem; color: var(--text-secondary);">${(p.auditedArea || 0).toFixed(2)}</td>
-                <td style="padding: 0.75rem; color: var(--text-secondary);">${(p.expectedHarvestTon || 0).toFixed(2)}</td>
+                <td style="padding: 0.75rem; color: var(--text-secondary);">${p.auditedArea === "NA" ? "NA" : (parseFloat(p.auditedArea) || 0).toFixed(2)}</td>
+                <td style="padding: 0.75rem; color: var(--text-secondary);">${p.expectedHarvestTon === "NA" ? "NA" : (parseFloat(p.expectedHarvestTon) || 0).toFixed(2)}</td>
                 <td style="padding: 0.75rem; color: var(--text-secondary); font-weight: 500; color: ${p.isHarvested === 'Yes' ? '#10b981' : '#f59e0b'};">${p.isHarvested}</td>
                 <td style="padding: 0.75rem; color: var(--text-secondary);">${p.harvestedDate || "-"}</td>
                 <td style="padding: 0.75rem; color: var(--text-secondary);">${p.currentStage || "-"}</td>
@@ -2840,8 +2976,8 @@ function showHarvestWindowPlots(label, plots) {
             tr.style.borderBottom = '1px solid var(--border-color)';
             tr.innerHTML = `
                 <td style="padding: 0.75rem; color: var(--text-primary); font-weight: 500;">${p.plotName}</td>
-                <td style="padding: 0.75rem; color: var(--text-secondary);">${(p.auditedArea || 0).toFixed(2)}</td>
-                <td style="padding: 0.75rem; color: var(--text-secondary);">${(p.expectedHarvestTon || 0).toFixed(2)}</td>
+                <td style="padding: 0.75rem; color: var(--text-secondary);">${p.auditedArea === "NA" ? "NA" : (parseFloat(p.auditedArea) || 0).toFixed(2)}</td>
+                <td style="padding: 0.75rem; color: var(--text-secondary);">${p.expectedHarvestTon === "NA" ? "NA" : (parseFloat(p.expectedHarvestTon) || 0).toFixed(2)}</td>
                 <td style="padding: 0.75rem; color: var(--text-secondary);">${p.currentStage || "-"}</td>
                 <td style="padding: 0.75rem; color: var(--text-secondary); font-weight: 600; color: var(--secondary-color);">${p.progression}%</td>
                 <td style="padding: 0.75rem; color: var(--text-secondary);">${p.hStart || "-"}</td>
@@ -3140,8 +3276,12 @@ function renderHarvestStatus(processedPlots, tasks) {
         const agg = windowAggregates[status];
         if (agg) {
             agg.count++;
-            agg.expected += (plot.expectedHarvestTon || 0);
-            agg.predicted += (plot.predictedHarvestTon || 0);
+            if (plot.expectedHarvestTon !== "NA") {
+                agg.expected += (parseFloat(plot.expectedHarvestTon) || 0);
+            }
+            if (plot.predictedHarvestTon !== "NA") {
+                agg.predicted += (parseFloat(plot.predictedHarvestTon) || 0);
+            }
         }
 
         let plotCollectedTon = 0;
@@ -3162,7 +3302,7 @@ function renderHarvestStatus(processedPlots, tasks) {
                 qty: qty,
                 unit: unit,
                 metricTon: metricTonValue,
-                predictedTon: plot.predictedHarvestTon || 0,
+                predictedTon: plot.predictedHarvestTon, // Keep raw "NA" or number
                 windowStatus: status // For filtering
             });
         });
@@ -3187,7 +3327,7 @@ function renderHarvestStatus(processedPlots, tasks) {
             <td style="padding: 1rem; color: var(--text-primary); font-weight: 600;">${r.qty}</td>
             <td style="padding: 1rem; color: var(--text-secondary);">${r.unit}</td>
             <td style="padding: 1rem; color: var(--secondary-color); font-weight: 700;">${r.metricTon.toFixed(2)}</td>
-            <td style="padding: 1rem; color: #f59e0b; font-weight: 600;">${r.predictedTon.toFixed(2)}</td>
+            <td style="padding: 1rem; color: #f59e0b; font-weight: 600;">${r.predictedTon === "NA" ? "NA" : (parseFloat(r.predictedTon) || 0).toFixed(2)}</td>
         `;
         tbody.appendChild(tr);
     });
@@ -3342,8 +3482,8 @@ function renderHarvestWindowStatus(aggregates, processedPlots) {
             <td style="padding: 1.25rem 1rem; font-weight: 500; color: #60a5fa;">${status}${isActive ? ' <i class="fas fa-filter" style="font-size: 0.8rem; margin-left: 5px;"></i>' : ''}</td>
             <td style="padding: 1.25rem 1rem; text-align: center; color: var(--text-primary); font-weight: 600;">${data.count}</td>
             <td style="padding: 1.25rem 1rem; text-align: center; color: #10b981; font-weight: 700;">${data.collected.toFixed(2)}</td>
-            <td style="padding: 1.25rem 1rem; text-align: center; color: var(--text-secondary);">${data.expected.toFixed(2)}</td>
-            <td style="padding: 1.25rem 1rem; text-align: center; color: #f59e0b;">${data.predicted.toFixed(2)}</td>
+            <td style="padding: 1.25rem 1rem; text-align: center; color: var(--text-secondary);">${data.expected === 0 && data.count > 0 ? "NA" : data.expected.toFixed(2)}</td>
+            <td style="padding: 1.25rem 1rem; text-align: center; color: #f59e0b;">${data.predicted === 0 && data.count > 0 ? "NA" : data.predicted.toFixed(2)}</td>
         `;
         tbody.appendChild(tr);
     });
