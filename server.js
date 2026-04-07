@@ -18,6 +18,16 @@ app.use(cors());
 // --- Sage Integrated Support removed ---
 
 app.use(bodyParser.json());
+
+// Serve backup files for the legacy dashboard
+app.get('/aggregate_dashboard.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'aggregate_dashboard_backup.html'));
+});
+
+app.get('/aggregate_script.js', (req, res) => {
+    res.sendFile(path.join(__dirname, 'aggregate_script_backup.js'));
+});
+
 app.use(express.static(__dirname));
 
 // Debug Middleware
@@ -1325,9 +1335,17 @@ app.get('/api/user-aggregate/growth-stage', (req, res) => {
             try {
                 const parsedData = JSON.parse(data);
                 if (gRes.statusCode >= 200 && gRes.statusCode < 300) {
-                    const record = (parsedData.records && parsedData.records.length > 0) ? parsedData.records[0] : null;
-                    const growth = record ? record.cropGrowthStage : null;
-                    
+                    let growth = null;
+                    if (parsedData.records && Array.isArray(parsedData.records)) {
+                        // Find the first record that has valid growth stage data
+                        for (const rec of parsedData.records) {
+                            if (rec.cropGrowthStage && rec.cropGrowthStage.cropStageName) {
+                                growth = rec.cropGrowthStage;
+                                break;
+                            }
+                        }
+                    }
+
                     if (growth) {
                         res.json({
                             caId: caIds,
@@ -1337,7 +1355,7 @@ app.get('/api/user-aggregate/growth-stage', (req, res) => {
                             harvestWindowEndDate: growth.harvestWindowEndDate || "-"
                         });
                     } else {
-                        res.json({ caId: caIds, _rawEmpty: true });
+                        res.json({ caId: caIds, _rawEmpty: true, _message: "No valid growth stage records found" });
                     }
                 } else {
                     res.status(gRes.statusCode).send(data);
@@ -1350,6 +1368,56 @@ app.get('/api/user-aggregate/growth-stage', (req, res) => {
     });
     gReq.on('error', e => res.status(500).json({ error: e.message }));
     gReq.end();
+});
+
+// GET Plot Features (Intelligence Features)
+app.get('/api/user-aggregate/plot-features/:caId', (req, res) => {
+    const { environment } = req.query;
+    const { caId } = req.params;
+    const authHeader = req.headers.authorization;
+
+    if (!environment || !caId) return res.status(400).json({ error: 'Missing environment or caId' });
+    if (!authHeader) return res.status(401).json({ error: 'Missing authorization' });
+
+    const db = readDb();
+    const apiBaseUrl = resolveEnvUrl(db, environment, 'api');
+    if (!apiBaseUrl) return res.status(400).json({ error: 'Unknown environment' });
+
+    const fullUrl = `${apiBaseUrl}/services/farm/api/croppable-areas/features/${caId}`;
+    const urlObj = new URL(fullUrl);
+
+    const options = {
+        hostname: urlObj.hostname,
+        port: 443,
+        path: urlObj.pathname,
+        method: 'GET',
+        headers: {
+            'Authorization': authHeader,
+            'Accept': 'application/json',
+            'User-Agent': 'Mozilla/5.0'
+        }
+    };
+
+    const fReq = https.request(options, (fRes) => {
+        let data = '';
+        fRes.on('data', chunk => data += chunk);
+        fRes.on('end', () => {
+            try {
+                if (data.trim().startsWith('<')) return res.status(502).json({ error: 'API returned HTML' });
+                const parsedData = JSON.parse(data);
+                if (fRes.statusCode >= 200 && fRes.statusCode < 300) {
+                    res.json(parsedData);
+                } else {
+                    res.status(fRes.statusCode).json(parsedData);
+                }
+            } catch (e) {
+                console.error('[User Aggregate] Plot Features Parse Error:', e.message);
+                res.status(500).json({ error: 'Failed to proxy plot features' });
+            }
+        });
+    });
+    fReq.on('error', e => res.status(500).json({ error: e.message }));
+    fReq.end();
 });
 
 // GET Harvest Tasks Data

@@ -4,7 +4,6 @@ var growthStageChartInstance = null;
 var harvestWindowChartInstance = null;
 var harvestDailyChartInstance = null;
 var harvestWindowPieChart = null;
-window.sustainabilityCache = {}; // Global cache for harvest status by caId
 
 document.addEventListener('DOMContentLoaded', () => {
     // Auto-detect production environment
@@ -463,7 +462,7 @@ function handleFileUpload(event) {
             initSearchableDropdown();
             updateUnitLabels();
 
-            const showAllBtn = document.getElementById('show-all-plots-btn');
+            const showAllBtn = document.getElementById('toggle-yield-table-btn');
             if (showAllBtn) showAllBtn.style.display = 'flex';
         } else {
             alert('File appears to be empty or invalid.');
@@ -536,20 +535,19 @@ function processData(rows) {
         const massFactor = MASS_CONVERSIONS[qUnit] || MASS_CONVERSIONS.kgs;
         const areaFactor = AREA_CONVERSIONS[aUnit] || AREA_CONVERSIONS.acre;
         
-        const areaHa = (parseFloat(area) || 0) / areaFactor;
-        const h1Ton = h1 === "NA" ? 0 : (parseFloat(h1) || 0) / massFactor;
-        const h2Ton = h2 === "NA" ? 0 : (parseFloat(h2) || 0) / massFactor;
+        const areaHa = area / areaFactor;
+        const h1Ton = h1 / massFactor;
+        const h2Ton = h2 / massFactor;
 
         const isNA = h3_min === 'NA' || y3_min === 'NA' || row['Harvest Min predicted'] === 'NA';
         const isZero = (h3_min === 0 || h3_min === null) && (h3_max === 0 || h3_max === null) && (y3_min === 0 || y3_min === null) && (y3_max === 0 || y3_max === null);
         const isPredictionAvailable = !isNA && !isZero && row['Harvest Min predicted'] !== undefined;
 
-        // Always accumulate baseline metrics for the selected set
-        totalAreaHaSum += (parseFloat(areaHa) || 0);
-        expHarvestTonSum += (parseFloat(h1Ton) || 0);
-        reHarvestTonSum += (parseFloat(h2Ton) || 0);
-
         if (isPredictionAvailable || includeNoPred) {
+            totalAreaHaSum += areaHa;
+            expHarvestTonSum += h1Ton;
+            reHarvestTonSum += h2Ton;
+            
             plotsWithPred.push(caName);
             countWithPrediction++;
         }
@@ -584,12 +582,10 @@ function processData(rows) {
             name: caName,
             auditedArea: area,
             areaUnit: aUnit,
-            y1: y1 === "NA" ? 0 : (parseFloat(y1) || 0), 
-            y2: y2 === "NA" ? 0 : (parseFloat(y2) || 0),
+            y1, y2,
             y3_min: y3MinVal, 
             y3_max: y3MaxVal,
-            h1: h1 === "NA" ? 0 : (parseFloat(h1) || 0), 
-            h2: h2 === "NA" ? 0 : (parseFloat(h2) || 0),
+            h1, h2,
             h3_min: h3MinTon, 
             h3_max: h3MaxTon,
             noPrediction: !isPredictionAvailable,
@@ -738,8 +734,6 @@ function calculateDataTestRangeDiff(elementId, min, max, baseline) {
 // ALL PLOTS MODAL WITH SEARCH & PAGINATION
 // =============================================
 function showAllPlotsModal() {
-    const modal = document.getElementById('all-plots-modal');
-
     paginationState.currentPage = 1;
     paginationState.searchQuery = '';
     paginationState.rowsPerPage = parseInt(document.getElementById('rows-per-page').value) || 20;
@@ -757,14 +751,46 @@ function showAllPlotsModal() {
     });
 
     renderPaginatedTable();
-    document.body.style.overflow = 'hidden';
-    modal.classList.add('active');
+}
+
+/**
+ * Standardized Toggle for Inline Yield Table
+ */
+function toggleYieldTableVisibility() {
+    const wrapper = document.getElementById('base-yield-table-wrapper');
+    const btn = document.getElementById('toggle-yield-table-btn');
+    const textEl = document.getElementById('toggle-yield-table-text');
+    
+    if (!wrapper || !btn || !textEl) return;
+
+    const isHidden = wrapper.classList.toggle('hidden');
+    
+    if (!isHidden) {
+        // Opening: ensure data is updated/rendered
+        showAllPlotsModal();
+        textEl.textContent = "Hide Base Plot Data";
+        btn.querySelector('i').className = "fas fa-eye-slash";
+        btn.style.background = "#4b5563"; // grayish for hide state
+        
+        // Scroll slightly to the table
+        wrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+        // Closing
+        textEl.textContent = "View Base Plot Data";
+        btn.querySelector('i').className = "fas fa-table";
+        btn.style.background = "#8b5cf6"; // primary purple
+    }
+}
+
+function handleRowsPerPageChange(e) {
+    paginationState.rowsPerPage = parseInt(e.target.value);
+    paginationState.currentPage = 1;
+    renderPaginatedTable();
 }
 
 function closeAllPlotsModal() {
-    const modal = document.getElementById('all-plots-modal');
-    modal.classList.remove('active');
-    document.body.style.overflow = '';
+    // Repurposed to just scroll up or hide if needed, but the toggle handles it now
+    toggleYieldTableVisibility();
 }
 
 
@@ -927,21 +953,52 @@ function updatePaginationInfo(start, end, total) {
 }
 
 function updatePaginationButtons(currentPage, totalPages) {
-    const prevBtn = document.getElementById('prev-page-btn');
-    const nextBtn = document.getElementById('next-page-btn');
-    const pageNumbersEl = document.getElementById('page-numbers');
+    const controls = document.getElementById('pagination-controls');
+    if (!controls) return;
 
-    if (prevBtn) prevBtn.disabled = currentPage <= 1;
-    if (nextBtn) nextBtn.disabled = currentPage >= totalPages;
+    controls.innerHTML = '';
 
-    if (pageNumbersEl) {
-        pageNumbersEl.innerHTML = '';
-        // ... (Simplified pagination logic for brevity) ...
+    if (totalPages <= 1) return;
+
+    // Prev Button
+    const prevBtn = document.createElement('button');
+    prevBtn.className = 'export-btn';
+    prevBtn.style.padding = '0.4rem 0.8rem';
+    prevBtn.style.background = currentPage === 1 ? '#e5e7eb' : '#6366f1';
+    prevBtn.style.cursor = currentPage === 1 ? 'not-allowed' : 'pointer';
+    prevBtn.disabled = currentPage === 1;
+    prevBtn.innerHTML = '<i class="fas fa-chevron-left"></i>';
+    prevBtn.onclick = prevPage;
+    controls.appendChild(prevBtn);
+
+    // Page numbers
+    const startPage = Math.max(1, currentPage - 2);
+    const endPage = Math.min(totalPages, startPage + 4);
+    
+    for (let i = startPage; i <= endPage; i++) {
         const btn = document.createElement('button');
-        btn.className = 'page-number active';
-        btn.textContent = currentPage;
-        pageNumbersEl.appendChild(btn);
+        btn.className = 'export-btn';
+        btn.style.padding = '0.4rem 0.8rem';
+        btn.style.background = i === currentPage ? '#8b5cf6' : 'rgba(255,255,255,0.1)';
+        btn.style.border = i === currentPage ? 'none' : '1px solid var(--border-color)';
+        btn.textContent = i;
+        btn.onclick = () => {
+            paginationState.currentPage = i;
+            renderPaginatedTable();
+        };
+        controls.appendChild(btn);
     }
+
+    // Next Button
+    const nextBtn = document.createElement('button');
+    nextBtn.className = 'export-btn';
+    nextBtn.style.padding = '0.4rem 0.8rem';
+    nextBtn.style.background = currentPage === totalPages ? '#e5e7eb' : '#6366f1';
+    nextBtn.style.cursor = currentPage === totalPages ? 'not-allowed' : 'pointer';
+    nextBtn.disabled = currentPage === totalPages;
+    nextBtn.innerHTML = '<i class="fas fa-chevron-right"></i>';
+    nextBtn.onclick = nextPage;
+    controls.appendChild(nextBtn);
 }
 
 function nextPage() {
@@ -1410,22 +1467,6 @@ async function fetchCompanyInfo(companyId) {
             } else if (result.data.data && result.data.data.preferences) {
                 companyPrefs = result.data.data.preferences;
             }
-            
-            // Extract Providers Subscribed (data.data.PRCompanyDetails.subscriptions.plotrisk.providers)
-            try {
-                const nestedData = result.data.data || result.data;
-                const providers = nestedData.PRCompanyDetails?.subscriptions?.plotrisk?.providers || [];
-                const providerNames = providers.map(p => p.name).join(', ');
-                const providerEl = document.getElementById('company-providers-list');
-                const providerContainer = document.getElementById('company-providers-container');
-                if (providerEl && providerContainer) {
-                    providerEl.textContent = providerNames || 'None';
-                    providerContainer.classList.remove('hidden');
-                }
-            } catch (err) {
-                console.warn('Could not extract providers from company info', err);
-            }
-
             console.log('Company Info Fetched:', companyPrefs);
             // Update display again to show company status
             updateElement('session-info', `${currentEnvironment} | ${currentTenant} | User: ${userPrefs.areaUnits || 'NA'} | Co: ${companyPrefs.areaUnits || 'NA'}`);
@@ -1493,12 +1534,9 @@ function clearAllDataUI() {
     const sectionsToHide = [
         'dashboard-content', 'yield-harvest-section', 'growth-data-section', 'health-data-section', 
         'growth-info', 'growth-cards-container', 'health-info', 'health-cards-container', 
-        'harvest-status-section', 'health-harvest-status-section', 
-        'harvest-status-results', 'health-harvest-status-results',
-        'harvest-window-plots-container', 'health-harvest-window-plots-container', 
-        'growth-progression-plots-container', 'health-progression-plots-container',
-        'plot-info', 'unit-config-section', 'load-plots-btn-container',
-        'base-growth-table-wrapper', 'base-health-table-wrapper', 'project-container'
+        'harvest-status-section', 'harvest-status-results', 'harvest-window-plots-container', 
+        'growth-progression-plots-container', 'plot-info', 'unit-config-section',
+        'base-growth-table-wrapper', 'project-container', 'health-kpi-drilldown-container'
     ];
     sectionsToHide.forEach(id => {
         const el = document.getElementById(id);
@@ -1511,22 +1549,35 @@ function clearAllDataUI() {
         if (el) el.classList.remove('hidden');
     });
 
+    const verifyBtn = document.getElementById('verify-plots-btn');
+    if (verifyBtn) {
+        verifyBtn.disabled = true;
+        verifyBtn.style.opacity = '0.5';
+    }
+
     // 5. Reset Metrics & Diff Displays
     clearPlotDisplay();
     
     const simpleMetricIds = [
-        'plot-count-total', 'plot-count-risk', 'agg-total-area', 'agg-plots-count', 'agg-exp-harvest', 'agg-re-harvest', 
+        'plot-count', 'agg-total-area', 'agg-plots-count', 'agg-exp-harvest', 'agg-re-harvest', 
         'agg-ai-harvest-min', 'agg-ai-harvest-max', 'agg-exp-yield', 'agg-re-yield', 
-        'agg-ai-yield-min', 'agg-ai-yield-max', 
-        'growth-prog-total', 'growth-prog-harvested', 'health-prog-total', 'health-prog-harvested',
-        'harvest-plots-covered', 'harvest-window-range', 'health-harvest-plots-covered', 'health-harvest-window-range',
-        'stat-harvest-plots-covered', 'stat-harvest-collected', 'health-stat-harvest-plots-covered', 'health-stat-harvest-collected',
-        'growth-status', 'health-status', 'progress-text'
+        'agg-ai-yield-min', 'agg-ai-yield-max', 'growth-prog-total', 'growth-prog-harvested', 
+        'harvest-plots-covered', 'harvest-window-range', 'stat-harvest-plots-covered', 'stat-harvest-collected',
+        'growth-status', 'progress-text'
     ];
     simpleMetricIds.forEach(id => {
         const el = document.getElementById(id);
         if (el) el.textContent = '-';
     });
+    
+    // Extra resets for module status spans
+    ['yield-status', 'growth-status', 'health-status'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = '';
+    });
+
+    const prCount = document.getElementById('plot-risk-count');
+    if (prCount) prCount.textContent = '-';
 
     const diffIds = [
         'agg-re-harvest-diff', 'agg-ai-harvest-diff-exp', 'agg-ai-harvest-diff-re', 
@@ -1625,52 +1676,61 @@ try {
 async function generateDataFromAPI() {
     const progressSpan = document.getElementById('generate-progress');
     const progressText = document.getElementById('progress-text');
+    const yieldStatus = document.getElementById('yield-status');
     const baseUrl = getServerUrl();
 
-    const legacyYieldContent = document.getElementById('legacy-yield-content');
-    if (legacyYieldContent) legacyYieldContent.classList.remove('hidden');
-
     progressSpan && progressSpan.classList.remove('hidden');
+    if (yieldStatus) {
+        yieldStatus.textContent = 'Processing plots: 0/' + plotsData.length;
+        yieldStatus.style.color = 'var(--primary-color)';
+    }
 
     const generatedData = [];
     const total = plotsData.length;
     const BATCH_SIZE = 5;
 
-    // Use a local set of caIds to avoid any global pollution
-    const caIdsToFetch = plotsData.map(p => String(p.caId));
-    console.log(`[INFO] Starting Yield/Harvest data generation for ${caIdsToFetch.length} plots.`);
-
     async function fetchPlotData(plot) {
         try {
-            // 1. Fetch CA Details
+            // Fetch CA Details first (Critical)
             const caReq = fetch(`${baseUrl}/api/user-aggregate/ca-details?environment=${encodeURIComponent(currentEnvironment)}&caId=${encodeURIComponent(plot.caId)}`, {
-                headers: { 'Authorization': `Bearer ${authToken}`, 'ngrok-skip-browser-warning': 'true' }
+                headers: { 'Authorization': `Bearer ${authToken}` }
             });
 
-            // 2. Fetch Yield Prediction
+            // Fetch Yield Prediction (Optional - might fail if not enabled)
             const yieldReq = fetch(`${baseUrl}/api/user-aggregate/yield-prediction?environment=${encodeURIComponent(currentEnvironment)}&caIds=${encodeURIComponent(plot.caId)}`, {
-                headers: { 'Authorization': `Bearer ${authToken}`, 'ngrok-skip-browser-warning': 'true' }
+                headers: { 'Authorization': `Bearer ${authToken}` }
             });
 
-            const [caRes, yieldRes] = await Promise.all([caReq, yieldReq]);
-            
-            if (!caRes.ok) {
-                console.error(`[ERROR] CA info failed for ${plot.caId}`);
-                return null;
-            }
+            const [caResponse, yieldResponse] = await Promise.all([caReq, yieldReq]);
+            const caData = await caResponse.json();
 
-            const caData = await caRes.json();
             let yieldData = {};
-            
-            if (yieldRes.ok) {
-                yieldData = await yieldRes.json();
+            if (!yieldResponse.ok) {
+                // Handle specific "Not Enabled" cases gracefully
+                try {
+                    const errBody = await yieldResponse.json();
+                    const errMsg = JSON.stringify(errBody);
+                    // Check for specific error signatures: srPlotIdnull or 'not generated yet'
+                    if (errMsg.includes('error.srPlotIdnull') || errMsg.includes('Yield data is not generated yet')) {
+                        console.warn(`[INFO] Plot ${plot.caId} has no yield data (expected). Response: ${errMsg}`);
+                        yieldData = { notEnabled: true }; // Mark as explicitly not enabled
+                    } else {
+                        console.warn(`[WARN] Yield API Failed for CA ${plot.caId} | Status: ${yieldResponse.status}`, errBody);
+                        yieldData = {}; // Just missing/failed
+                    }
+                } catch (e) {
+                    console.warn(`[WARN] Yield API Failed for CA ${plot.caId} | Status: ${yieldResponse.status}`);
+                    yieldData = {};
+                }
             } else {
-                console.warn(`[INFO] Yield data missing for ${plot.caId} (${yieldRes.status})`);
+                yieldData = await yieldResponse.json();
             }
 
             const reEstYield = caData.auditedArea > 0 ? (caData.reestimatedValue || 0) / caData.auditedArea : 0;
+
             let companyAreaUnit = (companyPrefs.areaUnits || 'ha').toLowerCase().includes('acre') ? 'acre' : 'ha';
             let userAreaUnit = (userPrefs.areaUnits || companyAreaUnit).toLowerCase().includes('acre') ? 'acre' : 'ha';
+            let rawUnit = (caData.quantityUnit || 'kgs').toLowerCase();
 
             return {
                 'Plot Name': plot.name || 'Unknown',
@@ -1686,12 +1746,12 @@ async function generateDataFromAPI() {
                 'Yield Min predicted': yieldData.yieldMin,
                 'Yield Max predicted': yieldData.yieldMax,
                 'Yield Average predicted': yieldData.yieldAvg,
-                'Yield Not Enabled': !yieldRes.ok,
-                'plotHarvestUnit': (caData.quantityUnit || 'kgs').toLowerCase(),
-                'plotAreaUnit': userAreaUnit
+                'Yield Not Enabled': yieldData.notEnabled || false,
+                'plotHarvestUnit': rawUnit,
+                'plotAreaUnit': userAreaUnit // Data from API is assumed to be in user/company pref
             };
         } catch (error) {
-            console.error(`[ERROR] CA ${plot.caId}:`, error);
+            console.error(`Error fetching data for CA ${plot.caId}:`, error);
             return null;
         }
     }
@@ -1699,15 +1759,22 @@ async function generateDataFromAPI() {
     let completed = 0;
     for (let i = 0; i < plotsData.length; i += BATCH_SIZE) {
         const batch = plotsData.slice(i, Math.min(i + BATCH_SIZE, plotsData.length));
-        const batchResults = await Promise.allSettled(batch.map(plot => fetchPlotData(plot)));
+        const batchResults = await Promise.allSettled(
+            batch.map(plot => fetchPlotData(plot))
+        );
 
-        batchResults.forEach(r => {
-            if (r.status === 'fulfilled' && r.value) generatedData.push(r.value);
+        batchResults.forEach(result => {
+            if (result.status === 'fulfilled' && result.value) {
+                generatedData.push(result.value);
+            }
         });
 
         completed += batch.length;
-        if (progressText) progressText.textContent = `${completed}/${total}`;
+        progressText.textContent = `${completed}/${total}`;
+        if (yieldStatus) yieldStatus.textContent = `Processing plots: ${completed}/${total}`;
     }
+    
+    if (yieldStatus) yieldStatus.textContent = 'Processing Complete (' + total + ' plots)';
 
     progressSpan && progressSpan.classList.add('hidden');
 
@@ -1757,14 +1824,12 @@ async function generateDataFromAPI() {
     }
 
     document.getElementById('dashboard-content').classList.remove('hidden');
-    document.getElementById('agg-level-section')?.classList.remove('hidden');
-    document.getElementById('agg-plot-section')?.classList.remove('hidden');
 
     processData(generatedData);
     initSearchableDropdown();
     updateUnitLabels();
 
-    const showAllBtn = document.getElementById('show-all-plots-btn');
+    const showAllBtn = document.getElementById('toggle-yield-table-btn');
     if (showAllBtn) showAllBtn.style.display = 'flex';
 }
 
@@ -1873,23 +1938,18 @@ function handleProjectSelection(id, isSelected) {
         }
     }
 
-    // Enable/Disable Verification Button
-    const loadPlotsBtn = document.getElementById('load-plots-btn');
+    // Enable/Disable Load Buttons
+    const loadBtn = document.getElementById('load-data-btn');
+    const growthLoadBtn = document.getElementById('load-growth-data-btn');
+    const healthLoadBtn = document.getElementById('load-health-data-btn');
+    const verifyPlotsBtn = document.getElementById('verify-plots-btn');
+    const yieldHarvestSection = document.getElementById('yield-harvest-section');
+    const growthSection = document.getElementById('growth-data-section');
+    const healthSection = document.getElementById('health-data-section');
+
     const hasSelection = selectedProjectIds.length > 0;
     
-    if (loadPlotsBtn) {
-        loadPlotsBtn.disabled = !hasSelection;
-        loadPlotsBtn.style.opacity = hasSelection ? '1' : '0.5';
-        loadPlotsBtn.style.cursor = hasSelection ? 'pointer' : 'not-allowed';
-    }
-
-    // Keep other load buttons disabled until plots are verified
-    const otherLoadBtns = [
-        document.getElementById('load-data-btn'),
-        document.getElementById('load-growth-data-btn'),
-        document.getElementById('load-health-data-btn')
-    ];
-    otherLoadBtns.forEach(btn => {
+    [loadBtn, growthLoadBtn, healthLoadBtn, verifyPlotsBtn].forEach(btn => {
         if (btn) {
             btn.disabled = true;
             btn.style.opacity = '0.5';
@@ -1897,14 +1957,17 @@ function handleProjectSelection(id, isSelected) {
         }
     });
 
-    // Sections should also be hidden until verification is done
-    const sectionsToHide = [
-        'yield-harvest-section', 'growth-data-section', 'health-data-section',
-        'new-yield-harvest-section', 'new-growth-data-section'
-    ];
-    sectionsToHide.forEach(id => {
-        const sec = document.getElementById(id);
-        if (sec) sec.classList.add('hidden');
+    if (hasSelection && verifyPlotsBtn) {
+        verifyPlotsBtn.disabled = false;
+        verifyPlotsBtn.style.opacity = '1';
+        verifyPlotsBtn.style.cursor = 'pointer';
+    }
+
+    [yieldHarvestSection, growthSection, healthSection].forEach(sec => {
+        if (sec) {
+            if (hasSelection) sec.classList.remove('hidden');
+            else sec.classList.add('hidden');
+        }
     });
 
     renderProjectsList(); // Re-render to update highlights/checkboxes
@@ -1914,29 +1977,21 @@ function handleProjectSelection(id, isSelected) {
 async function handleLoadPlots() {
     if (selectedProjectIds.length === 0) return;
 
+    // STEP BY STEP: Handle MULTIPLE projects
     const projectId = selectedProjectIds.join(',');
+
     const plotInfo = document.getElementById('plot-info');
-    const plotCountTotal = document.getElementById('plot-count-total');
-    const plotCountRisk = document.getElementById('plot-count-risk');
+    const plotCount = document.getElementById('plot-count');
     const plotLoading = document.getElementById('plot-loading');
-    const plotLoadingText = document.getElementById('plot-loading-text');
-    const progressSpan = document.getElementById('generate-progress');
-    const progressText = document.getElementById('progress-text');
-    const loadPlotsBtn = document.getElementById('load-plots-btn');
-    
     const baseUrl = getServerUrl();
 
-    // Reset UI
-    if (plotInfo) plotInfo.classList.remove('hidden');
-    if (plotLoading) plotLoading.classList.remove('hidden');
-    if (plotLoadingText) plotLoadingText.textContent = "Fetching plots...";
-    if (plotCountTotal) plotCountTotal.textContent = '-';
-    if (plotCountRisk) plotCountRisk.textContent = '-';
-    if (progressSpan) progressSpan.classList.add('hidden');
-    if (loadPlotsBtn) loadPlotsBtn.disabled = true;
+    // Show loading UI
+    plotInfo.classList.remove('hidden');
+    plotLoading.classList.remove('hidden');
+    plotCount.textContent = '-';
 
     try {
-        console.log(`[ARCHITECT] Step 1: Loading all plots for Project ID: ${projectId}`);
+        console.log(`[DEBUG] Loading plots for Project ID: ${projectId}`);
         const response = await fetch(`${baseUrl}/api/user-aggregate/plots?environment=${encodeURIComponent(currentEnvironment)}&projectId=${encodeURIComponent(projectId)}`, {
             headers: {
                 'Authorization': `Bearer ${authToken}`,
@@ -1947,132 +2002,130 @@ async function handleLoadPlots() {
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Failed to load plots');
 
-        const allPlots = data.plots || [];
-        if (plotCountTotal) plotCountTotal.textContent = allPlots.length;
-        
-        if (allPlots.length === 0) {
-            if (plotCountRisk) plotCountRisk.textContent = '0';
-            alert("No plots found for the selected projects.");
-            return;
-        }
-
-        // Step 2: Verify Plot Risk Features in Batches
-        if (plotLoadingText) plotLoadingText.textContent = "Verifying Intelligence Features...";
-        if (progressSpan) progressSpan.classList.remove('hidden');
-        
-        const riskEnabledPlots = await verifyPlotRiskFeatures(allPlots, (completed, total) => {
-            if (progressText) progressText.textContent = `${completed}/${total}`;
-        });
-
-        // Step 3: Update Global State with Filtered Data
-        plotsData = riskEnabledPlots;
-        window.totalSelectedPlotsCount = allPlots.length; // Store for X/Y reporting
-        if (plotCountRisk) plotCountRisk.textContent = plotsData.length;
-        console.log(`[ARCHITECT] Verification complete. ${plotsData.length} of ${allPlots.length} plots are Plot Risk enabled.`);
+        plotsData = data.plots || [];
+        plotCount.textContent = plotsData.length;
+        console.log(`[DEBUG] Loaded ${plotsData.length} plots`);
 
         if (plotsData.length > 0) {
-            // Enable analysis buttons now that we have filtered plots
-            enableDataLoadButtons(true);
-            
-            // Manual trigger required for Yield/Growth/Health generation
-            console.log(`[ARCHITECT] Verification complete. ${plotsData.length} plots are ready for analysis.`);
-        } else {
-            alert("None of the selected plots have the 'Plot Risk' feature enabled. Data loading is not possible for these plots.");
+            // Auto-generate data after loading plots (as per previous flow logic)
+            await generateDataFromAPI();
         }
 
     } catch (error) {
-        console.error('[ARCHITECT] Error in plot verification flow:', error);
-        if (plotCountTotal) plotCountTotal.textContent = 'Error';
-        alert(`Verification flow failed: ${error.message}`);
+        console.error('Error loading plots:', error);
+        plotCount.textContent = 'Error';
+        alert(`Failed to load plots: ${error.message}`);
+    } finally {
+        plotLoading.classList.add('hidden');
+    }
+}
+
+/**
+ * Verified compatible plots for Health Module
+ */
+async function handleVerifyPlots() {
+    if (selectedProjectIds.length === 0) return;
+
+    const verifyBtn = document.getElementById('verify-plots-btn');
+    const plotInfo = document.getElementById('plot-info');
+    const healthLoadBtn = document.getElementById('load-health-data-btn');
+    const baseUrl = getServerUrl();
+
+    // 1. Always fetch plots for current selection to ensure sync
+    verifyBtn.innerHTML = '⌛ Identifying Plots...';
+    const projectId = selectedProjectIds.join(',');
+    const plotCount = document.getElementById('plot-count');
+    const plotLoading = document.getElementById('plot-loading');
+    
+    if (plotLoading) plotLoading.classList.remove('hidden');
+    
+    try {
+        const response = await fetch(`${baseUrl}/api/user-aggregate/plots?environment=${encodeURIComponent(currentEnvironment)}&projectId=${encodeURIComponent(projectId)}`, {
+            headers: { 'Authorization': `Bearer ${authToken}`, 'ngrok-skip-browser-warning': 'true' }
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Failed to load plots');
+        
+        plotsData = data.plots || [];
+        if (plotCount) plotCount.textContent = plotsData.length;
+        if (plotInfo) plotInfo.classList.remove('hidden');
+    } catch (e) {
+        console.error('Error fetching plots for verification:', e);
+        alert(`Failed to identify plots: ${e.message}`);
+        return;
     } finally {
         if (plotLoading) plotLoading.classList.add('hidden');
-        if (progressSpan) progressSpan.classList.add('hidden');
-        if (loadPlotsBtn) loadPlotsBtn.disabled = false;
     }
-}
 
-async function verifyPlotRiskFeatures(plots, onProgress) {
-    const BATCH_SIZE = 10;
-    const filteredPlots = [];
+    if (plotsData.length === 0) {
+        alert("No plots found for the selected projects.");
+        return;
+    }
+
+    // 2. Start Verification Process
+    verifyBtn.disabled = true;
+    verifyBtn.style.opacity = '0.7';
+    verifyBtn.innerHTML = '🔍 Verifying Compatibility...';
     
-    for (let i = 0; i < plots.length; i += BATCH_SIZE) {
-        const batch = plots.slice(i, i + BATCH_SIZE);
-        const results = await Promise.allSettled(batch.map(async (plot) => {
-            const features = await fetchPlotFeatures(plot.caId);
-            // Case-insensitive match for "Plot Risk"
-            const hasRisk = features.some(f => String(f).toLowerCase() === "plot risk");
-            if (hasRisk) {
-                plot.intelligenceFeatures = features;
-                return plot;
+    const verifiedPlots = [];
+    const BATCH_SIZE = 5;
+
+    for (let i = 0; i < plotsData.length; i += BATCH_SIZE) {
+        const batch = plotsData.slice(i, i + BATCH_SIZE);
+        const batchResults = await Promise.all(batch.map(async (plot) => {
+            try {
+                const response = await fetch(`${baseUrl}/api/user-aggregate/plot-features/${plot.caId}?environment=${encodeURIComponent(currentEnvironment)}`, {
+                    headers: { 'Authorization': `Bearer ${authToken}`, 'ngrok-skip-browser-warning': 'true' }
+                });
+                if (!response.ok) return null;
+                const features = await response.json();
+                // Logic: A plot is compatible for Health if its features include "Plot Risk"
+                if (features.features && features.features.includes("Plot Risk")) {
+                    return plot;
+                }
+                return null;
+            } catch (e) {
+                console.warn(`Feature check failed for ${plot.caId}:`, e);
+                return null;
             }
-            return null;
         }));
 
-        results.forEach(res => {
-            if (res.status === 'fulfilled' && res.value) {
-                filteredPlots.push(res.value);
-            }
-        });
-
-        if (onProgress) onProgress(Math.min(i + BATCH_SIZE, plots.length), plots.length);
+        batchResults.forEach(p => { if (p) verifiedPlots.push(p); });
+        
+        const prCountInProgress = document.getElementById('plot-risk-count');
+        if (prCountInProgress) prCountInProgress.textContent = `${verifiedPlots.length} (verifying...)`;
     }
-    return filteredPlots;
-}
 
-async function fetchPlotFeatures(caId) {
-    const baseUrl = getServerUrl();
-    try {
-        const response = await fetch(`${baseUrl}/api/user-aggregate/plot-features/${caId}?environment=${encodeURIComponent(currentEnvironment)}`, {
-            headers: {
-                'Authorization': `Bearer ${authToken}`,
-                'ngrok-skip-browser-warning': 'true'
-            }
-        });
-        if (!response.ok) return [];
-        const data = await response.json();
-        return data.features || [];
-    } catch (e) {
-        console.warn(`[ARCHITECT] Feature API proxy check failed for CA ${caId}:`, e);
-        return [];
-    }
-}
+    // 3. Update UI and enable Module Buttons
+    // IMPORTANT: We no longer overwrite the global plotsData so other modules stay functional.
+    window.verifiedHealthPlots = verifiedPlots; 
 
-function enableDataLoadButtons(enabled) {
-    const btns = [
-        'load-health-data-btn',
-        'load-data-btn',
-        'new-load-data-btn',
-        'load-growth-data-btn',
-        'new-load-growth-data-btn'
-    ];
-    btns.forEach(id => {
-        const btn = document.getElementById(id);
-        if (btn) {
-            btn.disabled = !enabled;
-            btn.style.opacity = enabled ? '1' : '0.5';
-            btn.style.cursor = enabled ? 'pointer' : 'not-allowed';
-        }
-    });
+    const prCount = document.getElementById('plot-risk-count');
+    if (prCount) prCount.textContent = verifiedPlots.length;
 
-    const mainSections = [
-        'health-data-section',
-        'yield-harvest-section',
-        'new-yield-harvest-section',
-        'growth-data-section',
-        'new-growth-data-section'
-    ];
-    mainSections.forEach(id => {
-        const sec = document.getElementById(id);
-        if (sec) {
-            if (enabled) sec.classList.remove('hidden');
-            else sec.classList.add('hidden');
-        }
-    });
+    if (plotInfo) plotInfo.classList.remove('hidden');
+
+    verifyBtn.innerHTML = '🔍 Verify & Load Plots';
     
-    // Auto-expand the main dashboard wrapper if any module is enabled
-    const dashboardContent = document.getElementById('dashboard-content');
-    if (dashboardContent && enabled) {
-        dashboardContent.classList.remove('hidden');
+    // Enable all module load buttons
+    const canLoad = plotsData.length > 0;
+    const loadBtn = document.getElementById('load-data-btn');
+    const growthLoadBtn = document.getElementById('load-growth-data-btn');
+
+    [loadBtn, growthLoadBtn].forEach(btn => {
+        if (btn) {
+            btn.disabled = !canLoad;
+            btn.style.opacity = canLoad ? '1' : '0.5';
+            btn.style.cursor = canLoad ? 'pointer' : 'not-allowed';
+        }
+    });
+
+    // Health Load button depends on verifiedPlots
+    const canLoadHealth = verifiedPlots.length > 0;
+    if (healthLoadBtn) {
+        healthLoadBtn.disabled = !canLoadHealth;
+        healthLoadBtn.style.opacity = canLoadHealth ? '1' : '0.5';
+        healthLoadBtn.style.cursor = canLoadHealth ? 'pointer' : 'not-allowed';
     }
 }
 
@@ -2124,7 +2177,6 @@ async function handleLoadGrowthData() {
     }
 
     const loadBtn = document.getElementById('load-growth-data-btn');
-    const growthInfo = document.getElementById('growth-info');
     const growthStatus = document.getElementById('growth-status');
     const growthCardsContainer = document.getElementById('growth-cards-container');
     const growthEmptyState = document.getElementById('growth-empty-state');
@@ -2135,12 +2187,10 @@ async function handleLoadGrowthData() {
     loadBtn.innerHTML = '⌛ Loading Growth Data...';
     loadBtn.style.opacity = '0.7';
     
-    const legacyGrowthContent = document.getElementById('legacy-growth-content');
-    if (legacyGrowthContent) legacyGrowthContent.classList.remove('hidden');
-
-    growthInfo.classList.remove('hidden');
-    growthStatus.textContent = "Analyzing " + plotsData.length + " plots...";
-    growthStatus.style.color = "var(--primary-color)";
+    if (growthStatus) {
+        growthStatus.textContent = "Analyzing " + plotsData.length + " plots...";
+        growthStatus.style.color = "var(--primary-color)";
+    }
 
     const growthResults = [];
     const BATCH_SIZE = 5;
@@ -2148,9 +2198,24 @@ async function handleLoadGrowthData() {
 
     async function processPlotGrowth(plot) {
         try {
-            // Sustainability data is now fetched in the Health module and cached globally
-            const sData = (window.sustainabilityCache && window.sustainabilityCache[plot.caId]) || {};
+            // 1. Sustainability API
+            const sResp = await fetch(`${baseUrl}/api/user-aggregate/sustainability?environment=${encodeURIComponent(currentEnvironment)}&caIds=${encodeURIComponent(plot.caId)}`, {
+                headers: { 'Authorization': `Bearer ${authToken}` }
+            });
+
+            if (sResp.status === 204) {
+                console.log(`[INFO] Sustainability data not enabled for Plot ${plot.caId}`);
+                return null; // Skip
+            }
+
+            const sData = await sResp.json();
             
+            // The backend was modified to return a flat object: { caId, harvested, harvestDate }
+            // or { caId, _rawEmpty: true } if there was no data.
+            if (!sData || sData._rawEmpty) {
+                return null;
+            }
+
             // Robust isHarvested check: true if flag is true OR if a date exists
             const rawHarvestDate = sData.harvestDate || null;
             const isHarvested = (sData.harvested || !!rawHarvestDate);
@@ -2910,13 +2975,11 @@ function renderHarvestWindowChart(results) {
                 };
             }
             weeksMap[weekKey].plots.push(p);
-            const pExp = parseFloat(p.expectedHarvestTon);
-            if (!isNaN(pExp)) {
-                weeksMap[weekKey].totalHarvest += pExp;
+            if (p.expectedHarvestTon !== "NA") {
+                weeksMap[weekKey].totalHarvest += (parseFloat(p.expectedHarvestTon) || 0);
             }
-            const pArea = parseFloat(p.auditedArea);
-            if (!isNaN(pArea)) {
-                weeksMap[weekKey].totalArea += pArea;
+            if (p.auditedArea !== "NA") {
+                weeksMap[weekKey].totalArea += (parseFloat(p.auditedArea) || 0);
             }
             weeksMap[weekKey].chartPlotsCount++;
         });
@@ -3019,10 +3082,10 @@ function renderHarvestWindowChart(results) {
                             ctx.fillStyle = '#84cc16';
                             ctx.textAlign = 'center';
                             
-                            const prodText = (isNaN(val) || (val === 0 && wData.plots.every(p => p.expectedHarvestTon === "NA"))) ? "NA" : val.toFixed(2);
+                            const prodText = wData.totalHarvest === 0 && wData.plots.every(p => p.expectedHarvestTon === "NA") ? "NA" : val.toFixed(2);
                             if (val > 0 || prodText === "NA") ctx.fillText(prodText, bar.x, bar.y - 10);
                             
-                            const areaVal = (isNaN(wData.totalArea) || (wData.totalArea === 0 && wData.plots.every(p => p.auditedArea === "NA"))) ? "NA" : wData.totalArea.toFixed(2);
+                            const areaVal = wData.totalArea === 0 && wData.plots.every(p => p.auditedArea === "NA") ? "NA" : wData.totalArea.toFixed(2);
                             const bubbleText = `${wData.chartPlotsCount} Plots, ${areaVal} ${areaUnit}`;
 
                             ctx.font = '11px "Inter", sans-serif';
@@ -3756,14 +3819,8 @@ function renderHarvestWindowDailyChart(results) {
                 };
             }
             dailyMap[key].plots.push(p);
-            const pExp = parseFloat(p.expectedHarvestTon);
-            if (!isNaN(pExp)) {
-                dailyMap[key].totalHarvest += pExp;
-            }
-            const pArea = parseFloat(p.auditedArea);
-            if (!isNaN(pArea)) {
-                dailyMap[key].totalArea += pArea;
-            }
+            dailyMap[key].totalHarvest += (parseFloat(p.expectedHarvestTon) || 0);
+            dailyMap[key].totalArea += (parseFloat(p.auditedArea) || 0);
         });
 
         // Get sorted list of dates that have data, starting from Tomorrow
@@ -3861,11 +3918,9 @@ function renderHarvestWindowDailyChart(results) {
                             ctx.font = 'bold 14px "Inter", sans-serif';
                             ctx.fillStyle = '#3b82f6';
                             ctx.textAlign = 'center';
-                            const prodText = (isNaN(val) || (val === 0 && b.plots.every(p => p.expectedHarvestTon === "NA"))) ? "NA" : val.toFixed(2);
-                            if (val > 0 || prodText === "NA") ctx.fillText(prodText, bar.x, bar.y - 10);
+                            if (val > 0) ctx.fillText(val.toFixed(2), bar.x, bar.y - 10);
                             
-                            const areaVal = (isNaN(b.totalArea) || (b.totalArea === 0 && b.plots.every(p => p.auditedArea === "NA"))) ? "NA" : b.totalArea.toFixed(2);
-                            const bubbleText = `${b.plots.length} Plots, ${areaVal} ${areaUnit}`;
+                            const bubbleText = `${b.plots.length} Plots, ${b.totalArea.toFixed(2)} ${areaUnit}`;
                             ctx.font = '10px "Inter", sans-serif';
                             const textWidth = ctx.measureText(bubbleText).width;
                             const bW = textWidth + 10;
@@ -3952,6 +4007,14 @@ window.sortProjectsToggle = sortProjectsToggle;
 window.handleLoadPlots = handleLoadPlots;
 window.navigatePlot = navigatePlot;
 window.showAllPlotsModal = showAllPlotsModal;
+window.toggleYieldTableVisibility = toggleYieldTableVisibility;
+window.handleRowsPerPageChange = handleRowsPerPageChange;
+window.handleSortChange = handleSortChange;
+window.toggleSortOrder = toggleSortOrder;
+window.filterTableData = filterTableData;
+window.sortTable = sortTable;
+window.nextPage = nextPage;
+window.prevPage = prevPage;
 window.closeAllPlotsModal = closeAllPlotsModal;
 window.handleLoadGrowthData = handleLoadGrowthData;
 window.closeGrowthDrillDown = closeGrowthDrillDown;
