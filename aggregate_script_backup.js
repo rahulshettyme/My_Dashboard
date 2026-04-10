@@ -1543,7 +1543,7 @@ function clearAllDataUI() {
         if (el) el.classList.add('hidden');
     });
 
-    const emptyStatesToShow = ['growth-empty-state', 'source-selector'];
+    const emptyStatesToShow = ['source-selector'];
     emptyStatesToShow.forEach(id => {
         const el = document.getElementById(id);
         if (el) el.classList.remove('hidden');
@@ -2726,7 +2726,7 @@ function renderGrowthProgressionChart(results) {
     }
 }
 
-// --- Growth Stage Chart Logic (NEW) ---
+// --- Growth Stage Chart Logic ---
 
 function renderGrowthStageChart(results) {
     try {
@@ -3681,7 +3681,7 @@ function renderHarvestWindowStatus(aggregates, processedPlots) {
         };
 
         tr.innerHTML = `
-            <td style="padding: 1.25rem 1rem; font-weight: 500; color: #60a5fa;">${status}${isActive ? ' <i class="fas fa-filter" style="font-size: 0.8rem; margin-left: 5px;"></i>' : ''}</td>
+            <td style="padding: 1.25rem 1rem; font-weight: 500; color: ${data.color};">${status}${isActive ? ' <i class="fas fa-filter" style="font-size: 0.8rem; margin-left: 5px;"></i>' : ''}</td>
             <td style="padding: 1.25rem 1rem; text-align: center; color: var(--text-primary); font-weight: 600;">${data.count}</td>
             <td style="padding: 1.25rem 1rem; text-align: center; color: #10b981; font-weight: 700;">${data.collected.toFixed(2)}</td>
             <td style="padding: 1.25rem 1rem; text-align: center; color: var(--text-secondary);">${data.expected === 0 && data.count > 0 ? "NA" : data.expected.toFixed(2)}</td>
@@ -3723,6 +3723,27 @@ function renderHarvestWindowStatus(aggregates, processedPlots) {
             }
         }
     });
+
+    // 5. Build and Show Summary Insight
+    const insightContainer = document.getElementById('harvest-insight-container');
+    const insightEl = document.getElementById('harvest-insight-summary');
+    if (insightContainer && insightEl) {
+        const total = statuses.reduce((sum, s) => sum + aggregates[s].count, 0);
+        if (total > 0) {
+            const before = aggregates['Before Window'];
+            const within = aggregates['Within Window'];
+            const post = aggregates['Post Window'];
+            
+            const beforeP = Math.round((before.count / total) * 100);
+            const withinP = Math.round((within.count / total) * 100);
+            const postP = Math.round((post.count / total) * 100);
+            
+            insightEl.textContent = `Out of ${total} plots, ${before.count} plots (${beforeP}%) were harvested before the expected window, ${within.count} plots (${withinP}%) were harvested within the window, and ${post.count} plots (${postP}%) were harvested after the window.`;
+            insightContainer.classList.remove('hidden');
+        } else {
+            insightContainer.classList.add('hidden');
+        }
+    }
 }
 
 async function handleLoadHarvestStatus() {

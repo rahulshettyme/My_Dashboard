@@ -1332,12 +1332,20 @@ app.get('/api/user-aggregate/growth-stage', (req, res) => {
         let data = '';
         gRes.on('data', chunk => data += chunk);
         gRes.on('end', () => {
+            if (data.trim().startsWith('<!DOCTYPE') || data.trim().startsWith('<html')) {
+                console.error(`[User Aggregate] Growth Stage Error: API returned HTML instead of JSON for caIds=${caIds}`);
+                return res.status(502).json({ error: 'Upstream API returned HTML (possible session timeout)' });
+            }
+            if (!data.trim()) {
+                console.warn(`[User Aggregate] Growth Stage Warning: Empty response for caIds=${caIds}`);
+                return res.json({ caId: caIds, _rawEmpty: true, _message: "Empty response from upstream" });
+            }
+
             try {
                 const parsedData = JSON.parse(data);
                 if (gRes.statusCode >= 200 && gRes.statusCode < 300) {
                     let growth = null;
                     if (parsedData.records && Array.isArray(parsedData.records)) {
-                        // Find the first record that has valid growth stage data
                         for (const rec of parsedData.records) {
                             if (rec.cropGrowthStage && rec.cropGrowthStage.cropStageName) {
                                 growth = rec.cropGrowthStage;
@@ -1362,11 +1370,15 @@ app.get('/api/user-aggregate/growth-stage', (req, res) => {
                 }
             } catch (e) {
                 console.error('[User Aggregate] Growth Stage Parse Error:', e.message);
-                res.status(500).json({ error: 'Failed to proxy growthstage' });
+                console.error('[User Aggregate] Raw Data snippet:', data.substring(0, 100));
+                res.status(500).json({ error: 'Failed to parse growthstage response' });
             }
         });
     });
-    gReq.on('error', e => res.status(500).json({ error: e.message }));
+    gReq.on('error', e => {
+        console.error('[User Aggregate] Growth Stage Request Error:', e.message);
+        res.status(500).json({ error: 'Proxy request failed: ' + e.message });
+    });
     gReq.end();
 });
 
