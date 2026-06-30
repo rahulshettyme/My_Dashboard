@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sisense Cube Refresh - Dashboard</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect x='10' y='50' width='15' height='40' rx='2' fill='%236366f1'/%3E%3Crect x='35' y='30' width='15' height='60' rx='2' fill='%23818cf8'/%3E%3Crect x='60' y='10' width='15' height='80' rx='2' fill='%23c084fc'/%3E%3Cpath d='M75 10 Q90 10 90 25 Q90 40 75 40 Q60 40 60 25 Q60 10 75 10 Z' fill='%2310b981'/%3E%3C/svg%3E">
+
+    <!-- Shared Styles -->
+    <link rel="stylesheet" href="style.css">
+
+    <style>
+        .page-container {
+            width: 100%;
+            max-width: 95%;
+            margin: 1.5rem auto;
+            padding: 0 1.5rem;
+            box-sizing: border-box;
+            animation: fadeIn 0.8s ease-out;
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.95rem;
+            font-weight: 500;
+            transition: all var(--transition-speed);
+        }
+
+        .back-link:hover {
+            color: var(--primary-color);
+            transform: translateX(-4px);
+        }
+
+        .header-section {
+            margin-bottom: 2.5rem;
+            text-align: center;
+        }
+
+        .header-section h1 {
+            font-size: 2.5rem;
+            font-weight: 800;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(to right, #818cf8, #c084fc);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            letter-spacing: -0.025em;
+        }
+
+        .content-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 2.5rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Status Section styling */
+        .status-display-card {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-top: 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .status-info {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .status-label {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .status-value {
+            font-size: 1.25rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .badge-idle {
+            background: rgba(148, 163, 184, 0.15);
+            color: var(--text-secondary);
+            border: 1px solid rgba(148, 163, 184, 0.3);
+        }
+
+        .badge-running {
+            background: rgba(99, 102, 241, 0.15);
+            color: #818cf8;
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            animation: pulse-border 2s infinite;
+        }
+
+        .badge-success {
+            background: rgba(16, 185, 129, 0.15);
+            color: #34d399;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .badge-failed {
+            background: rgba(239, 68, 68, 0.15);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        /* Live Log Terminal Emulator */
+        .terminal-container {
+            margin-top: 2rem;
+            background: #090d16;
+            border: 1px solid #1e293b;
+            border-radius: 12px;
+            overflow: hidden;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.85rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .terminal-header {
+            background: #111827;
+            padding: 0.75rem 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #1e293b;
+        }
+
+        .terminal-dots {
+            display: flex;
+            gap: 0.35rem;
+        }
+
+        .terminal-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+
+        .dot-red { background: #ef4444; }
+        .dot-yellow { background: #f59e0b; }
+        .dot-green { background: #10b981; }
+
+        .terminal-title {
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+
+        .terminal-clear {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 0.75rem;
+            padding: 0.15rem 0.5rem;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .terminal-clear:hover {
+            color: var(--text-primary);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .terminal-body {
+            padding: 1.25rem;
+            max-height: 450px;
+            overflow-y: auto;
+            color: #a7f3d0; /* emerald green-ish tint */
+            line-height: 1.5;
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+        }
+
+        .log-row {
+            display: flex;
+            word-break: break-all;
+        }
+
+        .log-time {
+            color: #64748b;
+            margin-right: 0.5rem;
+            flex-shrink: 0;
+        }
+
+        .log-info { color: #f8fafc; }
+        .log-success { color: #34d399; }
+        .log-warning { color: #fbbf24; }
+        .log-error { color: #f87171; }
+
+        button:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+            transform: none !important;
+            filter: none !important;
+            pointer-events: none;
+        }
+
+        /* Custom progress bar */
+        .progress-bar-container {
+            width: 100%;
+            height: 6px;
+            background: rgba(148, 163, 184, 0.1);
+            border-radius: 9999px;
+            margin-top: 1.5rem;
+            overflow: hidden;
+            display: none;
+        }
+
+        .progress-bar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(to right, var(--primary-color), #c084fc);
+            border-radius: 9999px;
+            transition: width 0.3s ease;
+        }
+
+        @keyframes pulse-border {
+            0%, 100% { border-color: rgba(99, 102, 241, 0.3); box-shadow: 0 0 0 rgba(99, 102, 241, 0); }
+            50% { border-color: rgba(99, 102, 241, 0.8); box-shadow: 0 0 10px rgba(99, 102, 241, 0.2); }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="page-container">
+
+        <header class="header-section">
+            <h1>Sisense Cube Refresh</h1>
+            <p style="color: var(--text-secondary);">Trigger and monitor cube rebuild tasks for your tenants.</p>
+        </header>
+
+        <div class="content-card">
+            <!-- Form Section -->
+            <div class="form-group">
+                <label for="tenant-select">Select Tenant</label>
+                <select id="tenant-select" disabled>
+                    <option value="" disabled selected>Loading Tenants...</option>
+                </select>
+            </div>
+
+            <div class="button-group" style="flex-wrap: wrap;">
+                <button class="btn-secondary" id="generate-token-btn" disabled style="display: flex; justify-content: center; align-items: center; gap: 0.5rem; background: linear-gradient(to right, #8b5cf6, #a78bfa);">
+                    <span>🔑</span> Generate Token
+                </button>
+                <button class="btn-primary" id="refresh-cube-btn" disabled style="display: flex; justify-content: center; align-items: center; gap: 0.5rem;">
+                    <span>🔄</span> Refresh Cube
+                </button>
+                <button class="btn-secondary" id="check-status-btn" disabled style="display: flex; justify-content: center; align-items: center; gap: 0.5rem;">
+                    <span>📋</span> Check Refresh Status
+                </button>
+            </div>
+
+            <!-- Progress Bar -->
+            <div class="progress-bar-container" id="cube-progress-container">
+                <div class="progress-bar" id="cube-progress-bar"></div>
+            </div>
+
+            <!-- Status Cards -->
+            <div class="status-display-card">
+                <div class="status-info">
+                    <span class="status-label">Current State</span>
+                    <div class="status-value">
+                        <span class="badge badge-idle" id="cube-status-badge">Idle</span>
+                    </div>
+                </div>
+                <div class="status-info" style="text-align: right;">
+                    <span class="status-label">Last Operation</span>
+                    <span class="status-value" id="cube-last-operation" style="font-size: 1rem; color: var(--text-primary); font-weight: 500;">None</span>
+                </div>
+            </div>
+
+            <!-- Log Terminal -->
+            <div class="terminal-container">
+                <div class="terminal-header">
+                    <div class="terminal-dots">
+                        <div class="terminal-dot dot-red"></div>
+                        <div class="terminal-dot dot-yellow"></div>
+                        <div class="terminal-dot dot-green"></div>
+                    </div>
+                    <span class="terminal-title">CONSOLE MONITOR</span>
+                    <button class="terminal-clear" id="clear-terminal-btn">Clear</button>
+                </div>
+                <div class="terminal-body" id="terminal-logs">
+                    <div class="log-row">
+                        <span class="log-time">[System]</span>
+                        <span class="log-info">Console initialized. Awaiting tenant selection...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script type="module" src="sisense_refresh.js"></script>
+</body>
+
+</html>

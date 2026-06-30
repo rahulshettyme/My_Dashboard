@@ -42,7 +42,31 @@ const api = {
         return response.status === 204;
     },
 
+    async loginSisense() {
+        const response = await fetch(`${API_BASE}/sisense/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        return response;
+    },
 
+    async refreshCube(tenant, datamodelId, token) {
+        const response = await fetch(`${API_BASE}/sisense/refresh`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tenant, datamodelId, token })
+        });
+        return response;
+    },
+
+    async checkStatus(tenant, datamodelId, token) {
+        const response = await fetch(`${API_BASE}/sisense/status`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tenant, datamodelId, token })
+        });
+        return response;
+    },
 
     async launchIncognito(details) {
         const response = await fetch(`${API_BASE}/launch-incognito`, {

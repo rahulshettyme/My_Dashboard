@@ -280,12 +280,20 @@
             padding: 0.3rem 0.75rem;
             font-size: 0.8rem;
         }
+
+        /* Dashboard Table Compression */
+        #all-plots-table {
+            font-size: 0.8rem;
+        }
+        #all-plots-table th, #all-plots-table td {
+            padding: 0.5rem 0.6rem !important;
+        }
     </style>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect x='10' y='50' width='15' height='40' rx='2' fill='%236366f1'/%3E%3Crect x='35' y='30' width='15' height='60' rx='2' fill='%23818cf8'/%3E%3Crect x='60' y='10' width='15' height='80' rx='2' fill='%23c084fc'/%3E%3Cpath d='M75 10 Q90 10 90 25 Q90 40 75 40 Q60 40 60 25 Q60 10 75 10 Z' fill='%2310b981'/%3E%3C/svg%3E">
 </head>
 
 <body>
-    <div class="container" style="max-width: 1000px;">
+    <div class="container" style="max-width: 1400px;">
         <a href="index.html" class="back-link"
             style="color: var(--text-secondary); text-decoration: none; margin-bottom: 1rem; display: inline-block;">←
             Back</a>
@@ -295,23 +303,7 @@
             <p style="color: var(--text-secondary); margin-bottom: 2rem;">Please login to your environment to continue</p>
         </header>
 
-        <!-- Source Selector Tabs Hidden -->
-        <div id="source-selector" style="margin-bottom: 2rem;" class="hidden">
-            <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem;">
-                <button id="tab-upload" onclick="showSourceTab('upload')" class="source-tab"
-                    style="flex: 1; padding: 1rem; border: 2px solid var(--border-color); background: transparent; color: var(--text-secondary); border-radius: 12px; cursor: pointer; font-weight: 600; font-size: 1rem; transition: all 0.3s;">
-                    📊 Using Available Data
-                </button>
-                <button id="tab-login" onclick="showSourceTab('login')" class="source-tab active"
-                    style="flex: 1; padding: 1rem; border: 2px solid var(--primary-color); background: rgba(99, 102, 241, 0.1); color: var(--text-primary); border-radius: 12px; cursor: pointer; font-weight: 600; font-size: 1rem; transition: all 0.3s;">
-                    🔐 Using Login
-                </button>
-            </div>
 
-            <!-- Upload Section Removed from UI -->
-            <section id="upload-section" class="source-content hidden">
-            </section>
-        </div>
 
         <!-- Login Section (Made Default and Visible) -->
         <section id="login-section" class="source-content">
@@ -467,6 +459,10 @@
                         <input type="checkbox" id="health-sentinel-only-toggle" onchange="handleHealthToggleChange()">
                         <span style="color: var(--text-primary); font-weight: 500;">Use Sentinel Data Only (Bypass Planet)</span>
                     </label>
+                    <label class="toggle-container" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                        <input type="checkbox" id="health-provider-preference-toggle" onchange="handleHealthToggleChange()">
+                        <span style="color: var(--text-primary); font-weight: 500;">Show Provider Preference</span>
+                    </label>
                 </div>
 
                 <!-- KPI Analysis Grid (Greenness, Nitrogen, Water Stress) -->
@@ -486,7 +482,7 @@
                     <!-- Nitrogen Section -->
                     <div class="metric-card" style="padding: 1.25rem;">
                         <h3 style="margin-bottom: 1rem; color: #f59e0b; font-weight: 700; font-size: 1.1rem;">
-                            <i class="fas fa-microchip"></i> Nitrogen Uptake
+                            <i class="fas fa-microchip"></i> Nutrient Uptake
                         </h3>
                         <div style="height: 180px; margin-bottom: 1rem; position: relative;">
                             <canvas id="health-nitrogen-pie"></canvas>
@@ -1022,12 +1018,10 @@
                             <th id="th-exp-harvest" style="padding: 1rem; border-bottom: 2px solid var(--secondary-color); cursor: pointer;" onclick="sortTable('h1')">Exp Harvest <span id="sort-icon-h1" class="ml-1"></span></th>
                             <th id="th-re-harvest" style="padding: 1rem; border-bottom: 2px solid var(--secondary-color); cursor: pointer;" onclick="sortTable('h2')">Re-est Harvest <span id="sort-icon-h2" class="ml-1"></span></th>
                             <th id="th-pred-harvest-min" style="padding: 1rem; border-bottom: 2px solid var(--secondary-color); cursor: pointer;" onclick="sortTable('h3_min')">Pred Harv Min <span id="sort-icon-h3_min" class="ml-1"></span></th>
-                            <th id="th-pred-harvest-avg" style="padding: 1rem; border-bottom: 2px solid var(--secondary-color); cursor: pointer;" onclick="sortTable('h3_avg')">Pred Harv Avg <span id="sort-icon-h3_avg" class="ml-1"></span></th>
                             <th id="th-pred-harvest-max" style="padding: 1rem; border-bottom: 2px solid var(--secondary-color); cursor: pointer;" onclick="sortTable('h3_max')">Pred Harv Max <span id="sort-icon-h3_max" class="ml-1"></span></th>
                             <th id="th-exp-yield" style="padding: 1rem; border-bottom: 2px solid var(--secondary-color); cursor: pointer;" onclick="sortTable('y1')">Exp Yield <span id="sort-icon-y1" class="ml-1"></span></th>
                             <th id="th-re-yield" style="padding: 1rem; border-bottom: 2px solid var(--secondary-color); cursor: pointer;" onclick="sortTable('y2')">Re-est Yield <span id="sort-icon-y2" class="ml-1"></span></th>
                             <th id="th-pred-yield-min" style="padding: 1rem; border-bottom: 2px solid var(--secondary-color); cursor: pointer;" onclick="sortTable('y3_min')">Pred Yield Min <span id="sort-icon-y3_min" class="ml-1"></span></th>
-                            <th id="th-pred-yield-avg" style="padding: 1rem; border-bottom: 2px solid var(--secondary-color); cursor: pointer;" onclick="sortTable('y3_avg')">Pred Yield Avg <span id="sort-icon-y3_avg" class="ml-1"></span></th>
                             <th id="th-pred-yield-max" style="padding: 1rem; border-bottom: 2px solid var(--secondary-color); cursor: pointer;" onclick="sortTable('y3_max')">Pred Yield Max <span id="sort-icon-y3_max" class="ml-1"></span></th>
                         </tr>
                     </thead>
@@ -1240,86 +1234,94 @@
                 </div>
 
                 <!-- Harvest Status Section (KPI) -->
-                <div id="harvest-status-section" class="hidden" style="margin-top: 2rem; border-top: 2px solid var(--border-color); padding-top: 2rem;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; background: rgba(99, 102, 241, 0.05); padding: 1.25rem; border-radius: 12px; border: 1px solid rgba(99, 102, 241, 0.2);">
-                        <h4 style="margin: 0; color: var(--text-primary); font-size: 1.5rem; font-weight: 700;">Plot Harvest Status</h4>
-                        
-                        <div style="display: flex; gap: 1rem; align-items: center;">
-                            <input type="text" id="harvest-plantype-id" placeholder="Enter Plantype ID (e.g. 5)" 
-                                   style="padding: 0.75rem; border-radius: 8px; background: var(--input-bg); color: var(--text-primary); border: 1px solid var(--border-color); width: 200px;">
-                            <button id="load-harvest-status-btn" onclick="handleLoadHarvestStatus()"
-                                    style="padding: 0.75rem 1.5rem; background: var(--primary-color); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 700;">
-                                📥 Load Collected Harvest
-                            </button>
-                        </div>
-                    </div>
-
-                    <div id="harvest-status-results" class="growth-stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
-                        <!-- KPI Cards -->
-                        <div class="stat-card" style="background: var(--card-bg); padding: 1.5rem; border-radius: 12px; border-left: 4px solid var(--primary-color); box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
-                            <div style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 0.5rem; font-weight: 500;">Plots Covered</div>
-                            <div id="stat-harvest-plots-covered" style="font-size: 1.75rem; font-weight: 700; color: var(--text-primary);">-</div>
-                        </div>
-                        <div class="stat-card" style="background: var(--card-bg); padding: 1.5rem; border-radius: 12px; border-left: 4px solid var(--secondary-color); box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
-                            <div style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 0.5rem; font-weight: 500;">Collected Harvest</div>
-                            <div id="stat-harvest-collected" style="font-size: 1.75rem; font-weight: 700; color: var(--text-primary);">-</div>
-                        </div>
-                    </div>
-
-                    <div id="harvest-window-status-container" class="hidden" style="margin-bottom: 2rem;">
-                        <p style="margin-bottom: 1.5rem; color: var(--text-primary); font-weight: 600;">Expected Harvest window <span id="harvest-window-range-text"></span></p>
-
-                        <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 2rem; align-items: flex-start;">
-                            <!-- LEFT: Pie Chart -->
-                            <div class="analysis-card" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
-                                <div style="height: 250px; width: 250px; position: relative;">
-                                    <canvas id="harvest-window-pie-chart"></canvas>
-                                </div>
-                            </div>
-
-                            <!-- RIGHT: Summary Table -->
-                            <div class="analysis-card">
-                                <div style="max-height: 400px; overflow-y: auto;">
-                                    <table class="plots-table" style="width: 100%;">
-                                        <thead>
-                                            <tr style="font-size: 0.85rem; border-bottom: 2px solid var(--border-color);">
-                                                <th style="padding: 1rem;">Status</th>
-                                                <th style="padding: 1rem; text-align: center;">No. of plots</th>
-                                                <th style="padding: 1rem; text-align: center;">Collected Production(tons)</th>
-                                                <th style="padding: 1rem; text-align: center;">Expected Production(tons)</th>
-                                                <th style="padding: 1rem; text-align: center;">Predicted Production(tons)</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="harvest-window-summary-tbody"></tbody>
-                                    </table>
-                                </div>
+                <!-- Unified Harvest Status Card -->
+                <div id="harvest-status-section" class="hidden" style="margin-top: 2rem;">
+                    <div class="analysis-card" style="padding: 2rem; border-radius: 12px; background: var(--card-bg); border: 1px solid var(--border-color); box-shadow: 0 4px 20px rgba(0,0,0,0.1);">
+                        <!-- 1. Header Row -->
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2.5rem; background: rgba(99, 102, 241, 0.05); padding: 1.25rem; border-radius: 12px; border: 1px solid rgba(99, 102, 241, 0.2);">
+                            <h3 style="margin: 0; color: var(--text-primary); font-size: 1.5rem; font-weight: 700; display: flex; align-items: center; gap: 0.75rem;">
+                                <i class="fas fa-clipboard-check" style="color: var(--primary-color);"></i> Plot Harvest Status
+                            </h3>
+                            
+                            <div style="display: flex; gap: 1rem; align-items: center;">
+                                <input type="text" id="harvest-plantype-id" placeholder="Enter Plantype ID (e.g. 5)" 
+                                       style="padding: 0.75rem; border-radius: 8px; background: var(--input-bg); color: var(--text-primary); border: 1px solid var(--border-color); width: 200px;">
+                                <button id="load-harvest-status-btn" onclick="handleLoadHarvestStatus()"
+                                        style="padding: 0.75rem 1.5rem; background: var(--primary-color); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 700;">
+                                    📥 Load Collected Harvest
+                                </button>
                             </div>
                         </div>
 
-                        <!-- BOTTOM: Insight Summary Text -->
-                        <div id="harvest-insight-container" class="hidden" style="margin-top: 1.5rem; padding: 1.5rem; background: rgba(59, 130, 246, 0.05); border-radius: 12px; border: 1px solid rgba(59, 130, 246, 0.1);">
-                            <p id="harvest-insight-summary" style="margin: 0; color: #60a5fa; font-size: 1.05rem; line-height: 1.6; font-weight: 500;"></p>
+                        <!-- 2. Health-Style Metrics Row -->
+                        <div id="harvest-status-results" class="metrics-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 2rem; margin-bottom: 3rem; padding: 1rem 0;">
+                            <div class="metric-card" style="text-align: center; border-left: 4px solid var(--primary-color); padding: 0.5rem 1.5rem;">
+                                <h4 style="color: var(--text-secondary); margin-bottom: 0.5rem; font-size: 1rem; font-weight: 500;">Plots Covered</h4>
+                                <div id="stat-harvest-plots-covered" style="font-size: 2.25rem; font-weight: 700; color: var(--text-primary);">-</div>
+                            </div>
+                            <div class="metric-card" style="text-align: center; border-left: 4px solid var(--secondary-color); padding: 0.5rem 1.5rem;">
+                                <h4 style="color: var(--text-secondary); margin-bottom: 0.5rem; font-size: 1rem; font-weight: 500;">Collected Harvest</h4>
+                                <div id="stat-harvest-collected" style="font-size: 2.25rem; font-weight: 700; color: var(--secondary-color);">-</div>
+                            </div>
                         </div>
-                    </div>
 
-                    <div class="analysis-card">
-                        <h4 style="margin-top: 0; margin-bottom: 1rem; color: var(--text-primary);">Detailed Harvest Analysis</h4>
-                        <div style="max-height: 400px; overflow-y: auto;">
-                            <table class="plots-table" style="width: 100%;">
-                                <thead>
-                                    <tr>
-                                        <th>Plot Name</th>
-                                        <th>Closed Date</th>
-                                        <th>H-Start</th>
-                                        <th>H-End</th>
-                                        <th>Qty</th>
-                                        <th>Unit</th>
-                                        <th>Metric Ton</th>
-                                        <th>Predicted Ton</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="harvest-status-tbody"></tbody>
-                            </table>
+                        <!-- 3. Alignment Summary & Distribution -->
+                        <div id="harvest-window-status-container" class="hidden" style="margin-bottom: 3rem; border-top: 1px solid var(--border-color); padding-top: 2rem;">
+                            <p style="margin-bottom: 1.5rem; color: var(--text-primary); font-weight: 600; font-size: 1.1rem;">Expected Harvest window <span id="harvest-window-range-text"></span></p>
+
+                            <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 3rem; align-items: flex-start;">
+                                <!-- LEFT: Pie Chart -->
+                                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(255,255,255,0.02); padding: 2rem; border-radius: 12px;">
+                                    <div style="height: 250px; width: 250px; position: relative;">
+                                        <canvas id="harvest-window-pie-chart"></canvas>
+                                    </div>
+                                </div>
+
+                                <!-- RIGHT: Summary Table -->
+                                <div>
+                                    <div style="max-height: 400px; overflow-y: auto;">
+                                        <table class="plots-table" style="width: 100%;">
+                                            <thead>
+                                                <tr style="font-size: 0.85rem; border-bottom: 2px solid var(--border-color);">
+                                                    <th style="padding: 1rem;">Status</th>
+                                                    <th style="padding: 1rem; text-align: center;">No. of plots</th>
+                                                    <th style="padding: 1rem; text-align: center;">Collected Production(tons)</th>
+                                                    <th style="padding: 1rem; text-align: center;">Expected Production(tons)</th>
+                                                    <th style="padding: 1rem; text-align: center;">Predicted Production(tons)</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="harvest-window-summary-tbody"></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- BOTTOM: Insight Summary Text -->
+                            <div id="harvest-insight-container" class="hidden" style="margin-top: 2rem; padding: 1.5rem; background: rgba(59, 130, 246, 0.05); border-radius: 12px; border: 1px solid rgba(59, 130, 246, 0.1);">
+                                <p id="harvest-insight-summary" style="margin: 0; color: #60a5fa; font-size: 1.05rem; line-height: 1.6; font-weight: 500;"></p>
+                            </div>
+                        </div>
+
+                        <!-- 4. Detailed Table (Inside the same card) -->
+                        <div style="border-top: 1px solid var(--border-color); padding-top: 2rem;">
+                            <h4 style="margin-top: 0; margin-bottom: 1.5rem; color: var(--text-primary); font-size: 1.2rem; font-weight: 700;">Detailed Harvest Analysis</h4>
+                            <div style="max-height: 500px; overflow-y: auto;">
+                                <table class="plots-table" style="width: 100%;">
+                                    <thead>
+                                        <tr style="border-bottom: 2px solid var(--border-color);">
+                                            <th style="padding: 1rem;">Plot Name</th>
+                                            <th style="padding: 1rem;">Closed Date</th>
+                                            <th style="padding: 1rem;">H-Start</th>
+                                            <th style="padding: 1rem;">H-End</th>
+                                            <th style="padding: 1rem;">Qty</th>
+                                            <th style="padding: 1rem;">Unit</th>
+                                            <th style="padding: 1rem;">Metric Ton</th>
+                                            <th style="padding: 1rem;">Predicted Ton</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="harvest-status-tbody"></tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 </div>

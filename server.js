@@ -86,6 +86,165 @@ app.get('/api/db', (req, res) => {
     res.json(readDb());
 });
 
+// POST Sisense Authentication (Get Token)
+app.post('/api/sisense/login', async (req, res) => {
+    try {
+        console.log(`[SISENSE] Authenticating to retrieve access token...`);
+        const loginUrl = 'https://bi-new.cropin.com/api/v1/authentication/login';
+        
+        const cookieVal = '.prism=%7B%22name%22%3A%22.prism%22%2C%22tenantId%22%3A%22613ee09d198ce3001a7e0c34%22%2C%22allowedTenants%22%3A%5B%22613ee09d198ce3001a7e0c34%22%5D%2C%22token%22%3A%22eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoiNjAwMTc2N2Q0NmUwZWMwMDJjYzI1NTlhIiwiYXBpU2VjcmV0IjoiYzkzMGZkN2UtNjgyNy01ZWE0LWIwZTItYzE1NTM3YTAzZTllIiwiYWxsb3dlZFRlbmFudHMiOlsiNjEzZWUwOWQxOThjZTMwMDFhN2UwYzM0Il0sInRlbmFudElkIjoiNjEzZWUwOWQxOThjZTMwMDFhN2UwYzM0IiwiaWF0IjoxNzYxNjMwOTI2fQ.RxS_8zC0XUluHUR17wVUfFBl2cOvbsJPIVt38dWiRXI%22%2C%22isPersistent%22%3Afalse%2C%22expiration%22%3A%222025-10-29T05%3A55%3A26.147Z%22%2C%22issueDate%22%3A%222025-10-28T05%3A55%3A26.149Z%22%7D; XSRF-TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2MDAxNzY3ZDQ2ZTBlYzAwMmNjMjU1OWEiLCJ0ZW5hbnRJZCI6IjYxM2VlMDlkMTk4Y2UzMDAxYTdlMGMzNCIsImFsbG93ZWRUZW5hbnRzIjpbIjYxM2VlMDlkMTk4Y2UzMDAxYTdlMGMzNCJdLCJjc3JmVG9rZW4iOiJtTTNZR1QvZ1QwZkgyNzFuTTdMRXVmWk12NzM3MDI1OVlua1NMNEtlYS9qQmlHMU9jQ2lFbzlUd0ZkNjBwSlBjIiwiZXhwIjoxNzYxNzE3MzI2LCJpYXQiOjE3NjE2MzA5MjZ9.VDbhRYSsp2mf8PtthLob-QGmFiR-p9zXbw7567cK2cg; server.session=s%3A4DhhyqHJsIu5v1q_ukSsBpSRTySxtmEm.neisp3Z9H1zAP1alzR4K3DoUDoIeAQ5kKNkY%2BajctlM; .prism=%7B%22name%22%3A%22.prism%22%2C%22tenantId%22%3A%22613ee09d198ce3001a7e0c34%22%2C%22allowedTenants%22%3A%5B%22613ee09d198ce3001a7e0c34%22%5D%2C%22token%22%3A%22eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoiNjAwMTc2N2Q0NmUwZWMwMDJjYzI1NTlhIiwiYXBpU2VjcmV0IjoiN2EyZTc3ZTgtZTBhOS05YTQxLTdhZWItYzkxNTUwNzczNTIwIiwiYWxsb3dlZFRlbmFudHMiOlsiNjEzZWUwOWQxOThjZTMwMDFhN2UwYzM0Il0sInRlbmFudElkIjoiNjEzZWUwOWQxOThjZTMwMDFhN2UwYzM0IiwiYXV0aE1ldGhvZCI6InBhc3N3b3JkIiwiaWF0IjoxNzgyODMzNjM0fQ._GXHp2pBDi7arp4A9N2DfimPQZXIlU0703grhp4JJpo%22%2C%22isPersistent%22%3Afalse%2C%22expiration%22%3A%222026-07-06T15%3A33%3A54.866Z%22%2C%22issueDate%22%3A%222026-06-30T15%3A33%3A54.866Z%22%7D; XSRF-TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2MDAxNzY3ZDQ2ZTBlYzAwMmNjMjU1OWEiLCJ0ZW5hbnRJZCI6IjYxM2VlMDlkMTk4Y2UzMDAxYTdlMGMzNCIsImFsbG93ZWRUZW5hbnRzIjpbIjYxM2VlMDlkMTk4Y2UzMDAxYTdlMGMzNCJdLCJjc3JmVG9rZW4iOiJld01UcFNsM01ZMUJNWExBYXIvNUplaEZzaEkvL01NWWpiYit0NlFvcHFhaU84S2dIUVovYlIzZnBDMzdjS3RuIiwiZXhwIjoxNzgzMzUyMDM0LCJpYXQiOjE3ODI4MzM2MzR9.FRnsie6BgH1b2MvvXFumOuzuOqOL1mD457NxI6s9-XE; server.session=s%3AS-itLr-2UFHZvy8tdE0-K09BXZkdL6bE.jypG5WE6Kzi27nTiorW9Z%2ByyYlr5cyiRHXsn99bXIyg';
+
+        const loginResponse = await fetch(loginUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Cookie': cookieVal
+            },
+            body: 'username=analytics%40cropin.com&password=Sisensedev%402207%24'
+        });
+
+        if (!loginResponse.ok) {
+            const errText = await loginResponse.text();
+            console.error('[SISENSE] Login failed:', errText);
+            return res.status(loginResponse.status).json({
+                error: 'Sisense authentication failed',
+                details: errText
+            });
+        }
+
+        const loginData = await loginResponse.json();
+        return res.json(loginData);
+    } catch (err) {
+        console.error('[SISENSE] Error in token generation:', err);
+        return res.status(500).json({ error: 'Server error generating Sisense token', details: err.message });
+    }
+});
+
+// POST Sisense Cube Refresh
+app.post('/api/sisense/refresh', async (req, res) => {
+    const { tenant, datamodelId, token } = req.body;
+    if (!tenant || !datamodelId || !token) {
+        return res.status(400).json({ error: 'Missing tenant, datamodelId or token' });
+    }
+
+    try {
+        console.log(`[SISENSE] Triggering rebuild for tenant=${tenant}, datamodelId=${datamodelId} using provided token...`);
+
+        const buildUrl = 'https://bi-new.cropin.com/api/v2/builds';
+        const buildResponse = await fetch(buildUrl, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                datamodelId: datamodelId,
+                datamodelTitle: tenant,
+                buildType: 'full',
+                schemaOrigin: 'latest'
+            })
+        });
+
+        const buildStatus = buildResponse.status;
+        const buildData = await buildResponse.json().catch(() => null) || await buildResponse.text();
+        console.log(`[SISENSE] Build triggered. Response status=${buildStatus}:`, buildData);
+
+        return res.status(buildStatus).json(buildData);
+
+    } catch (err) {
+        console.error('[SISENSE] Error in cube refresh handler:', err);
+        return res.status(500).json({ error: 'Server error processing Sisense cube refresh', details: err.message });
+    }
+});
+
+// POST Sisense Cube Status check
+app.post('/api/sisense/status', async (req, res) => {
+    const { tenant, datamodelId, token } = req.body;
+    if (!tenant || !datamodelId || !token) {
+        return res.status(400).json({ error: 'Missing tenant, datamodelId or token' });
+    }
+
+    try {
+        console.log(`[SISENSE] Querying ElastiCube metadata list for status checking...`);
+        const ecmUrl = 'https://bi-new.cropin.com/api/v2/ecm/';
+        
+        const cookieVal = 'x-device-id=e5cd595f-c654-475c-aafc-b097b75129b2; server.session=s%3AMY8Vl3NPDDW91-nKLfdul801Ij-ompnW.bUE%2BDX1pFPvVtnR7f9skh2MiOnJ0puB%2BwGA5odMzDbc; XSRF-TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2MDAxNzY3ZDQ2ZTBlYzAwMmNjMjU1OWEiLCJ0ZW5hbnRJZCI6IjYxM2VlMDlkMTk4Y2UzMDAxYTdlMGMzNCIsImFsbG93ZWRUZW5hbnRzIjpbIjYxM2VlMDlkMTk4Y2UzMDAxYTdlMGMzNCJdLCJjc3JmVG9rZW4iOiJManlrSEFQOHUxY0Fsa3NnWVlVcG5VeXhFUzVDeG45VU81UlRPK3hOUGJGMFVEUEk3U3ZpUDN4eE5IdXVjQm9LIiwiZXhwIjoxNzgyODE3NjI3LCJpYXQiOjE3ODIyOTkyMjd9.-0iA8VE9l43y1f9Qq0YO8LePXDCVGPc_pBhSDkRAggU; .prism=%7B%22name%22%3A%22.prism%22%2C%22tenantId%22%3A%22613ee09d198ce3001a7e0c34%22%2C%22allowedTenants%22%3A%5B%22613ee09d198ce3001a7e0c34%22%5D%2C%22token%22%3A%22eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoiNjAwMTc2N2Q0NmUwZWMwMDJjYzI1NTlhIiwiZGV2aWNlU2VjcmV0IjoiMDc5YmRhMmMtYWI2MC0zYjcxLWRlZWMtNWZjMGVjMjRlY2Q1IiwiZGV2aWNlSWQiOiI3NThhNDNhOS1mNjNmLWZmYTctNWNiNy1kOWJkZDU4YjkxNTAiLCJhbGxvd2VkVGVuYW50cyI6WyI2MTNlZTA5ZDE5OGNlMzAwMWE3ZTBjMzQiXSwidGVuYW50SWQiOiI2MTNlZTA5ZDE5OGNlMzAwMWE3ZTBjMzQiLCJhdXRoTWV0aG9kIjoicGFzc3dvcmQiLCJpYXQiOjE3ODIyOTkyMjd9.pSAy3d27SIAWLfdS1mBnj9iVkn1Y_042cz7jWXzhzQc%22%2C%22deviceId%22%3A%22758a43a9-f63f-ffa7-5cb7-d9bdd58b9150%22%2C%22isPersistent%22%3Afalse%2C%22expiration%22%3A%222026-06-30T11%3A07%3A07.418Z%22%2C%22issueDate%22%3A%222026-06-24T11%3A07%3A07.419Z%22%7D; .prism=%7B%22name%22%3A%22.prism%22%2C%22tenantId%22%3A%22613ee09d198ce3001a7e0c34%22%2C%22allowedTenants%22%3A%5B%22613ee09d198ce3001a7e0c34%22%5D%2C%22token%22%3A%22eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoiNjAwMTc2N2Q0NmUwZWMwMDJjYzI1NTlhIiwiYXBpU2VjcmV0IjoiN2EyZTc3ZTgtZTBhOS05YTQxLTdhZWItYzkxNTUwNzczNTIwIiwiYWxsb3dlZFRlbmFudHMiOlsiNjEzZWUwOWQxOThjZTMwMDFhN2UwYzM0Il0sInRlbmFudElkIjoiNjEzZWUwOWQxOThjZTMwMDFhN2UwYzM0IiwiYXV0aE1ldGhvZCI6InBhc3N3b3JkIiwiaWF0IjoxNzgyODMzNjM0fQ._GXHp2pBDi7arp4A9N2DfimPQZXIlU0703grhp4JJpo%22%2C%22isPersistent%22%3Afalse%2C%22expiration%22%3A%222026-07-06T15%3A33%3A54.866Z%22%2C%22issueDate%22%3A%222026-06-30T15%3A33%3A54.866Z%22%7D; XSRF-TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2MDAxNzY3ZDQ2ZTBlYzAwMmNjMjU1OWEiLCJ0ZW5hbnRJZCI6IjYxM2VlMDlkMTk4Y2UzMDAxYTdlMGMzNCIsImFsbG93ZWRUZW5hbnRzIjpbIjYxM2VlMDlkMTk4Y2UzMDAxYTdlMGMzNCJdLCJjc3JmVG9rZW4iOiJld01UcFNsM01ZMUJNWExBYXIvNUplaEZzaEkvL01NWWpiYit0NlFvcHFhaU84S2dIUVovYlIzZnBDMzdjS3RuIiwiZXhwIjoxNzgzMzUyMDM0LCJpYXQiOjE3ODI4MzM2MzR9.FRnsie6BgH1b2MvvXFumOuzuOqOL1mD457NxI6s9-XE; server.session=s%3AMY8Vl3NPDDW91-nKLfdul801Ij-ompnW.bUE%2BDX1pFPvVtnR7f9skh2MiOnJ0puB%2BwGA5odMzDbc';
+
+        const queryBody = {
+            query: "query elasticubesMetadata($tenantFilter: String, $isViewMode: Boolean) {\n  elasticubesMetadata(tenantFilter: $tenantFilter, isViewMode: $isViewMode) {\n    ...ecMetaData\n    __typename\n  }\n}\n\nfragment ecMetaData on ElasticubeMetadata {\n  oid\n  title\n  server\n  tenant {\n    _id\n    name\n    systemManagement\n    __typename\n  }\n  fiscal\n  serverId\n  hasDatasets\n  type\n  relationType\n  provider\n  importTime\n  hasDatasetsWithoutConnectionParameters\n  aiAccessController {\n    availableForAnalyticsAssistant\n    availableForStudioAssistant\n    availableForSemanticEnrichment\n    __typename\n  }\n  datasets {\n    oid\n    database\n    schemaName\n    connection {\n      id\n      __typename\n    }\n    __typename\n  }\n  set {\n    title\n    __typename\n  }\n  status\n  lastBuildTime\n  lastBuildStatus\n  lastSuccessfulBuildStartTime\n  lastSuccessfulManualBuildStartTime\n  lastSuccessfulBuildTime\n  lastPublishTime\n  lastUpdated\n  hasPendingChanges\n  nextBuildTime\n  creator {\n    id\n    firstName\n    lastName\n    __typename\n  }\n  sizeInMb\n  shares {\n    partyId\n    type\n    permission\n    ... on ShareUserInfo {\n      firstName\n      lastName\n      email\n      __typename\n    }\n    ... on ShareGroupInfo {\n      name\n      ad\n      objectSid\n      everyone\n      tenantEveryone\n      admins\n      __typename\n    }\n    __typename\n  }\n  buildDestination {\n    destination\n    database\n    schema\n    resultLimit\n    queryTimeout\n    __typename\n  }\n  modelStatistics {\n    enableModelStatistics\n    allTablesPerCollection\n    maxTablesPerCollection\n    __typename\n  }\n  experiments {\n    ...experiments\n    __typename\n  }\n  acceleration {\n    parentModelOid\n    __typename\n  }\n  analyticalEngine {\n    queryAeMode\n    customTranslationMode\n    generateDependenciesMode\n    __typename\n  }\n  __typename\n}\n\nfragment experiments on Experiments {\n  __typename\n}\n",
+            variables: { isViewMode: false }
+        };
+
+        const ecmResponse = await fetch(ecmUrl, {
+            method: 'POST',
+            headers: {
+                'accept': '*/*',
+                'accept-language': 'en-US,en;q=0.9',
+                'content-type': 'application/json',
+                'internal': 'true',
+                'origin': 'https://bi-new.cropin.com',
+                'referer': 'https://bi-new.cropin.com/',
+                'sec-ch-ua': '"Microsoft Edge";v="149", "Chromium";v="149", "Not)A;Brand";v="24"',
+                'sec-ch-ua-mobile': '?0',
+                'sec-ch-ua-platform': '"Windows"',
+                'sec-fetch-dest': 'empty',
+                'sec-fetch-mode': 'cors',
+                'sec-fetch-site': 'same-origin',
+                'sessionheader': '811fa8f2-af6f-4a9e-9989-b25b0151672f',
+                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36 Edg/149.0.0.0',
+                'x-xsrf-token': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2MDAxNzY3ZDQ2ZTBlYzAwMmNjMjU1OWEiLCJ0ZW5hbnRJZCI6IjYxM2VlMDlkMTk4Y2UzMDAxYTdlMGMzNCIsImFsbG93ZWRUZW5hbnRzIjpbIjYxM2VlMDlkMTk4Y2UzMDAxYTdlMGMzNCJdLCJjc3JmVG9rZW4iOiJManlrSEFQOHUxY0Fsa3NnWVlVcG5VeXhFUzVDeG45VU81UlRPK3hOUGJGMFVEUEk3U3ZpUDN4eE5IdXVjQm9LIiwiZXhwIjoxNzgyODE3NjI3LCJpYXQiOjE3ODIyOTkyMjd9.-0iA8VE9l43y1f9Qq0YO8LePXDCVGPc_pBhSDkRAggU',
+                'Cookie': cookieVal,
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(queryBody)
+        });
+
+        if (!ecmResponse.ok) {
+            const errText = await ecmResponse.text();
+            console.error('[SISENSE] ElastiCube metadata query failed:', errText);
+            return res.status(ecmResponse.status).json({
+                error: 'ElastiCube metadata query failed',
+                details: errText
+            });
+        }
+
+        const ecmData = await ecmResponse.json();
+        
+        // Filter the response array
+        const list = ecmData?.data?.elasticubesMetadata || [];
+        // Match: title === tenant or oid === datamodelId
+        const match = list.find(item => 
+            (item.oid === datamodelId) || 
+            (item.title && item.title.toLowerCase() === tenant.toLowerCase())
+        );
+
+        if (!match) {
+            console.log(`[SISENSE] Tenant ${tenant} (datamodelId: ${datamodelId}) not found in ElastiCube metadata list.`);
+            return res.status(404).json({ error: 'Tenant cube metadata not found' });
+        }
+
+        // Extract specified attributes
+        const result = {
+            oid: match.oid,
+            title: match.title,
+            status: match.status,
+            lastBuildTime: match.lastBuildTime,
+            lastBuildStatus: match.lastBuildStatus,
+            lastSuccessfulBuildStartTime: match.lastSuccessfulBuildStartTime,
+            lastSuccessfulManualBuildStartTime: match.lastSuccessfulManualBuildStartTime,
+            lastSuccessfulBuildTime: match.lastSuccessfulBuildTime,
+            lastUpdated: match.lastUpdated
+        };
+
+        console.log('[SISENSE] Matching cube metadata found:', result);
+        return res.json(result);
+
+    } catch (err) {
+        console.error('[SISENSE] Error checking cube status:', err);
+        return res.status(500).json({ error: 'Server error checking cube status', details: err.message });
+    }
+});
+
 // GET unit conversions
 app.get('/api/unit-conversions', (req, res) => {
     const db = readDb();
@@ -1301,6 +1460,62 @@ app.get('/api/user-aggregate/sustainability', (req, res) => {
     sReq.on('error', e => res.status(500).json({ error: e.message }));
     sReq.end();
 });
+
+// GET Satellite Data Proxy
+app.get('/api/user-aggregate/satellite', (req, res) => {
+    const { environment, sortBy, orderBy, size, caIds } = req.query;
+    const authHeader = req.headers.authorization;
+
+    if (!environment || !caIds) return res.status(400).json({ error: 'Missing environment or caIds' });
+    if (!authHeader) return res.status(401).json({ error: 'Missing authorization' });
+
+    const db = readDb();
+    const apiBaseUrl = resolveEnvUrl(db, environment, 'api');
+    if (!apiBaseUrl) return res.status(400).json({ error: 'Unknown environment' });
+
+    const params = new URLSearchParams();
+    if (caIds) params.append('caIds', caIds);
+    if (sortBy) params.append('sortBy', sortBy);
+    if (orderBy) params.append('orderBy', orderBy);
+    if (size) params.append('size', size);
+
+    const fullUrl = `${apiBaseUrl}/services/farm/api/plot-risk/satellite?${params.toString()}`;
+    const urlObj = new URL(fullUrl);
+
+    const options = {
+        hostname: urlObj.hostname,
+        port: 443,
+        path: urlObj.pathname + urlObj.search,
+        method: 'GET',
+        headers: {
+            'Authorization': authHeader,
+            'Accept': 'application/json',
+            'User-Agent': 'Mozilla/5.0'
+        }
+    };
+
+    const satReq = https.request(options, (satRes) => {
+        let data = '';
+        satRes.on('data', chunk => data += chunk);
+        satRes.on('end', () => {
+            if (data.trim().startsWith('<')) return res.status(502).json({ error: 'API returned HTML' });
+            try {
+                const parsedData = JSON.parse(data);
+                if (satRes.statusCode >= 200 && satRes.statusCode < 300) {
+                    res.json(parsedData);
+                } else {
+                    res.status(satRes.statusCode).json(parsedData);
+                }
+            } catch (e) {
+                console.error('[User Aggregate] Satellite Parse Error:', e.message);
+                res.status(500).json({ error: 'Failed to proxy satellite data' });
+            }
+        });
+    });
+    satReq.on('error', e => res.status(500).json({ error: e.message }));
+    satReq.end();
+});
+
 // GET Growth Stage Data
 app.get('/api/user-aggregate/growth-stage', (req, res) => {
     const { environment, caIds } = req.query;

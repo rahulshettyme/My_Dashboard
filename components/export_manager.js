@@ -16,12 +16,10 @@ async function exportToExcel(globalData, MASS_CONVERSIONS, AREA_CONVERSIONS, sho
         `Expected Harvest (${harvestLabel})`,
         `Re-estimated Harvest (${harvestLabel})`,
         `Predicted Harvest Min (${harvestLabel})`,
-        `Predicted Harvest Avg (${harvestLabel})`,
         `Predicted Harvest Max (${harvestLabel})`,
         `Expected Yield (${yieldLabel})`,
         `Re-estimated Yield (${yieldLabel})`,
         `Predicted Yield Min (${yieldLabel})`,
-        `Predicted Yield Avg (${yieldLabel})`,
         `Predicted Yield Max (${yieldLabel})`
     ]);
 
@@ -44,22 +42,18 @@ async function exportToExcel(globalData, MASS_CONVERSIONS, AREA_CONVERSIONS, sho
 
         let predHarvestMin = d.h3_min;
         let predHarvestMax = d.h3_max;
-        let predHarvestAvg = (predHarvestMin + predHarvestMax) / 2;
 
         let predYieldMin = d.y3_min;
         let predYieldMax = d.y3_max;
-        let predYieldAvg = (predYieldMin + predYieldMax) / 2;
 
         if (d.noPrediction || d.notEnabled) {
-            predHarvestMin = predHarvestMax = predHarvestAvg = 'NA';
-            predYieldMin = predYieldMax = predYieldAvg = 'NA';
+            predHarvestMin = predHarvestMax = 'NA';
+            predYieldMin = predYieldMax = 'NA';
         } else {
             predHarvestMin = parseFloat(predHarvestMin.toFixed(2));
             predHarvestMax = parseFloat(predHarvestMax.toFixed(2));
-            predHarvestAvg = parseFloat(predHarvestAvg.toFixed(2));
             predYieldMin = parseFloat(predYieldMin.toFixed(2));
             predYieldMax = parseFloat(predYieldMax.toFixed(2));
-            predYieldAvg = parseFloat(predYieldAvg.toFixed(2));
         }
 
         exportData.push([
@@ -70,12 +64,10 @@ async function exportToExcel(globalData, MASS_CONVERSIONS, AREA_CONVERSIONS, sho
             parseFloat(h1Ton.toFixed(2)),
             parseFloat(h2Ton.toFixed(2)),
             predHarvestMin,
-            predHarvestAvg,
             predHarvestMax,
             areaHa > 0 ? parseFloat((h1Ton / areaHa).toFixed(2)) : 0,
             areaHa > 0 ? parseFloat((h2Ton / areaHa).toFixed(2)) : 0,
             predYieldMin,
-            predYieldAvg,
             predYieldMax
         ]);
     });

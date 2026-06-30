@@ -1,4 +1,30 @@
 {
+  "sisensecubes": [
+    {
+      "tenant": "qazone1",
+      "datamodelTitle": "71a2388b-74c1-4d9e-97d8-311aafb4c607"
+    },
+    {
+      "tenant": "qazone2",
+      "datamodelTitle": "40a21739-1ac5-4fdd-b394-8f4befc9d55f"
+    },
+    {
+      "tenant": "qa2sentinel",
+      "datamodelTitle": "70d2b710-d9d1-4c2b-bea7-ae4508ccc6b4"
+    },
+    {
+      "tenant": "qazone6",
+      "datamodelTitle": "9138a20d-dd9d-4370-8cde-f7e4d40094a2"
+    },
+    {
+      "tenant": "qazone7",
+      "datamodelTitle": "cd6a16be-6c98-49d7-865b-7eb97c867a86"
+    },
+    {
+      "tenant": "qazone8",
+      "datamodelTitle": "db2f6397-83c1-4cc7-9422-7cd853a89605"
+    }
+  ],
   "environment_urls": {
     "QA1": "https://v2.cropin.co.in",
     "QA2": "https://sf-v2.cropin.co.in",

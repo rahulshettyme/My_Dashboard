@@ -36,6 +36,17 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('include-no-prediction-agg')?.addEventListener('change', () => {
         if (globalData && globalData.length > 0) processData(globalData);
     });
+
+    // Add event listeners for unit dropdowns to update UI immediately
+    ['data-yield-unit', 'data-area-unit', 'data-harvest-unit'].forEach(id => {
+        document.getElementById(id)?.addEventListener('change', () => {
+            if (globalData && globalData.length > 0) {
+                processData(globalData);
+                updateUnitLabels();
+                if (paginationState.filteredData.length > 0) renderPaginatedTable();
+            }
+        });
+    });
 });
 
 const excelUploadInput = document.getElementById('excel-upload');
@@ -129,7 +140,7 @@ var paginationState = {
 // =============================================
 function getServerUrl() {
     const input = document.getElementById('server-url');
-    let url = input ? input.value.trim() : 'http://localhost:3000';
+    let url = (input && input.value.trim()) ? input.value.trim() : 'http://localhost:3000';
     // Remove trailing slash if present
     return url.replace(/\/$/, '');
 }
@@ -269,10 +280,14 @@ function updateUnitLabels(plotData = null) {
         yieldLabel = `${hLabel}/${aLabel}`;
         areaLabelLabel = aUnit === 'ha' ? 'Hectares' : 'Acres';
     } else {
-        // AGGREGATE LEVEL Labels (Always Tonnes/Ha as per request)
-        yieldLabel = 'Tonne/Ha';
-        harvestLabel = 'Tonne';
-        areaLabelLabel = 'Hectares';
+        // AGGREGATE LEVEL Labels (Dynamically follow selectors)
+        const yUnit = getDataYieldUnit();
+        const hUnit = getDataHarvestUnit();
+        const aUnit = getDataAreaUnit();
+
+        yieldLabel = YIELD_UNIT_LABELS[yUnit] || 'Tonne/Ha';
+        harvestLabel = HARVEST_UNIT_LABELS[hUnit] || 'Tonne';
+        areaLabelLabel = aUnit === 'ha' ? 'Hectares' : 'Acres';
     }
 
     const plotYieldLabel = document.getElementById('plot-yield-unit-label');
@@ -454,7 +469,8 @@ function handleFileUpload(event) {
         const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
         if (jsonData.length > 0) {
-            document.getElementById('source-selector').classList.add('hidden');
+            const sourceSelectorEl = document.getElementById('source-selector');
+            if (sourceSelectorEl) sourceSelectorEl.classList.add('hidden');
             document.getElementById('unit-config-section').classList.remove('hidden');
 
             processData(jsonData);
@@ -885,53 +901,48 @@ function renderPaginatedTable() {
         const y1TonHa = areaHa > 0 ? h1Ton / areaHa : 0;
         const y2TonHa = areaHa > 0 ? h2Ton / areaHa : 0;
 
-        // AI Predictions are already in Tonnes and Tonnes/Ha
-        const predictedHarvestMin = d.h3_min;
-        const predictedHarvestMax = d.h3_max;
-        const predictedHarvestAvg = d.noPrediction || d.notEnabled ? null : (predictedHarvestMin + predictedHarvestMax) / 2;
-        const predictedYieldMin = d.y3_min;
-        const predictedYieldMax = d.y3_max;
-        const yieldPredAvg = d.noPrediction || d.notEnabled ? null : (predictedYieldMin + predictedYieldMax) / 2;
+        // Convert to target units for display
+        const targetAreaFactor = AREA_CONVERSIONS[getDataAreaUnit()] || 1;
+        const areaDisplay = areaHa * targetAreaFactor;
 
-        const yieldReDiff = y1TonHa !== 0 ? ((y2TonHa - y1TonHa) / y1TonHa * 100).toFixed(2) : '0.00';
-        const yieldReClass = y2TonHa >= y1TonHa ? 'value-green' : 'value-red';
-        const yieldReArrow = y2TonHa >= y1TonHa ? '↑' : '↓';
+        const h1Display = convertHarvest(h1Ton, harvestUnit);
+        const h2Display = convertHarvest(h2Ton, harvestUnit);
 
-        const harvestReDiff = h1Ton !== 0 ? ((h2Ton - h1Ton) / h1Ton * 100).toFixed(2) : '0.00';
-        const harvestReClass = h2Ton >= h1Ton ? 'value-green' : 'value-red';
-        const harvestReArrow = h2Ton >= h1Ton ? '↑' : '↓';
+        const y1Display = convertYield(y1TonHa, yieldUnit);
+        const y2Display = convertYield(y2TonHa, yieldUnit);
 
-        const hasPred = !d.noPrediction && !d.notEnabled && predictedHarvestAvg !== null;
-        let harvestPredHtml = '<span style="color:var(--text-secondary)">-</span>';
-        if (hasPred) {
-            const harvestPredDiff = h2Ton !== 0 ? ((predictedHarvestAvg - h2Ton) / h2Ton * 100).toFixed(2) : '0.00';
-            const harvestPredClass = predictedHarvestAvg >= h2Ton ? 'value-green' : 'value-red';
-            const harvestPredArrow = predictedHarvestAvg >= h2Ton ? '↑' : '↓';
-            harvestPredHtml = `<span class="${harvestPredClass}">${harvestPredArrow} ${Math.abs(harvestPredDiff)}%</span>`;
-        }
+        const predictedHarvestMin = convertHarvest(d.h3_min, harvestUnit);
+        const predictedHarvestMax = convertHarvest(d.h3_max, harvestUnit);
+        const predictedYieldMin = convertYield(d.y3_min, yieldUnit);
+        const predictedYieldMax = convertYield(d.y3_max, yieldUnit);
+
+        const yieldReDiff = y1Display !== 0 ? ((y2Display - y1Display) / y1Display * 100).toFixed(2) : '0.00';
+        const yieldReClass = y2Display >= y1Display ? 'value-green' : 'value-red';
+        const yieldReArrow = y2Display >= y1Display ? '↑' : '↓';
+
+        const harvestReDiff = h1Display !== 0 ? ((h2Display - h1Display) / h1Display * 100).toFixed(2) : '0.00';
+        const harvestReClass = h2Display >= h1Display ? 'value-green' : 'value-red';
+        const harvestReArrow = h2Display >= h1Display ? '↑' : '↓';
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td>
-                <span style="font-weight: 600; color: #818cf8;">${d.name}</span><br>
-                <small>${harvestPredHtml}</small>
+                <span style="font-weight: 600; color: #818cf8;">${d.name}</span>
             </td>
-            <td>${areaHa.toFixed(2)}</td>
-            <td>${fmtSmart(h1Ton)}</td>
+            <td>${areaDisplay.toFixed(2)}</td>
+            <td>${fmtSmart(h1Display)}</td>
             <td>
-                ${fmtSmart(h2Ton)}<br>
+                ${fmtSmart(h2Display)}<br>
                 <small><span class="${harvestReClass}">${harvestReArrow} ${Math.abs(harvestReDiff)}%</span></small>
             </td>
             <td>${fmtSmart(predictedHarvestMin)}</td>
-            <td>${fmtSmart(predictedHarvestAvg)}</td>
             <td>${fmtSmart(predictedHarvestMax)}</td>
-            <td>${fmtSmart(y1TonHa)}</td>
+            <td>${fmtSmart(y1Display)}</td>
             <td>
-                ${fmtSmart(y2TonHa)}<br>
+                ${fmtSmart(y2Display)}<br>
                 <small><span class="${yieldReClass}">${yieldReArrow} ${Math.abs(yieldReDiff)}%</span></small>
             </td>
             <td>${fmtSmart(predictedYieldMin)}</td>
-            <td>${fmtSmart(yieldPredAvg)}</td>
             <td>${fmtSmart(predictedYieldMax)}</td>
         `;
         tbody.appendChild(tr);
@@ -1107,23 +1118,31 @@ function showSourceTab(tab) {
     const loginSection = document.getElementById('login-section');
 
     if (tab === 'upload') {
-        tabUpload.style.border = '2px solid var(--primary-color)';
-        tabUpload.style.background = 'rgba(99, 102, 241, 0.1)';
-        tabUpload.style.color = 'var(--text-primary)';
-        tabLogin.style.border = '2px solid var(--border-color)';
-        tabLogin.style.background = 'transparent';
-        tabLogin.style.color = 'var(--text-secondary)';
-        uploadSection.classList.remove('hidden');
-        loginSection.classList.add('hidden');
+        if (tabUpload) {
+            tabUpload.style.border = '2px solid var(--primary-color)';
+            tabUpload.style.background = 'rgba(99, 102, 241, 0.1)';
+            tabUpload.style.color = 'var(--text-primary)';
+        }
+        if (tabLogin) {
+            tabLogin.style.border = '2px solid var(--border-color)';
+            tabLogin.style.background = 'transparent';
+            tabLogin.style.color = 'var(--text-secondary)';
+        }
+        if (uploadSection) uploadSection.classList.remove('hidden');
+        if (loginSection) loginSection.classList.add('hidden');
     } else {
-        tabLogin.style.border = '2px solid var(--primary-color)';
-        tabLogin.style.background = 'rgba(99, 102, 241, 0.1)';
-        tabLogin.style.color = 'var(--text-primary)';
-        tabUpload.style.border = '2px solid var(--border-color)';
-        tabUpload.style.background = 'transparent';
-        tabUpload.style.color = 'var(--text-secondary)';
-        loginSection.classList.remove('hidden');
-        uploadSection.classList.add('hidden');
+        if (tabLogin) {
+            tabLogin.style.border = '2px solid var(--primary-color)';
+            tabLogin.style.background = 'rgba(99, 102, 241, 0.1)';
+            tabLogin.style.color = 'var(--text-primary)';
+        }
+        if (tabUpload) {
+            tabUpload.style.border = '2px solid var(--border-color)';
+            tabUpload.style.background = 'transparent';
+            tabUpload.style.color = 'var(--text-secondary)';
+        }
+        if (loginSection) loginSection.classList.remove('hidden');
+        if (uploadSection) uploadSection.classList.add('hidden');
     }
 }
 
@@ -1543,7 +1562,7 @@ function clearAllDataUI() {
         if (el) el.classList.add('hidden');
     });
 
-    const emptyStatesToShow = ['source-selector'];
+    const emptyStatesToShow = [];
     emptyStatesToShow.forEach(id => {
         const el = document.getElementById(id);
         if (el) el.classList.remove('hidden');

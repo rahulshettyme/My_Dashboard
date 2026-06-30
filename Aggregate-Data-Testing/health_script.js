@@ -22,6 +22,58 @@ function handleHealthToggleChange() {
 }
 
 /**
+ * Determine which provider's data to use for a given status type (greenness or nitrogen)
+ * based on selected options.
+ */
+function getTargetProviderData(res, type) {
+    const sentinelOnly = document.getElementById('health-sentinel-only-toggle')?.checked || false;
+    const showProviderPref = document.getElementById('health-provider-preference-toggle')?.checked || false;
+
+    // 1. If Sentinel Only is requested, always use Sentinel.
+    if (sentinelOnly) {
+        return {
+            val: type === 'greenness' ? res.sentinelGreenness : res.sentinelNitrogen,
+            date: res.sentinelDate
+        };
+    }
+
+    // Determine values and dates
+    const planetVal = type === 'greenness' ? res.planetGreenness : res.planetNitrogen;
+    const planetDate = res.planetDate;
+    const sentinelVal = type === 'greenness' ? res.sentinelGreenness : res.sentinelNitrogen;
+    const sentinelDate = res.sentinelDate;
+
+    // 2. If Show Provider Preference is checked, use the current default logic:
+    // Prefer Planet if available, fallback to Sentinel.
+    if (showProviderPref) {
+        const useSentinel = planetVal === '-';
+        return {
+            val: useSentinel ? sentinelVal : planetVal,
+            date: useSentinel ? sentinelDate : planetDate
+        };
+    }
+
+    // 3. Otherwise, by default, Show Latest Data (remove provider preference filter):
+    // Compare dates to choose the latest record.
+    if (planetVal !== '-' && sentinelVal !== '-') {
+        const pDate = new Date(planetDate);
+        const sDate = new Date(sentinelDate);
+        const pTime = isNaN(pDate.getTime()) ? 0 : pDate.getTime();
+        const sTime = isNaN(sDate.getTime()) ? 0 : sDate.getTime();
+
+        if (pTime > sTime) {
+            return { val: planetVal, date: planetDate };
+        } else {
+            return { val: sentinelVal, date: sentinelDate };
+        }
+    } else if (planetVal !== '-') {
+        return { val: planetVal, date: planetDate };
+    } else {
+        return { val: sentinelVal, date: sentinelDate };
+    }
+}
+
+/**
  * Main entry point to load Health Data
  */
 async function handleLoadHealthData() {
@@ -62,7 +114,7 @@ async function handleLoadHealthData() {
     const BATCH_SIZE = 5;
 
     const satBase = getEnvironmentBaseUrl(currentEnvironment);
-    const isProxy = satBase.includes('localhost') || satBase.includes('/api/user-aggregate');
+    const isProxy = satBase.includes('localhost') || satBase.includes('127.0.0.1') || satBase.includes('/api/user-aggregate');
 
     async function processPlotHealth(plot) {
         try {
@@ -268,13 +320,13 @@ function renderHealthCategoryKPI(type, results) {
     results.forEach(res => {
         let val = "-", date = "-";
         if (type === 'greenness') {
-            const useSentinel = sentinelOnly || (res.planetGreenness === '-');
-            val = useSentinel ? res.sentinelGreenness : res.planetGreenness;
-            date = useSentinel ? res.sentinelDate : res.planetDate;
+            const target = getTargetProviderData(res, 'greenness');
+            val = target.val;
+            date = target.date;
         } else if (type === 'nitrogen') {
-            const useSentinel = sentinelOnly || (res.planetNitrogen === '-');
-            val = useSentinel ? res.sentinelNitrogen : res.planetNitrogen;
-            date = useSentinel ? res.sentinelDate : res.planetDate;
+            const target = getTargetProviderData(res, 'nitrogen');
+            val = target.val;
+            date = target.date;
         } else if (type === 'water') {
             val = res.sentinelWaterStress;
             date = res.sentinelDate;
@@ -351,7 +403,8 @@ function renderHealthCategoryKPI(type, results) {
         const normPct = total > 0 ? Math.round((counts['Normal'] / total) * 100) : 0;
         const attnPct = total > 0 ? Math.round((counts['Plots Need Attention'] / total) * 100) : 0;
         const earlyPct = total > 0 ? Math.round((counts['Early Symptoms Noted'] / total) * 100) : 0;
-        insightEl.textContent = `The crop ${type} data shows that ${normPct}% is in the Normal range, ${attnPct}% Needs Attention and ${earlyPct}% is exhibiting Early Symptoms.`;
+        const displayType = type === 'nitrogen' ? 'nutrient' : type;
+        insightEl.textContent = `The crop ${displayType} data shows that ${normPct}% is in the Normal range, ${attnPct}% Needs Attention and ${earlyPct}% is exhibiting Early Symptoms.`;
     }
 }
 
@@ -365,7 +418,8 @@ function showHealthDrillDown(metric, status, plots) {
     
     if (!container || !title || !tbody) return;
 
-    title.textContent = `${metric.charAt(0).toUpperCase() + metric.slice(1)}: ${status} (${plots.length} Plots)`;
+    const displayName = metric === 'nitrogen' ? 'Nutrient' : (metric.charAt(0).toUpperCase() + metric.slice(1));
+    title.textContent = `${displayName}: ${status} (${plots.length} Plots)`;
     title.style.color = getHealthStatusColor(status);
     
     tbody.innerHTML = plots.map(p => `
@@ -391,6 +445,7 @@ function closeHealthDrillDown(id) {
 function renderHealthSatelliteTable(results) {
     const container = document.getElementById('health-table-container');
     const sentinelOnly = document.getElementById('health-sentinel-only-toggle')?.checked || false;
+    const showProviderPref = document.getElementById('health-provider-preference-toggle')?.checked || false;
     if (!container) return;
 
     if (!results || results.length === 0) {
@@ -405,11 +460,10 @@ function renderHealthSatelliteTable(results) {
                     <thead>
                         <tr style="background: rgba(6, 182, 212, 0.1); text-align: left;">
                             <th style="padding: 1rem; border-bottom: 2px solid #06b6d4;">Plot Name</th>
-                            <th style="padding: 1rem; border-bottom: 2px solid #06b6d4;">${sentinelOnly ? 'Sentinel Latest Date' : 'Planet Latest Date'}</th>
-                            <th style="padding: 1rem; border-bottom: 2px solid #06b6d4;">Greenness Status</th>
-                            <th style="padding: 1rem; border-bottom: 2px solid #06b6d4;">Nitrogen Uptake</th>
-                            <th style="padding: 1rem; border-bottom: 2px solid #06b6d4;">Sentinel Latest Date</th>
-                            <th style="padding: 1rem; border-bottom: 2px solid #06b6d4;">Water Stress Status</th>
+                            <th style="padding: 1rem; border-bottom: 2px solid #06b6d4;">Capture Date (P / S)</th>
+                            <th style="padding: 1rem; border-bottom: 2px solid #06b6d4;">Greenness Status (P / S)</th>
+                            <th style="padding: 1rem; border-bottom: 2px solid #06b6d4;">Nutrient Uptake (P / S)</th>
+                            <th style="padding: 1rem; border-bottom: 2px solid #06b6d4;">Water Stress Status (Sentinel)</th>
                             <th style="padding: 1rem; border-bottom: 2px solid #06b6d4;">Harvested</th>
                             <th style="padding: 1rem; border-bottom: 2px solid #06b6d4;">Harvested Date</th>
                         </tr>
@@ -417,23 +471,56 @@ function renderHealthSatelliteTable(results) {
                     <tbody>
     `;
 
-    results.forEach(res => {
-        const useSentinel = sentinelOnly || (res.planetGreenness === '-');
-        const greenVal = useSentinel ? res.sentinelGreenness : res.planetGreenness;
-        const nitrogenVal = useSentinel ? res.sentinelNitrogen : res.planetNitrogen;
-        const mainDate = useSentinel ? res.sentinelDate : res.planetDate;
+    // Sort results by plotName ascending
+    const sortedResults = [...results].sort((a, b) => {
+        return (a.plotName || '').localeCompare(b.plotName || '', undefined, { numeric: true, sensitivity: 'base' });
+    });
 
-        const fGreen = formatHealthStatus(greenVal);
-        const fNitrogen = formatHealthStatus(nitrogenVal);
+    sortedResults.forEach(res => {
         const fWater = formatHealthStatus(res.sentinelWaterStress);
+
+        const formatCellDate = (dateStr) => {
+            if (!dateStr || dateStr === '-') return '-';
+            const d = new Date(dateStr);
+            return isNaN(d.getTime()) ? dateStr : d.toLocaleDateString();
+        };
+
+        const planetDateFormatted = formatCellDate(res.planetDate);
+        const sentinelDateFormatted = formatCellDate(res.sentinelDate);
+
+        const hasSentinelNewer = (() => {
+            if (res.sentinelDate !== '-' && res.planetDate !== '-') {
+                const pDate = new Date(res.planetDate);
+                const sDate = new Date(res.sentinelDate);
+                return sDate.getTime() > pDate.getTime();
+            }
+            return res.sentinelDate !== '-' && res.planetDate === '-';
+        })();
+
+        const sentinelDateBadge = hasSentinelNewer
+            ? ` <span style="background: rgba(6, 182, 212, 0.15); color: #06b6d4; font-size: 0.65rem; padding: 1px 4px; border-radius: 3px; font-weight: 600; display: inline-block; vertical-align: middle;">Latest</span>`
+            : '';
+
+        const planetGreenStatus = formatHealthStatus(res.planetGreenness);
+        const sentinelGreenStatus = formatHealthStatus(res.sentinelGreenness);
+        const planetNitrogenStatus = formatHealthStatus(res.planetNitrogen);
+        const sentinelNitrogenStatus = formatHealthStatus(res.sentinelNitrogen);
 
         html += `
             <tr style="border-bottom: 1px solid var(--border-color)">
                 <td style="padding: 0.75rem; color: var(--text-primary); font-weight: 500;">${res.plotName}</td>
-                <td style="padding: 0.75rem; color: var(--text-secondary);">${mainDate === '-' ? '-' : new Date(mainDate).toLocaleDateString()}</td>
-                <td style="padding: 0.75rem; font-weight: 600; color: ${getHealthStatusColor(fGreen)}">${fGreen}</td>
-                <td style="padding: 0.75rem; font-weight: 600; color: ${getHealthStatusColor(fNitrogen)}">${fNitrogen}</td>
-                <td style="padding: 0.75rem; color: var(--text-secondary);">${res.sentinelDate === '-' ? '-' : new Date(res.sentinelDate).toLocaleDateString()}</td>
+                <td style="padding: 0.75rem;">
+                    <div style="font-size: 0.8rem; color: var(--text-secondary);">P: ${planetDateFormatted}</div>
+                    <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.25rem;">S: ${sentinelDateFormatted}${sentinelDateBadge}</div>
+                </td>
+                <td style="padding: 0.75rem;">
+                    <div style="font-size: 0.8rem; font-weight: 600; color: ${getHealthStatusColor(planetGreenStatus)};">Planet: ${planetGreenStatus}</div>
+                    <div style="font-size: 0.8rem; font-weight: 600; color: ${getHealthStatusColor(sentinelGreenStatus)}; margin-top: 0.25rem;">Sentinel: ${sentinelGreenStatus}</div>
+                </td>
+                <td style="padding: 0.75rem;">
+                    <div style="font-size: 0.8rem; font-weight: 600; color: ${getHealthStatusColor(planetNitrogenStatus)};">Planet: ${planetNitrogenStatus}</div>
+                    <div style="font-size: 0.8rem; font-weight: 600; color: ${getHealthStatusColor(sentinelNitrogenStatus)}; margin-top: 0.25rem;">Sentinel: ${sentinelNitrogenStatus}</div>
+                </td>
                 <td style="padding: 0.75rem; font-weight: 600; color: ${getHealthStatusColor(fWater)}">${fWater}</td>
                 <td style="padding: 0.75rem; color: ${res.isHarvested === 'Yes' ? '#10b981' : '#f59e0b'}; font-weight: 600;">${res.isHarvested}</td>
                 <td style="padding: 0.75rem; color: var(--text-secondary);">${res.harvestedDate || '-'}</td>
