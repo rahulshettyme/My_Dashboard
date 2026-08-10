@@ -441,7 +441,7 @@
                         <div id="health-stat-total-plots" style="font-size: 1.75rem; font-weight: 700; color: var(--text-primary);">-</div>
                     </div>
                     <div class="metric-card" style="text-align: center; border-left: 4px solid #10b981;">
-                        <h4 style="color: var(--text-secondary); margin-bottom: 0.5rem; font-size: 0.9rem;">Plots Analyzed (Covered)</h4>
+                        <h4 style="color: var(--text-secondary); margin-bottom: 0.5rem; font-size: 0.9rem;">PR Enabled</h4>
                         <div id="health-stat-plots-covered" style="font-size: 1.75rem; font-weight: 700; color: #10b981;">-</div>
                     </div>
                     <div class="metric-card" style="text-align: center; border-left: 4px solid #f59e0b;">
@@ -469,9 +469,24 @@
                 <div class="metrics-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; margin-bottom: 2rem;">
                     <!-- Greenness Section -->
                     <div class="metric-card" style="padding: 1.25rem;">
-                        <h3 style="margin-bottom: 1rem; color: #10b981; font-weight: 700; font-size: 1.1rem;">
+                        <h3 id="health-greenness-title-text" style="margin-bottom: 1rem; color: #10b981; font-weight: 700; font-size: 1.1rem;">
                             <i class="fas fa-leaf"></i> Crop Greenness Status
                         </h3>
+                        <div id="health-greenness-analyzed" style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem; font-weight: 600; background: rgba(16, 185, 129, 0.05); padding: 0.4rem 0.6rem; border-radius: 4px; display: inline-block;">
+                            Plots Analyzed (Covered): 0
+                        </div>
+                        <div style="margin-bottom: 1rem; padding: 0.5rem; background: rgba(99, 102, 241, 0.03); border: 1px solid rgba(99, 102, 241, 0.15); border-radius: 6px;">
+                            <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
+                                <span style="font-size: 0.8rem; color: var(--text-secondary); font-weight: 500;">Analysis Window (Days)</span>
+                                <div style="display: flex; gap: 0.25rem; align-items: center;">
+                                    <input type="number" id="health-greenness-window" value="15" min="1" style="width: 55px; padding: 0.25rem; font-size: 0.8rem; border-radius: 4px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: var(--text-primary); text-align: center;">
+                                    <button onclick="handleHealthApplyFilter('greenness')" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; border-radius: 4px; background: #10b981; border: none; color: white; cursor: pointer; font-weight: 600;">Apply Filter</button>
+                                </div>
+                            </div>
+                            <div id="health-greenness-date-window" style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 0.35rem; font-style: italic; text-align: left; display: flex; align-items: center; gap: 0.25rem;">
+                                <i class="far fa-calendar-alt"></i> Date Window: Calculating...
+                            </div>
+                        </div>
                         <div style="height: 180px; margin-bottom: 1rem; position: relative;">
                             <canvas id="health-greenness-pie"></canvas>
                         </div>
@@ -481,9 +496,24 @@
 
                     <!-- Nitrogen Section -->
                     <div class="metric-card" style="padding: 1.25rem;">
-                        <h3 style="margin-bottom: 1rem; color: #f59e0b; font-weight: 700; font-size: 1.1rem;">
+                        <h3 id="health-nitrogen-title-text" style="margin-bottom: 1rem; color: #f59e0b; font-weight: 700; font-size: 1.1rem;">
                             <i class="fas fa-microchip"></i> Nutrient Uptake
                         </h3>
+                        <div id="health-nitrogen-analyzed" style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem; font-weight: 600; background: rgba(245, 158, 11, 0.05); padding: 0.4rem 0.6rem; border-radius: 4px; display: inline-block;">
+                            Plots Analyzed (Covered): 0
+                        </div>
+                        <div style="margin-bottom: 1rem; padding: 0.5rem; background: rgba(99, 102, 241, 0.03); border: 1px solid rgba(99, 102, 241, 0.15); border-radius: 6px;">
+                            <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
+                                <span style="font-size: 0.8rem; color: var(--text-secondary); font-weight: 500;">Analysis Window (Days)</span>
+                                <div style="display: flex; gap: 0.25rem; align-items: center;">
+                                    <input type="number" id="health-nitrogen-window" value="15" min="1" style="width: 55px; padding: 0.25rem; font-size: 0.8rem; border-radius: 4px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: var(--text-primary); text-align: center;">
+                                    <button onclick="handleHealthApplyFilter('nitrogen')" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; border-radius: 4px; background: #f59e0b; border: none; color: white; cursor: pointer; font-weight: 600;">Apply Filter</button>
+                                </div>
+                            </div>
+                            <div id="health-nitrogen-date-window" style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 0.35rem; font-style: italic; text-align: left; display: flex; align-items: center; gap: 0.25rem;">
+                                <i class="far fa-calendar-alt"></i> Date Window: Calculating...
+                            </div>
+                        </div>
                         <div style="height: 180px; margin-bottom: 1rem; position: relative;">
                             <canvas id="health-nitrogen-pie"></canvas>
                         </div>
@@ -493,9 +523,24 @@
 
                     <!-- Water Stress Section -->
                     <div class="metric-card" style="padding: 1.25rem;">
-                        <h3 style="margin-bottom: 1rem; color: #3b82f6; font-weight: 700; font-size: 1.1rem;">
+                        <h3 id="health-water-title-text" style="margin-bottom: 1rem; color: #3b82f6; font-weight: 700; font-size: 1.1rem;">
                             <i class="fas fa-tint"></i> Water Stress Status
                         </h3>
+                        <div id="health-water-analyzed" style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem; font-weight: 600; background: rgba(59, 130, 246, 0.05); padding: 0.4rem 0.6rem; border-radius: 4px; display: inline-block;">
+                            Plots Analyzed (Covered): 0
+                        </div>
+                        <div style="margin-bottom: 1rem; padding: 0.5rem; background: rgba(99, 102, 241, 0.03); border: 1px solid rgba(99, 102, 241, 0.15); border-radius: 6px;">
+                            <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
+                                <span style="font-size: 0.8rem; color: var(--text-secondary); font-weight: 500;">Analysis Window (Days)</span>
+                                <div style="display: flex; gap: 0.25rem; align-items: center;">
+                                    <input type="number" id="health-water-window" value="15" min="1" style="width: 55px; padding: 0.25rem; font-size: 0.8rem; border-radius: 4px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: var(--text-primary); text-align: center;">
+                                    <button onclick="handleHealthApplyFilter('water')" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; border-radius: 4px; background: #3b82f6; border: none; color: white; cursor: pointer; font-weight: 600;">Apply Filter</button>
+                                </div>
+                            </div>
+                            <div id="health-water-date-window" style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 0.35rem; font-style: italic; text-align: left; display: flex; align-items: center; gap: 0.25rem;">
+                                <i class="far fa-calendar-alt"></i> Date Window: Calculating...
+                            </div>
+                        </div>
                         <div style="height: 180px; margin-bottom: 1rem; position: relative;">
                             <canvas id="health-water-pie"></canvas>
                         </div>
@@ -535,6 +580,10 @@
                 <div id="base-health-table-wrapper" class="hidden" style="margin-top: 2rem; border-top: 1px solid var(--border-color); padding-top: 2rem;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
                         <h3 style="margin: 0; font-size: 1.1rem; font-weight: 600; color: var(--text-primary);">Base Plot Level Analysis - Detail Table</h3>
+                        <label class="toggle-container" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                            <input type="checkbox" id="health-hide-harvested-base-table" onchange="handleHealthBaseTableToggleChange()">
+                            <span style="color: var(--text-primary); font-size: 0.9rem; font-weight: 500;">Hide harvested plots</span>
+                        </label>
                     </div>
                     <div id="health-table-container"></div>
                 </div>

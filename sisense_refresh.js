@@ -9,6 +9,7 @@ const elements = {
     progressBarContainer: document.getElementById('cube-progress-container'),
     progressBar: document.getElementById('cube-progress-bar'),
     statusBadge: document.getElementById('cube-status-badge'),
+    refreshStatusBadge: document.getElementById('refresh-status-badge'),
     lastOperation: document.getElementById('cube-last-operation'),
     terminalLogs: document.getElementById('terminal-logs'),
     clearTerminalBtn: document.getElementById('clear-terminal-btn')
@@ -266,8 +267,10 @@ elements.statusBtn.addEventListener('click', async () => {
             });
 
             // Update status badge dynamically based on response status array or lastBuildStatus
-            if (responseData.status && (responseData.status.includes('running') || responseData.status.includes('building') || responseData.status.includes('building-failed'))) {
-                updateStatusBadge('running');
+            if (responseData.status && Array.isArray(responseData.status)) {
+                const cubeStatus = responseData.status[0] || 'idle';
+                const refreshStatus = responseData.status[1] || '-';
+                updateStatusBadge(cubeStatus, refreshStatus);
             } else if (responseData.lastBuildStatus === 'succeeded' || responseData.lastBuildStatus === 'success') {
                 updateStatusBadge('success');
             } else if (responseData.lastBuildStatus === 'failed') {
@@ -290,19 +293,48 @@ elements.statusBtn.addEventListener('click', async () => {
     }
 });
 
-// Helper to update status badges
-function updateStatusBadge(status) {
-    elements.statusBadge.className = 'badge';
-    elements.statusBadge.textContent = status;
+// Helper to update individual badge style
+function updateBadge(badgeElement, status) {
+    if (!badgeElement) return;
+    badgeElement.className = 'badge';
+    badgeElement.textContent = status || '-';
 
-    if (status === 'idle') {
-        elements.statusBadge.classList.add('badge-idle');
-    } else if (status === 'running') {
-        elements.statusBadge.classList.add('badge-running');
-    } else if (status === 'success') {
-        elements.statusBadge.classList.add('badge-success');
-    } else if (status === 'failed') {
-        elements.statusBadge.classList.add('badge-failed');
+    const normalized = (status || '').toLowerCase();
+    if (normalized === 'idle' || normalized === '-') {
+        badgeElement.classList.add('badge-idle');
+    } else if (normalized === 'running' || normalized === 'building') {
+        badgeElement.classList.add('badge-running');
+    } else if (normalized === 'success' || normalized === 'succeeded' || normalized === 'completed') {
+        badgeElement.classList.add('badge-success');
+    } else if (normalized === 'failed' || normalized === 'error') {
+        badgeElement.classList.add('badge-failed');
+    } else {
+        badgeElement.classList.add('badge-idle');
+    }
+}
+
+// Helper to update status badges
+function updateStatusBadge(cubeStatus, refreshStatus) {
+    if (arguments.length === 1) {
+        if (cubeStatus === 'idle') {
+            updateBadge(elements.statusBadge, 'idle');
+            updateBadge(elements.refreshStatusBadge, '-');
+        } else if (cubeStatus === 'running') {
+            updateBadge(elements.statusBadge, 'running');
+            updateBadge(elements.refreshStatusBadge, 'building');
+        } else if (cubeStatus === 'success') {
+            updateBadge(elements.statusBadge, 'success');
+            updateBadge(elements.refreshStatusBadge, '-');
+        } else if (cubeStatus === 'failed') {
+            updateBadge(elements.statusBadge, 'failed');
+            updateBadge(elements.refreshStatusBadge, '-');
+        } else {
+            updateBadge(elements.statusBadge, cubeStatus);
+            updateBadge(elements.refreshStatusBadge, '-');
+        }
+    } else {
+        updateBadge(elements.statusBadge, cubeStatus);
+        updateBadge(elements.refreshStatusBadge, refreshStatus);
     }
 }
 

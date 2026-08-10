@@ -9,6 +9,14 @@
       "datamodelTitle": "40a21739-1ac5-4fdd-b394-8f4befc9d55f"
     },
     {
+      "tenant": "qa2wt",
+      "datamodelTitle": "2f5dd200-f13e-44d3-80e3-dbfc387f2a1e"
+    },
+    {
+      "tenant": "qa2indicesplanet",
+      "datamodelTitle": "522d8389-9dd0-44c6-8b5e-3483b9dad089"
+    },
+    {
       "tenant": "qa2sentinel",
       "datamodelTitle": "70d2b710-d9d1-4c2b-bea7-ae4508ccc6b4"
     },

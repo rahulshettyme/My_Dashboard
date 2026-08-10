@@ -61,6 +61,7 @@ var plotsWithoutPrediction = []; // Missing Data plots
 var plotsNotEnabled = []; // Not Enabled plots
 
 var authToken = null;
+var healthIndicatorsDisabled = false;
 var currentEnvironment = null;
 var currentTenant = null;
 var plotsData = [];
@@ -1426,7 +1427,7 @@ async function handleLogin() {
         document.getElementById('project-container').classList.remove('hidden');
         document.getElementById('session-info').textContent = `${environment} | ${tenant} | ${username} | Loading Prefs...`;
 
-        await Promise.all([loadProjects(), fetchUserInfo()]);
+        await Promise.all([loadProjects(), fetchUserInfo(), fetchHealthIndicatorsConfig()]);
 
     } catch (error) {
         loginError.textContent = error.message;
@@ -1434,6 +1435,34 @@ async function handleLogin() {
     } finally {
         loginBtn.disabled = false;
         loginBtn.textContent = 'Login to Application';
+    }
+}
+
+async function fetchHealthIndicatorsConfig() {
+    const baseUrl = getServerUrl();
+    healthIndicatorsDisabled = false; // Reset to default
+    try {
+        const response = await fetch(`${baseUrl}/api/user-aggregate/tenant-config?environment=${encodeURIComponent(currentEnvironment)}&name=HEALTH_INDICATORS_DISABLED`, {
+            headers: {
+                'Authorization': `Bearer ${authToken}`,
+                'ngrok-skip-browser-warning': 'true'
+            }
+        });
+        
+        if (response.status === 204) {
+            return;
+        }
+
+        if (response.ok) {
+            const result = await response.json();
+            if (result && result.data && result.data.disabled === true) {
+                healthIndicatorsDisabled = true;
+                window.healthIndicatorsDisabled = true; // Bind to window for cross-file accessibility
+                console.log('HEALTH_INDICATORS_DISABLE is true. Switching to NDVI/NDRE/LSWI Mean mode.');
+            }
+        }
+    } catch (e) {
+        console.warn('Failed to fetch HEALTH_INDICATORS_DISABLE config, default to False', e);
     }
 }
 
@@ -1947,6 +1976,10 @@ function handleProjectSelection(id, isSelected) {
         selectedProjectIds = selectedProjectIds.filter(pid => pid !== id);
     }
 
+    if (typeof clearHealthUI === 'function') {
+        clearHealthUI();
+    }
+
     // Update UI
     const triggerText = document.getElementById('trigger-text');
     if (triggerText) {
@@ -2044,6 +2077,10 @@ async function handleLoadPlots() {
  */
 async function handleVerifyPlots() {
     if (selectedProjectIds.length === 0) return;
+
+    if (typeof clearHealthUI === 'function') {
+        clearHealthUI();
+    }
 
     const verifyBtn = document.getElementById('verify-plots-btn');
     const plotInfo = document.getElementById('plot-info');

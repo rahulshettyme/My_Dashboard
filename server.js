@@ -397,6 +397,78 @@ app.get('/api/user-aggregate/master/constants', (req, res) => {
     reqProxy.end();
 });
 
+// --- Tenant Config Proxy Endpoint ---
+app.get('/api/user-aggregate/tenant-config', (req, res) => {
+    const { environment, name } = req.query;
+    const authHeader = req.headers.authorization;
+
+    if (!environment || !name) {
+        return res.status(400).json({ error: 'Missing environment or name parameter' });
+    }
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Missing or invalid authorization header' });
+    }
+
+    const db = readDb();
+    const apiBaseUrl = resolveEnvUrl(db, environment, 'api');
+    const frontendUrl = resolveEnvUrl(db, environment, 'ui');
+
+    if (!apiBaseUrl) {
+        return res.status(400).json({ error: `Unknown environment: ${environment}` });
+    }
+
+    const pathStr = `/services/farm/api/tenant-config?name=${encodeURIComponent(name)}`;
+    const fullUrl = apiBaseUrl + pathStr;
+    console.log(`[User Aggregate] Tenant Config URL: ${fullUrl}`);
+
+    const urlObj = new URL(fullUrl);
+    const options = {
+        hostname: urlObj.hostname,
+        port: 443,
+        path: urlObj.pathname + urlObj.search,
+        method: 'GET',
+        headers: {
+            'Authorization': authHeader,
+            'Accept': 'application/json, text/plain, */*',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'origin': frontendUrl || apiBaseUrl,
+            'referer': (frontendUrl || apiBaseUrl) + '/'
+        }
+    };
+
+    const reqProxy = https.request(options, (resProxy) => {
+        let data = '';
+        resProxy.on('data', chunk => data += chunk);
+        resProxy.on('end', () => {
+            if (data.trim().startsWith('<!DOCTYPE') || data.trim().startsWith('<html')) {
+                return res.status(502).json({ error: 'API returned HTML' });
+            }
+            try {
+                if (resProxy.statusCode === 204) {
+                    return res.status(204).send();
+                }
+                const jsonData = JSON.parse(data);
+                if (resProxy.statusCode >= 200 && resProxy.statusCode < 300) {
+                    res.json(jsonData);
+                } else {
+                    res.status(resProxy.statusCode).json({ error: jsonData.message || 'Failed to fetch tenant-config' });
+                }
+            } catch (e) {
+                console.error('[User Aggregate] Parse Error:', e.message);
+                res.status(500).json({ error: 'Failed to parse response' });
+            }
+        });
+    });
+
+    reqProxy.on('error', (e) => {
+        console.error('[User Aggregate] Proxy Request Error:', e);
+        res.status(500).json({ error: 'Proxy request failed: ' + e.message });
+    });
+
+    reqProxy.end();
+});
+
 // --- Farmer List Proxy Endpoint ---
 app.get('/api/user-aggregate/farmers', (req, res) => {
     const { environment } = req.query;

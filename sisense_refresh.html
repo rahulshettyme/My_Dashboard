@@ -291,8 +291,13 @@
             <div class="status-display-card">
                 <div class="status-info">
                     <span class="status-label">Current State</span>
-                    <div class="status-value">
-                        <span class="badge badge-idle" id="cube-status-badge">Idle</span>
+                    <div class="status-value" style="display: flex; gap: 1rem; align-items: center;">
+                        <span id="cube-status-container" style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem; font-weight: 500; color: var(--text-secondary);">
+                            Cube: <span class="badge badge-idle" id="cube-status-badge">Idle</span>
+                        </span>
+                        <span id="refresh-status-container" style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem; font-weight: 500; color: var(--text-secondary);">
+                            Refresh: <span class="badge badge-idle" id="refresh-status-badge">-</span>
+                        </span>
                     </div>
                 </div>
                 <div class="status-info" style="text-align: right;">
