@@ -1441,6 +1441,7 @@ async function handleLogin() {
 async function fetchHealthIndicatorsConfig() {
     const baseUrl = getServerUrl();
     healthIndicatorsDisabled = false; // Reset to default
+    window.healthIndicatorsDisabled = false;
     try {
         const response = await fetch(`${baseUrl}/api/user-aggregate/tenant-config?environment=${encodeURIComponent(currentEnvironment)}&name=HEALTH_INDICATORS_DISABLED`, {
             headers: {
@@ -1450,6 +1451,7 @@ async function fetchHealthIndicatorsConfig() {
         });
         
         if (response.status === 204) {
+            updateGerminationCheckboxVisibility();
             return;
         }
 
@@ -1463,6 +1465,18 @@ async function fetchHealthIndicatorsConfig() {
         }
     } catch (e) {
         console.warn('Failed to fetch HEALTH_INDICATORS_DISABLE config, default to False', e);
+    }
+    updateGerminationCheckboxVisibility();
+}
+
+function updateGerminationCheckboxVisibility() {
+    const wrapper = document.getElementById('health-load-germination-wrapper');
+    if (wrapper) {
+        if (window.healthIndicatorsDisabled) {
+            wrapper.classList.add('hidden');
+        } else {
+            wrapper.classList.remove('hidden');
+        }
     }
 }
 

@@ -103,6 +103,25 @@ const tests = [
             assert.strictEqual(plCandidates[0].capturedDateTime, '2026-08-05T09:00:00Z', 'PL candidate should be from a previous day');
             assert.strictEqual(plCandidates[0].provider, 'sentinel', 'PL candidate provider should match');
         }
+    },
+    {
+        name: 'formatGerminationStatus',
+        fn: () => {
+            assert.strictEqual(healthScript.formatGerminationStatus('good'), 'Good', 'good should format to Good');
+            assert.strictEqual(healthScript.formatGerminationStatus('normal'), 'Good', 'normal should format to Good');
+            assert.strictEqual(healthScript.formatGerminationStatus('moderate'), 'Moderate', 'moderate should format to Moderate');
+            assert.strictEqual(healthScript.formatGerminationStatus('needsAttention'), 'Need Attention', 'needsAttention should format to Need Attention');
+            assert.strictEqual(healthScript.formatGerminationStatus('attention'), 'Need Attention', 'attention should format to Need Attention');
+            assert.strictEqual(healthScript.formatGerminationStatus('-'), '-', '- should format to -');
+        }
+    },
+    {
+        name: 'getGerminationColor',
+        fn: () => {
+            assert.strictEqual(healthScript.getGerminationColor('Good'), '#10b981', 'Good status should color green');
+            assert.strictEqual(healthScript.getGerminationColor('Moderate'), '#f59e0b', 'Moderate status should color yellow');
+            assert.strictEqual(healthScript.getGerminationColor('Need Attention'), '#ef4444', 'Need Attention status should color red');
+        }
     }
 ];
 

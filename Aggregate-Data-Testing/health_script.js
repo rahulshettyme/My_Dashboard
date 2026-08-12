@@ -2,6 +2,7 @@
 var healthGreennessPieChart = null;
 var healthNitrogenPieChart = null;
 var healthWaterPieChart = null;
+var healthGerminationPieChart = null;
 
 // --- State Variables ---
 var currentHealthResults = null;
@@ -34,6 +35,7 @@ function clearHealthUI() {
     if (healthGreennessPieChart) { healthGreennessPieChart.destroy(); healthGreennessPieChart = null; }
     if (healthNitrogenPieChart) { healthNitrogenPieChart.destroy(); healthNitrogenPieChart = null; }
     if (healthWaterPieChart) { healthWaterPieChart.destroy(); healthWaterPieChart = null; }
+    if (healthGerminationPieChart) { healthGerminationPieChart.destroy(); healthGerminationPieChart = null; }
     
     // Reset status label
     const healthStatus = document.getElementById('health-status');
@@ -67,16 +69,16 @@ function getTargetProviderData(res, type) {
     // 1. If Sentinel Only is requested, always use Sentinel.
     if (sentinelOnly) {
         return {
-            val: type === 'greenness' ? res.sentinelGreenness : res.sentinelNitrogen,
-            date: res.sentinelDate
+            val: type === 'greenness' ? res.sentinelGreenness : (type === 'nitrogen' ? res.sentinelNitrogen : res.sentinelGermination),
+            date: type === 'germination' ? res.sentinelGermDate : res.sentinelDate
         };
     }
 
     // Determine values and dates
-    const planetVal = type === 'greenness' ? res.planetGreenness : res.planetNitrogen;
-    const planetDate = res.planetDate;
-    const sentinelVal = type === 'greenness' ? res.sentinelGreenness : res.sentinelNitrogen;
-    const sentinelDate = res.sentinelDate;
+    const planetVal = type === 'greenness' ? res.planetGreenness : (type === 'nitrogen' ? res.planetNitrogen : res.planetGermination);
+    const planetDate = type === 'germination' ? res.planetGermDate : res.planetDate;
+    const sentinelVal = type === 'greenness' ? res.sentinelGreenness : (type === 'nitrogen' ? res.sentinelNitrogen : res.sentinelGermination);
+    const sentinelDate = type === 'germination' ? res.sentinelGermDate : res.sentinelDate;
 
     // 2. If Show Provider Preference is checked, use the current default logic:
     // Prefer Planet if available, fallback to Sentinel.
@@ -165,10 +167,32 @@ async function handleLoadHealthData() {
                 ? `${satBase}/api/user-aggregate/satellite?environment=${encodeURIComponent(currentEnvironment)}&sortBy=capturedDateTime&orderBy=DESC&size=30&caIds=${plot.caId}`
                 : `${satBase}/services/farm/api/plot-risk/satellite?sortBy=capturedDateTime&orderBy=DESC&size=30&caIds=${plot.caId}`;
 
-            const [sResp, satResp] = await Promise.all([
-                fetch(sUrl, { headers: { 'Authorization': `Bearer ${authToken}`, 'ngrok-skip-browser-warning': 'true' } }),
-                fetch(satUrl, { headers: { 'Authorization': `Bearer ${authToken}`, 'ngrok-skip-browser-warning': 'true' } })
-            ]);
+            const loadGermCheckbox = document.getElementById('health-load-germination-checkbox');
+            const shouldLoadGerm = !window.healthIndicatorsDisabled && loadGermCheckbox && loadGermCheckbox.checked;
+
+            let sResp, satResp, gResp;
+            let gData = { records: [] };
+
+            if (shouldLoadGerm) {
+                const germUrl = `${baseUrl}/api/user-aggregate/germination?environment=${encodeURIComponent(currentEnvironment)}&caIds=${plot.caId}`;
+                [sResp, satResp, gResp] = await Promise.all([
+                    fetch(sUrl, { headers: { 'Authorization': `Bearer ${authToken}`, 'ngrok-skip-browser-warning': 'true' } }),
+                    fetch(satUrl, { headers: { 'Authorization': `Bearer ${authToken}`, 'ngrok-skip-browser-warning': 'true' } }),
+                    fetch(germUrl, { headers: { 'Authorization': `Bearer ${authToken}`, 'ngrok-skip-browser-warning': 'true' } })
+                ]);
+                if (gResp.ok) {
+                    try {
+                        gData = await gResp.json();
+                    } catch (e) {
+                        console.error('Failed to parse germination data:', e);
+                    }
+                }
+            } else {
+                [sResp, satResp] = await Promise.all([
+                    fetch(sUrl, { headers: { 'Authorization': `Bearer ${authToken}`, 'ngrok-skip-browser-warning': 'true' } }),
+                    fetch(satUrl, { headers: { 'Authorization': `Bearer ${authToken}`, 'ngrok-skip-browser-warning': 'true' } })
+                ]);
+            }
 
             // Handle Sustainability
             let sData = {};
@@ -178,17 +202,17 @@ async function handleLoadHealthData() {
                 if (window.sustainabilityCache) window.sustainabilityCache[plot.caId] = sData;
             }
 
+            const rawHarvestDate = sData.harvestDate || null;
+            const harvestDateObj = rawHarvestDate ? new Date(rawHarvestDate) : null;
+            if (harvestDateObj && !isNaN(harvestDateObj.getTime())) {
+                harvestDateObj.setHours(23, 59, 59, 999);
+            }
+
             // Handle Satellite
             let satResult = null;
             if (satResp.ok) {
                 const result = await satResp.json();
                 if (result && result.records) {
-                    const rawHarvestDate = sData.harvestDate || null;
-                    const harvestDateObj = rawHarvestDate ? new Date(rawHarvestDate) : null;
-                    if (harvestDateObj && !isNaN(harvestDateObj.getTime())) {
-                        harvestDateObj.setHours(23, 59, 59, 999);
-                    }
-
                     // 1. Filter out invalid/cmk records and post-harvest records
                     const validRecords = result.records.filter(record => {
                         const boundaryStatus = record.metrics?.errorCodes?.boundaryMetrics;
@@ -333,7 +357,67 @@ async function handleLoadHealthData() {
                 }
             }
 
-            const rawHarvestDate = sData.harvestDate || null;
+            // Handle Germination records
+            let planetGerm = null, sentinelGerm = null, plGerm = null;
+            if (shouldLoadGerm && gData && gData.records) {
+                const getCalendarDay = (dateStr) => {
+                    if (!dateStr || dateStr === '-') return '';
+                    const d = new Date(dateStr);
+                    return isNaN(d.getTime()) ? '' : d.toDateString();
+                };
+
+                const validGermRecords = gData.records.filter(record => {
+                    if (harvestDateObj && record.date) {
+                        const recordDateObj = new Date(record.date);
+                        if (!isNaN(recordDateObj.getTime()) && recordDateObj.getTime() > harvestDateObj.getTime()) {
+                            return false;
+                        }
+                    }
+                    return true;
+                });
+
+                validGermRecords.sort((a, b) => {
+                    const tA = new Date(a.date).getTime();
+                    const tB = new Date(b.date).getTime();
+                    if (tA !== tB) {
+                        return tB - tA;
+                    }
+                    const pA = (a.provider || '').toLowerCase() === 'planet' ? 1 : 0;
+                    const pB = (b.provider || '').toLowerCase() === 'planet' ? 1 : 0;
+                    return pB - pA;
+                });
+
+                for (const record of validGermRecords) {
+                    const provider = (record.provider || '').toLowerCase();
+                    if (provider === 'planet' && !planetGerm) {
+                        planetGerm = {
+                            date: record.date,
+                            value: record.data?.cropGermination || '-'
+                        };
+                    }
+                    if ((provider === 'sentinel2' || provider === 'sentinel') && !sentinelGerm) {
+                        sentinelGerm = {
+                            date: record.date,
+                            value: record.data?.cropGermination || '-'
+                        };
+                    }
+                    if (planetGerm && sentinelGerm) break;
+                }
+
+                if (validGermRecords.length > 0) {
+                    const latestGermDay = getCalendarDay(validGermRecords[0].date);
+                    const plGermCandidates = validGermRecords.filter(r => getCalendarDay(r.date) !== latestGermDay);
+                    if (plGermCandidates.length > 0) {
+                        const rec = plGermCandidates[0];
+                        plGerm = {
+                            date: rec.date,
+                            provider: (rec.provider || '').toLowerCase() === 'planet' ? 'Planet' : 'Sentinel',
+                            value: rec.data?.cropGermination || '-'
+                        };
+                    }
+                }
+            }
+
             const isHarvestedToggle = (sData.harvested == true || sData.harvested === 'true' || sData.harvested === 1 || !!rawHarvestDate);
             
             const formatDate = (dateStr) => {
@@ -365,7 +449,16 @@ async function handleLoadHealthData() {
                 plGreenness: satResult?.plData ? satResult.plData.greenness : '-',
                 plNitrogen: satResult?.plData ? satResult.plData.nitrogen : '-',
                 plWaterStress: satResult?.plData ? satResult.plData.waterStress : '-',
-                plWaterDate: satResult?.plData ? satResult.plData.waterDate : '-'
+                plWaterDate: satResult?.plData ? satResult.plData.waterDate : '-',
+                
+                // Germination fields
+                planetGermDate: planetGerm ? planetGerm.date : '-',
+                planetGermination: planetGerm ? planetGerm.value : '-',
+                sentinelGermDate: sentinelGerm ? sentinelGerm.date : '-',
+                sentinelGermination: sentinelGerm ? sentinelGerm.value : '-',
+                plGermDate: plGerm ? plGerm.date : '-',
+                plGermProvider: plGerm ? plGerm.provider : '-',
+                plGermination: plGerm ? plGerm.value : '-'
             };
         } catch (error) {
             console.error(`Error processing health for plot ${plot.caId}:`, error);
@@ -447,6 +540,22 @@ function getHealthStatusColor(status) {
     return 'var(--text-primary)';
 }
 
+function formatGerminationStatus(val) {
+    if (!val || val === '-') return '-';
+    const v = val.toString().toLowerCase().trim();
+    if (v === 'good' || v === 'normal') return 'Good';
+    if (v === 'moderate') return 'Moderate';
+    if (v === 'needsattention' || v.includes('attention')) return 'Need Attention';
+    return val;
+}
+
+function getGerminationColor(status) {
+    if (status === 'Good') return '#10b981'; // Green
+    if (status === 'Moderate') return '#f59e0b'; // Yellow
+    if (status === 'Need Attention') return '#ef4444'; // Red
+    return 'var(--text-secondary)';
+}
+
 function getEnvironmentBaseUrl(env) {
     if (env === 'QA2') return 'https://sf-v2-gcp.cropin.co.in/qa2';
     return getServerUrl(); 
@@ -504,6 +613,22 @@ function renderHealthKPIDashboard(results) {
     renderHealthCategoryKPI('greenness', kpiResults);
     renderHealthCategoryKPI('nitrogen', kpiResults);
     renderHealthCategoryKPI('water', kpiResults);
+
+    // Germination dynamic card visibility and rendering
+    const loadGermCheckbox = document.getElementById('health-load-germination-checkbox');
+    const showGermination = !window.healthIndicatorsDisabled && loadGermCheckbox && loadGermCheckbox.checked;
+
+    const germinationCard = document.getElementById('health-germination-card');
+    const grid = document.getElementById('health-kpi-grid');
+
+    if (showGermination) {
+        if (germinationCard) germinationCard.classList.remove('hidden');
+        if (grid) grid.style.gridTemplateColumns = 'repeat(4, 1fr)';
+        renderHealthCategoryKPI('germination', kpiResults);
+    } else {
+        if (germinationCard) germinationCard.classList.add('hidden');
+        if (grid) grid.style.gridTemplateColumns = 'repeat(3, 1fr)';
+    }
 
     // Also ensure the base detail table is updated if it's currently visible
     renderHealthSatelliteTable(results);
@@ -587,24 +712,18 @@ function renderHealthCategoryKPI(type, results) {
         dateWindowEl.innerHTML = `<i class="far fa-calendar-alt"></i> Window: ${formatDateToDMY(startLimit)} to ${formatDateToDMY(endLimit)}`;
     }
 
-    const counts = { 
-        'Normal': 0, 
-        'Early Symptoms Noted': 0, 
-        'Plots Need Attention': 0,
-        'Excluded (Normal)': 0,
-        'Excluded (Early Symptoms Noted)': 0,
-        'Excluded (Plots Need Attention)': 0,
-        'No Data': 0 
-    };
-    const plotBuckets = { 
-        'Normal': [], 
-        'Early Symptoms Noted': [], 
-        'Plots Need Attention': [],
-        'Excluded (Normal)': [],
-        'Excluded (Early Symptoms Noted)': [],
-        'Excluded (Plots Need Attention)': [],
-        'No Data': [] 
-    };
+    const categories = type === 'germination'
+        ? ['Good', 'Moderate', 'Need Attention']
+        : ['Normal', 'Early Symptoms Noted', 'Plots Need Attention'];
+
+    const counts = { 'No Data': 0 };
+    const plotBuckets = { 'No Data': [] };
+    categories.forEach(c => {
+        counts[c] = 0;
+        counts[`Excluded (${c})`] = 0;
+        plotBuckets[c] = [];
+        plotBuckets[`Excluded (${c})`] = [];
+    });
 
     results.forEach(res => {
         let val = "-", date = "-";
@@ -619,10 +738,16 @@ function renderHealthCategoryKPI(type, results) {
         } else if (type === 'water') {
             val = res.sentinelWaterStress;
             date = res.sentinelDate;
+        } else if (type === 'germination') {
+            const target = getTargetProviderData(res, 'germination');
+            val = target.val;
+            date = target.date;
         }
 
         let status = val;
-        if (window.healthIndicatorsDisabled && !isNaN(val) && val !== '-') {
+        if (type === 'germination') {
+            status = formatGerminationStatus(val);
+        } else if (window.healthIndicatorsDisabled && !isNaN(val) && val !== '-') {
             status = classifyValueToStatus(val);
         } else {
             status = formatHealthStatus(val);
@@ -652,7 +777,6 @@ function renderHealthCategoryKPI(type, results) {
         }
     });
 
-    const categories = ['Normal', 'Early Symptoms Noted', 'Plots Need Attention'];
     const data = categories.map(c => counts[c]);
     const total = data.reduce((a, b) => a + b, 0);
 
@@ -664,14 +788,14 @@ function renderHealthCategoryKPI(type, results) {
     // Pie Chart
     const canvas = document.getElementById(`health-${type}-pie`);
     if (canvas) {
-        let chartRef = (type === 'greenness' ? healthGreennessPieChart : (type === 'nitrogen' ? healthNitrogenPieChart : healthWaterPieChart));
+        let chartRef = (type === 'greenness' ? healthGreennessPieChart : (type === 'nitrogen' ? healthNitrogenPieChart : (type === 'water' ? healthWaterPieChart : healthGerminationPieChart)));
         if (chartRef) chartRef.destroy();
 
         const ctx = canvas.getContext('2d');
         const newChart = new Chart(ctx, {
             type: 'pie',
             data: {
-                labels: categories.map(c => formatHealthStatus(c)),
+                labels: categories.map(c => type === 'germination' ? formatGerminationStatus(c) : formatHealthStatus(c)),
                 datasets: [{
                     data: data,
                     backgroundColor: ['#10b981', '#f59e0b', '#ef4444'],
@@ -691,7 +815,8 @@ function renderHealthCategoryKPI(type, results) {
         });
         if (type === 'greenness') healthGreennessPieChart = newChart;
         else if (type === 'nitrogen') healthNitrogenPieChart = newChart;
-        else healthWaterPieChart = newChart;
+        else if (type === 'water') healthWaterPieChart = newChart;
+        else healthGerminationPieChart = newChart;
     }
 
     // Table next to Pie
@@ -703,7 +828,7 @@ function renderHealthCategoryKPI(type, results) {
             const count = counts[cat];
             const pct = total > 0 ? Math.round((count / total) * 100) : 0;
             const color = ['#10b981', '#f59e0b', '#ef4444'][idx];
-            const displayCatName = formatHealthStatus(cat);
+            const displayCatName = type === 'germination' ? formatGerminationStatus(cat) : formatHealthStatus(cat);
             html += `
                 <tr style="cursor: pointer; border-bottom: 1px solid var(--border-color);" onclick='showHealthDrillDown("${type}", "${cat}", ${JSON.stringify(plotBuckets[cat]).replace(/'/g, "&apos;")})'>
                     <td style="padding: 0.5rem 0; color: var(--text-secondary);">${displayCatName}</td>
@@ -713,7 +838,7 @@ function renderHealthCategoryKPI(type, results) {
         });
 
         // Excluded rows matching each status
-        const excludedCategories = ['Excluded (Normal)', 'Excluded (Early Symptoms Noted)', 'Excluded (Plots Need Attention)'];
+        const excludedCategories = categories.map(c => `Excluded (${c})`);
         html += `
             <tr style="background: rgba(255, 255, 255, 0.05); pointer-events: none;">
                 <td colspan="2" style="padding: 0.4rem 0 0.2rem 0; font-size: 0.75rem; color: var(--text-secondary); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border-color);">Excluded (Outside Window)</td>
@@ -722,7 +847,7 @@ function renderHealthCategoryKPI(type, results) {
         excludedCategories.forEach((cat, idx) => {
             const count = counts[cat];
             const color = ['rgba(16, 185, 129, 0.6)', 'rgba(245, 158, 11, 0.6)', 'rgba(239, 68, 68, 0.6)'][idx];
-            const displayLabel = formatHealthStatus(cat.replace('Excluded (', '').replace(')', ''));
+            const displayLabel = type === 'germination' ? formatGerminationStatus(cat.replace('Excluded (', '').replace(')', '')) : formatHealthStatus(cat.replace('Excluded (', '').replace(')', ''));
             html += `
                 <tr style="cursor: pointer; border-bottom: 1px solid var(--border-color); opacity: 0.7;" onclick='showHealthDrillDown("${type}", "${cat}", ${JSON.stringify(plotBuckets[cat]).replace(/'/g, "&apos;")})'>
                     <td style="padding: 0.5rem 0; color: var(--text-secondary); font-style: italic; padding-left: 0.5rem;">${displayLabel}</td>
@@ -738,23 +863,30 @@ function renderHealthCategoryKPI(type, results) {
     // Insight
     const insightEl = document.getElementById(`health-${type}-insight`);
     if (insightEl) {
-        const normPct = total > 0 ? Math.round((counts['Normal'] / total) * 100) : 0;
-        const attnPct = total > 0 ? Math.round((counts['Plots Need Attention'] / total) * 100) : 0;
-        const earlyPct = total > 0 ? Math.round((counts['Early Symptoms Noted'] / total) * 100) : 0;
-        
-        let displayType = type === 'nitrogen' ? 'nutrient' : type;
-        let normalLabel = 'Normal';
-        let attnLabel = 'Needs Attention';
-        let earlyLabel = 'Early Symptoms';
-        
-        if (window.healthIndicatorsDisabled) {
-            displayType = type === 'greenness' ? 'NDVI' : (type === 'nitrogen' ? 'NDRE' : 'LSWI');
-            normalLabel = '0.66 - 1';
-            attnLabel = '-1 - 0.33';
-            earlyLabel = '0.33 - 0.66';
+        if (type === 'germination') {
+            const goodPct = total > 0 ? Math.round((counts['Good'] / total) * 100) : 0;
+            const modPct = total > 0 ? Math.round((counts['Moderate'] / total) * 100) : 0;
+            const attnPct = total > 0 ? Math.round((counts['Need Attention'] / total) * 100) : 0;
+            insightEl.textContent = `The crop germination data shows that ${goodPct}% is in the Good range, ${modPct}% is in the Moderate range, and ${attnPct}% is in the Need Attention range.`;
+        } else {
+            const normPct = total > 0 ? Math.round((counts['Normal'] / total) * 100) : 0;
+            const attnPct = total > 0 ? Math.round((counts['Plots Need Attention'] / total) * 100) : 0;
+            const earlyPct = total > 0 ? Math.round((counts['Early Symptoms Noted'] / total) * 100) : 0;
+            
+            let displayType = type === 'nitrogen' ? 'nutrient' : type;
+            let normalLabel = 'Normal';
+            let attnLabel = 'Needs Attention';
+            let earlyLabel = 'Early Symptoms';
+            
+            if (window.healthIndicatorsDisabled) {
+                displayType = type === 'greenness' ? 'NDVI' : (type === 'nitrogen' ? 'NDRE' : 'LSWI');
+                normalLabel = '0.66 - 1';
+                attnLabel = '-1 - 0.33';
+                earlyLabel = '0.33 - 0.66';
+            }
+            
+            insightEl.textContent = `The crop ${displayType} data shows that ${normPct}% is in the ${normalLabel} range, ${attnPct}% is in the ${attnLabel} range, and ${earlyPct}% is in the ${earlyLabel} range.`;
         }
-        
-        insightEl.textContent = `The crop ${displayType} data shows that ${normPct}% is in the ${normalLabel} range, ${attnPct}% is in the ${attnLabel} range, and ${earlyPct}% is in the ${earlyLabel} range.`;
     }
 }
 
@@ -839,10 +971,16 @@ function renderHealthSatelliteTable(results) {
             } else if (type === 'water') {
                 val = res.sentinelWaterStress;
                 date = res.sentinelDate;
+            } else if (type === 'germination') {
+                const target = getTargetProviderData(res, 'germination');
+                val = target.val;
+                date = target.date;
             }
 
             let plotStatus = val;
-            if (window.healthIndicatorsDisabled && !isNaN(val) && val !== '-') {
+            if (type === 'germination') {
+                plotStatus = formatGerminationStatus(val);
+            } else if (window.healthIndicatorsDisabled && !isNaN(val) && val !== '-') {
                 plotStatus = classifyValueToStatus(val);
             } else {
                 plotStatus = formatHealthStatus(val);
@@ -871,14 +1009,17 @@ function renderHealthSatelliteTable(results) {
 
     let filterBannerHtml = '';
     if (activeHealthFilter) {
-        let displayType = activeHealthFilter.type === 'greenness' ? 'Greenness' : (activeHealthFilter.type === 'nitrogen' ? 'Nutrient' : 'Water Stress');
+        let displayType = activeHealthFilter.type === 'greenness' ? 'Greenness' : (activeHealthFilter.type === 'nitrogen' ? 'Nutrient' : (activeHealthFilter.type === 'water' ? 'Water Stress' : 'Germination'));
         if (window.healthIndicatorsDisabled) {
             displayType = activeHealthFilter.type === 'greenness' ? 'NDVI' : (activeHealthFilter.type === 'nitrogen' ? 'NDRE' : 'LSWI');
         }
+        const displayStatusText = activeHealthFilter.type === 'germination'
+            ? formatGerminationStatus(activeHealthFilter.status)
+            : formatHealthStatus(activeHealthFilter.status);
         filterBannerHtml = `
             <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(6, 182, 212, 0.08); border: 1px solid rgba(6, 182, 212, 0.2); border-radius: 6px; padding: 0.5rem 1rem; margin-bottom: 1rem;">
                 <span style="font-size: 0.85rem; color: var(--text-primary); font-weight: 500;">
-                    Showing only plots with status <strong style="color: #06b6d4;">${formatHealthStatus(activeHealthFilter.status)}</strong> for <strong style="color: #06b6d4;">${displayType}</strong>
+                    Showing only plots with status <strong style="color: #06b6d4;">${displayStatusText}</strong> for <strong style="color: #06b6d4;">${displayType}</strong>
                 </span>
                 <button onclick="clearActiveHealthFilter()" style="padding: 0.25rem 0.5rem; background: #06b6d4; border: none; color: white; border-radius: 4px; font-size: 0.75rem; font-weight: 600; cursor: pointer;">Clear Filter</button>
             </div>
@@ -890,6 +1031,9 @@ function renderHealthSatelliteTable(results) {
         return;
     }
 
+    const loadGermCheckbox = document.getElementById('health-load-germination-checkbox');
+    const showGermination = !window.healthIndicatorsDisabled && loadGermCheckbox && loadGermCheckbox.checked;
+
     let html = filterBannerHtml + `
         <div class="metrics-grid" style="grid-template-columns: 1fr; margin-top: 1rem;">
             <div class="metric-card" style="padding: 0; overflow-x: auto;">
@@ -900,6 +1044,7 @@ function renderHealthSatelliteTable(results) {
                             <th style="padding: 1rem; border-bottom: 2px solid #06b6d4;">${window.healthIndicatorsDisabled ? 'NDVI (P / S)' : 'Greenness Status (P / S)'}</th>
                             <th style="padding: 1rem; border-bottom: 2px solid #06b6d4;">${window.healthIndicatorsDisabled ? 'NDRE (P / S)' : 'Nutrient Uptake (P / S)'}</th>
                             <th style="padding: 1rem; border-bottom: 2px solid #06b6d4;">${window.healthIndicatorsDisabled ? 'LSWI (Sentinel)' : 'Water Stress Status (Sentinel)'}</th>
+                            ${showGermination ? '<th style="padding: 1rem; border-bottom: 2px solid #06b6d4;">Germination (P / S)</th>' : ''}
                             <th style="padding: 1rem; border-bottom: 2px solid #06b6d4;">Harvested</th>
                             <th style="padding: 1rem; border-bottom: 2px solid #06b6d4;">Harvested Date</th>
                         </tr>
@@ -933,14 +1078,9 @@ function renderHealthSatelliteTable(results) {
             return res.sentinelDate !== '-' && res.planetDate === '-';
         })();
 
-        const sentinelDateBadge = hasSentinelNewer
-            ? ` <span style="background: rgba(6, 182, 212, 0.15); color: #06b6d4; font-size: 0.65rem; padding: 1px 4px; border-radius: 3px; font-weight: 600; display: inline-block; vertical-align: middle;">Latest</span>`
-            : '';
-
         const lBadgeHtml = ` <span style="background: rgba(6, 182, 212, 0.15); color: #06b6d4; font-size: 0.65rem; padding: 1px 4px; border-radius: 3px; font-weight: 600; display: inline-block; vertical-align: middle;">L</span>`;
         const planetLBadge = (!hasSentinelNewer && res.planetDate !== '-') ? lBadgeHtml : '';
         const sentinelLBadge = (hasSentinelNewer && res.sentinelDate !== '-') ? lBadgeHtml : '';
-        const waterLBadge = (hasSentinelNewer && res.sentinelDate !== '-') ? lBadgeHtml : '';
 
         const planetGreenStatus = formatHealthStatus(res.planetGreenness);
         const sentinelGreenStatus = formatHealthStatus(res.sentinelGreenness);
@@ -970,7 +1110,6 @@ function renderHealthSatelliteTable(results) {
 
         const plProviderText = res.plProvider === 'Planet' ? 'P' : 'S';
 
-        const plDateText = res.plDate === '-' ? 'PL: -' : `PL: ${plProviderText} : ${plDateFormatted}`;
         const plGreenText = res.plDate === '-' ? 'PL: -' : `PL: ${plProviderText} : ${plDateFormatted} : ${displayPlGreen}`;
         const plGreenColor = res.plDate === '-' ? 'var(--text-secondary)' : getHealthStatusColor(plGreenStatus);
 
@@ -980,6 +1119,42 @@ function renderHealthSatelliteTable(results) {
         const plWaterDateFormatted = formatCellDate(res.plWaterDate);
         const plWaterText = (res.plWaterStress === '-') ? 'PL: -' : `PL: ${plWaterDateFormatted} : ${displayPlWater}`;
         const plWaterColor = (res.plWaterStress === '-') ? 'var(--text-secondary)' : getHealthStatusColor(plWaterStatus);
+
+        // Germination Cell variables
+        let germinationCellHtml = '';
+        if (showGermination) {
+            const planetGermDateFormatted = formatCellDate(res.planetGermDate);
+            const sentinelGermDateFormatted = formatCellDate(res.sentinelGermDate);
+            const plGermDateFormatted = formatCellDate(res.plGermDate);
+
+            const planetGermStatus = formatGerminationStatus(res.planetGermination);
+            const sentinelGermStatus = formatGerminationStatus(res.sentinelGermination);
+            const plGermStatus = formatGerminationStatus(res.plGermination);
+
+            const hasSentinelGermNewer = (() => {
+                if (res.sentinelGermDate !== '-' && res.planetGermDate !== '-') {
+                    const pDate = new Date(res.planetGermDate);
+                    const sDate = new Date(res.sentinelGermDate);
+                    return sDate.getTime() > pDate.getTime();
+                }
+                return res.sentinelGermDate !== '-' && res.planetGermDate === '-';
+            })();
+
+            const planetGermLBadge = (!hasSentinelGermNewer && res.planetGermDate !== '-') ? lBadgeHtml : '';
+            const sentinelGermLBadge = (hasSentinelGermNewer && res.sentinelGermDate !== '-') ? lBadgeHtml : '';
+
+            const plGermProviderText = res.plGermProvider === 'Planet' ? 'P' : 'S';
+            const plGermDisplayText = res.plGermDate === '-' ? 'PL: -' : `PL: ${plGermProviderText} : ${plGermDateFormatted} : ${plGermStatus}`;
+            const plGermColor = res.plGermDate === '-' ? 'var(--text-secondary)' : getGerminationColor(plGermStatus);
+
+            germinationCellHtml = `
+                <td style="padding: 0.75rem;">
+                    <div style="font-size: 0.8rem; font-weight: 600; color: ${getGerminationColor(planetGermStatus)};">${res.planetGermDate === '-' ? 'P: -' : `P: ${planetGermDateFormatted} : ${planetGermStatus}${planetGermLBadge}`}</div>
+                    <div style="font-size: 0.8rem; font-weight: 600; color: ${getGerminationColor(sentinelGermStatus)}; margin-top: 0.25rem;">${res.sentinelGermDate === '-' ? 'S: -' : `S: ${sentinelGermDateFormatted} : ${sentinelGermStatus}${sentinelGermLBadge}`}</div>
+                    <div style="font-size: 0.8rem; font-weight: 600; color: ${plGermColor}; margin-top: 0.25rem; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 0.25rem;">${plGermDisplayText}</div>
+                </td>
+            `;
+        }
 
         html += `
             <tr style="border-bottom: 1px solid var(--border-color)">
@@ -998,6 +1173,7 @@ function renderHealthSatelliteTable(results) {
                     <div style="font-size: 0.8rem; font-weight: 600; color: ${getHealthStatusColor(fWater)};">${res.sentinelDate === '-' ? '-' : `${sentinelDateFormatted} : ${displayWater}`}</div>
                     <div style="font-size: 0.8rem; font-weight: 600; color: ${plWaterColor}; margin-top: 0.25rem; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 0.25rem;">${plWaterText}</div>
                 </td>
+                ${germinationCellHtml}
                 <td style="padding: 0.75rem; color: ${res.isHarvested === 'Yes' ? '#10b981' : '#f59e0b'}; font-weight: 600;">${res.isHarvested}</td>
                 <td style="padding: 0.75rem; color: var(--text-secondary);">${res.harvestedDate || '-'}</td>
             </tr>
@@ -1152,6 +1328,8 @@ if (typeof module !== 'undefined') {
         formatDateToDMY,
         classifyValueToStatus,
         formatHealthStatus,
-        getHealthStatusColor
+        getHealthStatusColor,
+        formatGerminationStatus,
+        getGerminationColor
     };
 }

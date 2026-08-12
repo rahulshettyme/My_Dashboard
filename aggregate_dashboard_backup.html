@@ -424,6 +424,10 @@
                 </h2>
                 <div style="display: flex; gap: 1rem; align-items: center;">
                     <span id="health-status" style="font-size: 0.85rem; font-weight: 600; color: #06b6d4; margin-right: 0.5rem;"></span>
+                    <label id="health-load-germination-wrapper" class="hidden" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; color: var(--text-primary); font-weight: 500; font-size: 0.85rem;">
+                        <input type="checkbox" id="health-load-germination-checkbox">
+                        <span>Load Germination Data</span>
+                    </label>
                     <button id="load-health-data-btn" onclick="handleLoadHealthData()" disabled
                         style="padding: 0.7rem 1.5rem; background: #06b6d4; opacity: 0.5; color: white; border: none; border-radius: 8px; cursor: not-allowed; transition: all 0.3s; font-weight: 700; box-shadow: 0 4px 12px rgba(6, 182, 212, 0.2);">
                         ❤️ Load Health Data
@@ -466,7 +470,7 @@
                 </div>
 
                 <!-- KPI Analysis Grid (Greenness, Nitrogen, Water Stress) -->
-                <div class="metrics-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; margin-bottom: 2rem;">
+                <div id="health-kpi-grid" class="metrics-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; margin-bottom: 2rem;">
                     <!-- Greenness Section -->
                     <div class="metric-card" style="padding: 1.25rem;">
                         <h3 id="health-greenness-title-text" style="margin-bottom: 1rem; color: #10b981; font-weight: 700; font-size: 1.1rem;">
@@ -546,6 +550,33 @@
                         </div>
                         <div id="health-water-table"></div>
                         <p id="health-water-insight" style="margin-top: 1rem; font-size: 0.85rem; color: var(--text-secondary); line-height: 1.4; border-top: 1px solid var(--border-color); padding-top: 0.75rem;"></p>
+                    </div>
+
+                    <!-- Germination Section -->
+                    <div id="health-germination-card" class="metric-card hidden" style="padding: 1.25rem;">
+                        <h3 id="health-germination-title-text" style="margin-bottom: 1rem; color: #a855f7; font-weight: 700; font-size: 1.1rem;">
+                            <i class="fas fa-seedling"></i> Germination
+                        </h3>
+                        <div id="health-germination-analyzed" style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem; font-weight: 600; background: rgba(168, 85, 247, 0.05); padding: 0.4rem 0.6rem; border-radius: 4px; display: inline-block;">
+                            Plots Analyzed (Covered): 0
+                        </div>
+                        <div style="margin-bottom: 1rem; padding: 0.5rem; background: rgba(99, 102, 241, 0.03); border: 1px solid rgba(99, 102, 241, 0.15); border-radius: 6px;">
+                            <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
+                                <span style="font-size: 0.8rem; color: var(--text-secondary); font-weight: 500;">Analysis Window (Days)</span>
+                                <div style="display: flex; gap: 0.25rem; align-items: center;">
+                                    <input type="number" id="health-germination-window" value="15" min="1" style="width: 55px; padding: 0.25rem; font-size: 0.8rem; border-radius: 4px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: var(--text-primary); text-align: center;">
+                                    <button onclick="handleHealthApplyFilter('germination')" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; border-radius: 4px; background: #a855f7; border: none; color: white; cursor: pointer; font-weight: 600;">Apply Filter</button>
+                                </div>
+                            </div>
+                            <div id="health-germination-date-window" style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 0.35rem; font-style: italic; text-align: left; display: flex; align-items: center; gap: 0.25rem;">
+                                <i class="far fa-calendar-alt"></i> Date Window: Calculating...
+                            </div>
+                        </div>
+                        <div style="height: 180px; margin-bottom: 1rem; position: relative;">
+                            <canvas id="health-germination-pie"></canvas>
+                        </div>
+                        <div id="health-germination-table"></div>
+                        <p id="health-germination-insight" style="margin-top: 1rem; font-size: 0.85rem; color: var(--text-secondary); line-height: 1.4; border-top: 1px solid var(--border-color); padding-top: 0.75rem;"></p>
                     </div>
                 </div>
 

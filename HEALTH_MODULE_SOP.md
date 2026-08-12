@@ -40,6 +40,14 @@ When `HEALTH_INDICATORS_DISABLED` is `true`, fractional values for NDVI, NDRE, a
 * **Hide Harvested Plots**: If a plot is flagged as harvested (`isHarvested === 'Yes'`), it can be filtered out.
 * **KPI Alignment**: If the KPI include-harvested checkbox is off, the base details table filters out harvested plots to align row counts exactly with the KPI card counts.
 
+### E. Germination KPI Mappings (Indicators Enabled Only)
+* **Availability**: Germination is available **only when health indicators are present/enabled** (`HEALTH_INDICATORS_DISABLED` = false). It is completely hidden when they are disabled.
+* **Loading Mechanism**: A checkbox wrapper (`id="health-load-germination-wrapper"`) is presented next to the Load Health Data button in the enabled mode. Hitting `/services/farm/api/plot-risk/germination` happens only if checked.
+* **Status & Color Mapping**:
+  * `good` / `normal` $\to$ `'Good'` (Green, `#10b981`)
+  * `moderate` $\to$ `'Moderate'` (Yellow, `#f59e0b`)
+  * `needsAttention` / contains `attention` $\to$ `'Need Attention'` (Red, `#ef4444`)
+
 ---
 
 ## 3. Previous Latest (PL) Logic
@@ -47,7 +55,7 @@ To provide a comparison timeline:
 1. **Date Selection**: After sorting all valid capture records DESC (latest first), the PL record is selected by filtering out all records captured on the same calendar day as the latest record. The **first record from a strictly previous calendar day** is selected as the Previous Latest (`PL`) record (prioritizing Planet if both providers have data on that previous day).
 2. **Sentinel-only LSWI PL**: Because LSWI is Sentinel-only, the PL water stress value is extracted by filtering out all Sentinel records captured on the same calendar day as the latest Sentinel record. The **first Sentinel record from a strictly previous Sentinel calendar day** is selected as the PL water stress record.
 3. **UI Layout**:
-   * Greenness / Nutrient columns: Display:
+   * Greenness / Nutrient / Germination columns: Display:
      * Planet: `P: <date> : <status_or_value>` + `L` badge if Planet is latest (or `P: -` if empty)
      * Sentinel: `S: <date> : <status_or_value>` + `L` badge if Sentinel is latest (or `S: -` if empty)
      * PL: `PL: <provider> : <date> : <status_or_value>` (or `PL: -` if empty)
@@ -70,3 +78,5 @@ To provide a comparison timeline:
 * **2026-08-12**: Refined details table formatting to display formatted capture dates inline for all Planet and Sentinel status cells.
 * **2026-08-12**: Added a compact inline `L` (Latest) badge next to the newest provider in Greenness and Nutrient cells, omitting it from Sentinel-only Water Stress.
 * **2026-08-12**: Removed the redundant Capture Date column from the base details table to optimize screen layout space.
+* **2026-08-12**: Integrated "Germination" Crop Health Risk KPI card and table column with conditional load checkbox beside the Load Health Data button.
+

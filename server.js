@@ -1588,6 +1588,56 @@ app.get('/api/user-aggregate/satellite', (req, res) => {
     satReq.end();
 });
 
+// GET Germination Data Proxy
+app.get('/api/user-aggregate/germination', (req, res) => {
+    const { environment, caIds } = req.query;
+    const authHeader = req.headers.authorization;
+
+    if (!environment || !caIds) return res.status(400).json({ error: 'Missing environment or caIds' });
+    if (!authHeader) return res.status(401).json({ error: 'Missing authorization' });
+
+    const db = readDb();
+    const apiBaseUrl = resolveEnvUrl(db, environment, 'api');
+    if (!apiBaseUrl) return res.status(400).json({ error: 'Unknown environment' });
+
+    const fullUrl = `${apiBaseUrl}/services/farm/api/plot-risk/germination?caIds=${caIds}&sortBy=date&orderBy=ASC&size=1000`;
+    const urlObj = new URL(fullUrl);
+
+    const options = {
+        hostname: urlObj.hostname,
+        port: 443,
+        path: urlObj.pathname + urlObj.search,
+        method: 'GET',
+        headers: {
+            'Authorization': authHeader,
+            'Accept': 'application/json',
+            'User-Agent': 'Mozilla/5.0'
+        }
+    };
+
+    const gReq = https.request(options, (gRes) => {
+        let data = '';
+        gRes.on('data', chunk => data += chunk);
+        gRes.on('end', () => {
+            if (data.trim().startsWith('<')) return res.status(502).json({ error: 'API returned HTML' });
+            try {
+                const parsedData = JSON.parse(data);
+                if (gRes.statusCode >= 200 && gRes.statusCode < 300) {
+                    res.json(parsedData);
+                } else {
+                    res.status(gRes.statusCode).json(parsedData);
+                }
+            } catch (e) {
+                console.error('[User Aggregate] Germination Parse Error:', e.message);
+                res.status(500).json({ error: 'Failed to proxy germination data' });
+            }
+        });
+    });
+    gReq.on('error', e => res.status(500).json({ error: e.message }));
+    gReq.end();
+});
+
+
 // GET Growth Stage Data
 app.get('/api/user-aggregate/growth-stage', (req, res) => {
     const { environment, caIds } = req.query;
