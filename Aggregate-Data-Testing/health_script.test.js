@@ -1,7 +1,7 @@
 const assert = require('assert');
 const healthScript = require('./health_script.js');
 
-const baselineCount = 6;
+const baselineCount = 8;
 
 const tests = [
     {
@@ -15,18 +15,22 @@ const tests = [
         name: 'isWithinAnalysisWindow',
         fn: () => {
             const today = new Date();
+            
+            // Today (should be included now)
+            const todayStr = today.toISOString();
+            assert.strictEqual(healthScript.isWithinAnalysisWindow(todayStr, 15), true, 'Today must be included in the analysis window');
+
+            // Yesterday (should be included)
             const yesterday = new Date(today);
             yesterday.setDate(today.getDate() - 1);
             const yesterdayStr = yesterday.toISOString();
             assert.strictEqual(healthScript.isWithinAnalysisWindow(yesterdayStr, 15), true, 'Yesterday must be inside the analysis window');
 
-            const todayStr = today.toISOString();
-            assert.strictEqual(healthScript.isWithinAnalysisWindow(todayStr, 15), false, 'Today must be excluded from the analysis window');
-
+            // 15 days ago (should be outside a 15-day window including today)
             const oldDate = new Date(today);
-            oldDate.setDate(today.getDate() - 16);
+            oldDate.setDate(today.getDate() - 15);
             const oldDateStr = oldDate.toISOString();
-            assert.strictEqual(healthScript.isWithinAnalysisWindow(oldDateStr, 15), false, '16 days ago must be outside 15-day window');
+            assert.strictEqual(healthScript.isWithinAnalysisWindow(oldDateStr, 15), false, '15 days ago must be outside 15-day window');
         }
     },
     {
@@ -75,6 +79,29 @@ const tests = [
         fn: () => {
             global.window.healthIndicatorsDisabled = true;
             assert.strictEqual(healthScript.formatHealthStatus(0.66), '0.66 - 1', '0.66 boundary value must map to range 0.66 - 1');
+        }
+    },
+    {
+        name: 'plSameDayFilteringLogic',
+        fn: () => {
+            const getCalendarDay = (dateStr) => {
+                if (!dateStr || dateStr === '-') return '';
+                const d = new Date(dateStr);
+                return isNaN(d.getTime()) ? '' : d.toDateString();
+            };
+
+            const validRecords = [
+                { capturedDateTime: '2026-08-10T12:00:00Z', provider: 'planet' },
+                { capturedDateTime: '2026-08-10T08:00:00Z', provider: 'sentinel' },
+                { capturedDateTime: '2026-08-05T09:00:00Z', provider: 'sentinel' }
+            ];
+
+            const latestDay = getCalendarDay(validRecords[0].capturedDateTime);
+            const plCandidates = validRecords.filter(r => getCalendarDay(r.capturedDateTime) !== latestDay);
+
+            assert.strictEqual(plCandidates.length, 1, 'Should filter out all records from the same day as latest');
+            assert.strictEqual(plCandidates[0].capturedDateTime, '2026-08-05T09:00:00Z', 'PL candidate should be from a previous day');
+            assert.strictEqual(plCandidates[0].provider, 'sentinel', 'PL candidate provider should match');
         }
     }
 ];

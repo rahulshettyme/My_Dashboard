@@ -258,38 +258,75 @@ async function handleLoadHealthData() {
                         if (planetData && sentinelData) break;
                     }
 
-                    // 4. Extract the PL (2nd overall latest record) from validRecords
-                    let plData = null;
-                    if (validRecords.length >= 2) {
-                        const rec = validRecords[1];
-                        const isPlanet = rec.provider === 'planet';
-                        plData = {
-                            date: rec.capturedDateTime,
-                            provider: isPlanet ? 'Planet' : 'Sentinel',
-                            greenness: '-',
-                            nitrogen: '-',
-                            waterStress: '-'
-                        };
+                    // Helper to get calendar day (e.g. "Mon Aug 10 2026")
+                    const getCalendarDay = (dateStr) => {
+                        if (!dateStr || dateStr === '-') return '';
+                        const d = new Date(dateStr);
+                        return isNaN(d.getTime()) ? '' : d.toDateString();
+                    };
 
-                        if (window.healthIndicatorsDisabled) {
-                            const stats = rec.metrics?.statistics;
-                            if (stats) {
-                                plData.greenness = stats.ndvi ? stats.ndvi.mean : '-';
-                                plData.nitrogen = stats.ndre ? stats.ndre.mean : '-';
-                                if (!isPlanet) {
-                                    plData.waterStress = stats.lswi ? stats.lswi.mean : '-';
+                    // 4. Extract the PL record (for Greenness & Nitrogen)
+                    // Must be strictly from a previous calendar day than the overall latest record (validRecords[0])
+                    let plData = null;
+                    if (validRecords.length > 0) {
+                        const latestDay = getCalendarDay(validRecords[0].capturedDateTime);
+                        const plCandidates = validRecords.filter(r => getCalendarDay(r.capturedDateTime) !== latestDay);
+                        
+                        if (plCandidates.length > 0) {
+                            const rec = plCandidates[0];
+                            const isPlanet = rec.provider === 'planet';
+                            plData = {
+                                date: rec.capturedDateTime,
+                                provider: isPlanet ? 'Planet' : 'Sentinel',
+                                greenness: '-',
+                                nitrogen: '-',
+                                waterStress: '-'
+                            };
+
+                            if (window.healthIndicatorsDisabled) {
+                                const stats = rec.metrics?.statistics;
+                                if (stats) {
+                                    plData.greenness = stats.ndvi ? stats.ndvi.mean : '-';
+                                    plData.nitrogen = stats.ndre ? stats.ndre.mean : '-';
                                 }
-                            }
-                        } else {
-                            const m = rec.metrics?.cropMetrics?.[0];
-                            if (m) {
-                                plData.greenness = m.plotDeviationNDVI;
-                                plData.nitrogen = m.plotDeviationNDRE;
-                                if (!isPlanet) {
-                                    plData.waterStress = m.plotDeviationLSWI;
+                            } else {
+                                const m = rec.metrics?.cropMetrics?.[0];
+                                if (m) {
+                                    plData.greenness = m.plotDeviationNDVI;
+                                    plData.nitrogen = m.plotDeviationNDRE;
                                 }
                             }
                         }
+                    }
+
+                    // 5. Extract PL Water Stress from a previous Sentinel capture day (since LSWI is Sentinel-only)
+                    // Must be strictly from a previous calendar day than the latest Sentinel record (sentinelRecords[0])
+                    const sentinelRecords = validRecords.filter(r => r.provider === 'sentinel2' || r.provider === 'sentinel');
+                    let plWaterStressVal = '-';
+                    let plWaterDateVal = '-';
+                    if (sentinelRecords.length > 0) {
+                        const latestSentinelDay = getCalendarDay(sentinelRecords[0].capturedDateTime);
+                        const plSentinelCandidates = sentinelRecords.filter(r => getCalendarDay(r.capturedDateTime) !== latestSentinelDay);
+                        
+                        if (plSentinelCandidates.length > 0) {
+                            const secSentinel = plSentinelCandidates[0];
+                            plWaterDateVal = secSentinel.capturedDateTime;
+                            if (window.healthIndicatorsDisabled) {
+                                const stats = secSentinel.metrics?.statistics;
+                                if (stats && stats.lswi) {
+                                    plWaterStressVal = stats.lswi.mean;
+                                }
+                            } else {
+                                const m = secSentinel.metrics?.cropMetrics?.[0];
+                                if (m && m.plotDeviationLSWI !== undefined) {
+                                    plWaterStressVal = m.plotDeviationLSWI;
+                                }
+                            }
+                        }
+                    }
+                    if (plData) {
+                        plData.waterStress = plWaterStressVal;
+                        plData.waterDate = plWaterDateVal;
                     }
 
                     satResult = { planetData, sentinelData, plData };
@@ -327,7 +364,8 @@ async function handleLoadHealthData() {
                 plProvider: satResult?.plData ? satResult.plData.provider : '-',
                 plGreenness: satResult?.plData ? satResult.plData.greenness : '-',
                 plNitrogen: satResult?.plData ? satResult.plData.nitrogen : '-',
-                plWaterStress: satResult?.plData ? satResult.plData.waterStress : '-'
+                plWaterStress: satResult?.plData ? satResult.plData.waterStress : '-',
+                plWaterDate: satResult?.plData ? satResult.plData.waterDate : '-'
             };
         } catch (error) {
             console.error(`Error processing health for plot ${plot.caId}:`, error);
@@ -496,8 +534,7 @@ function formatDateToDMY(date) {
 }
 
 /**
- * Helper to check if a date string is within the last N days from today, excluding today.
- * Today is excluded, meaning the record date must be strictly before today (local time).
+ * Helper to check if a date string is within the last N days from today, including today.
  */
 function isWithinAnalysisWindow(dateStr, windowDays) {
     if (!dateStr || dateStr === '-') return false;
@@ -512,12 +549,12 @@ function isWithinAnalysisWindow(dateStr, windowDays) {
     const record = new Date(recordDate);
     record.setHours(0, 0, 0, 0);
 
-    // Lower bound: today - windowDays
+    // Lower bound: today - windowDays + 1 (since today is included)
     const startLimit = new Date(today);
-    startLimit.setDate(today.getDate() - windowDays);
+    startLimit.setDate(today.getDate() - windowDays + 1);
 
-    // Return true if startLimit <= record < today
-    return record.getTime() >= startLimit.getTime() && record.getTime() < today.getTime();
+    // Return true if startLimit <= record <= today
+    return record.getTime() >= startLimit.getTime() && record.getTime() <= today.getTime();
 }
 
 /**
@@ -544,10 +581,9 @@ function renderHealthCategoryKPI(type, results) {
     if (dateWindowEl) {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        const endLimit = new Date(today);
-        endLimit.setDate(today.getDate() - 1); // Yesterday
+        const endLimit = new Date(today); // Today (inclusive)
         const startLimit = new Date(today);
-        startLimit.setDate(today.getDate() - windowDays); // today - windowDays
+        startLimit.setDate(today.getDate() - windowDays + 1); // today - windowDays + 1
         dateWindowEl.innerHTML = `<i class="far fa-calendar-alt"></i> Window: ${formatDateToDMY(startLimit)} to ${formatDateToDMY(endLimit)}`;
     }
 
@@ -781,11 +817,16 @@ function renderHealthSatelliteTable(results) {
 
     let filteredResults = results;
     if (activeHealthFilter) {
+        const includeHarvested = document.getElementById('health-include-harvested')?.checked || false;
+        if (!includeHarvested) {
+            filteredResults = filteredResults.filter(r => r.isHarvested !== 'Yes');
+        }
+
         const { type, status } = activeHealthFilter;
         const windowInput = document.getElementById(`health-${type}-window`);
         const windowDays = windowInput ? parseInt(windowInput.value, 10) : 15;
 
-        filteredResults = results.filter(res => {
+        filteredResults = filteredResults.filter(res => {
             let val = "-", date = "-";
             if (type === 'greenness') {
                 const target = getTargetProviderData(res, 'greenness');
@@ -856,7 +897,6 @@ function renderHealthSatelliteTable(results) {
                     <thead>
                         <tr style="background: rgba(6, 182, 212, 0.1); text-align: left;">
                             <th style="padding: 1rem; border-bottom: 2px solid #06b6d4;">Plot Name</th>
-                            <th style="padding: 1rem; border-bottom: 2px solid #06b6d4;">Capture Date (P / S)</th>
                             <th style="padding: 1rem; border-bottom: 2px solid #06b6d4;">${window.healthIndicatorsDisabled ? 'NDVI (P / S)' : 'Greenness Status (P / S)'}</th>
                             <th style="padding: 1rem; border-bottom: 2px solid #06b6d4;">${window.healthIndicatorsDisabled ? 'NDRE (P / S)' : 'Nutrient Uptake (P / S)'}</th>
                             <th style="padding: 1rem; border-bottom: 2px solid #06b6d4;">${window.healthIndicatorsDisabled ? 'LSWI (Sentinel)' : 'Water Stress Status (Sentinel)'}</th>
@@ -897,6 +937,11 @@ function renderHealthSatelliteTable(results) {
             ? ` <span style="background: rgba(6, 182, 212, 0.15); color: #06b6d4; font-size: 0.65rem; padding: 1px 4px; border-radius: 3px; font-weight: 600; display: inline-block; vertical-align: middle;">Latest</span>`
             : '';
 
+        const lBadgeHtml = ` <span style="background: rgba(6, 182, 212, 0.15); color: #06b6d4; font-size: 0.65rem; padding: 1px 4px; border-radius: 3px; font-weight: 600; display: inline-block; vertical-align: middle;">L</span>`;
+        const planetLBadge = (!hasSentinelNewer && res.planetDate !== '-') ? lBadgeHtml : '';
+        const sentinelLBadge = (hasSentinelNewer && res.sentinelDate !== '-') ? lBadgeHtml : '';
+        const waterLBadge = (hasSentinelNewer && res.sentinelDate !== '-') ? lBadgeHtml : '';
+
         const planetGreenStatus = formatHealthStatus(res.planetGreenness);
         const sentinelGreenStatus = formatHealthStatus(res.sentinelGreenness);
         const planetNitrogenStatus = formatHealthStatus(res.planetNitrogen);
@@ -926,35 +971,31 @@ function renderHealthSatelliteTable(results) {
         const plProviderText = res.plProvider === 'Planet' ? 'P' : 'S';
 
         const plDateText = res.plDate === '-' ? 'PL: -' : `PL: ${plProviderText} : ${plDateFormatted}`;
-        const plGreenText = res.plDate === '-' ? 'PL: -' : `PL: ${plProviderText} : ${displayPlGreen}`;
+        const plGreenText = res.plDate === '-' ? 'PL: -' : `PL: ${plProviderText} : ${plDateFormatted} : ${displayPlGreen}`;
         const plGreenColor = res.plDate === '-' ? 'var(--text-secondary)' : getHealthStatusColor(plGreenStatus);
 
-        const plNitrogenText = res.plDate === '-' ? 'PL: -' : `PL: ${plProviderText} : ${displayPlNitrogen}`;
+        const plNitrogenText = res.plDate === '-' ? 'PL: -' : `PL: ${plProviderText} : ${plDateFormatted} : ${displayPlNitrogen}`;
         const plNitrogenColor = res.plDate === '-' ? 'var(--text-secondary)' : getHealthStatusColor(plNitrogenStatus);
 
-        const plWaterText = (res.plDate === '-' || res.plWaterStress === '-') ? 'PL: -' : `PL: ${plProviderText} : ${displayPlWater}`;
-        const plWaterColor = (res.plDate === '-' || res.plWaterStress === '-') ? 'var(--text-secondary)' : getHealthStatusColor(plWaterStatus);
+        const plWaterDateFormatted = formatCellDate(res.plWaterDate);
+        const plWaterText = (res.plWaterStress === '-') ? 'PL: -' : `PL: ${plWaterDateFormatted} : ${displayPlWater}`;
+        const plWaterColor = (res.plWaterStress === '-') ? 'var(--text-secondary)' : getHealthStatusColor(plWaterStatus);
 
         html += `
             <tr style="border-bottom: 1px solid var(--border-color)">
                 <td style="padding: 0.75rem; color: var(--text-primary); font-weight: 500;">${res.plotName}</td>
                 <td style="padding: 0.75rem;">
-                    <div style="font-size: 0.8rem; color: var(--text-secondary);">P: ${planetDateFormatted}</div>
-                    <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.25rem;">S: ${sentinelDateFormatted}${sentinelDateBadge}</div>
-                    <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.25rem; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 0.25rem;">${plDateText}</div>
-                </td>
-                <td style="padding: 0.75rem;">
-                    <div style="font-size: 0.8rem; font-weight: 600; color: ${getHealthStatusColor(planetGreenStatus)};">Planet: ${displayPlanetGreen}</div>
-                    <div style="font-size: 0.8rem; font-weight: 600; color: ${getHealthStatusColor(sentinelGreenStatus)}; margin-top: 0.25rem;">Sentinel: ${displaySentinelGreen}</div>
+                    <div style="font-size: 0.8rem; font-weight: 600; color: ${getHealthStatusColor(planetGreenStatus)};">${res.planetDate === '-' ? 'P: -' : `P: ${planetDateFormatted} : ${displayPlanetGreen}${planetLBadge}`}</div>
+                    <div style="font-size: 0.8rem; font-weight: 600; color: ${getHealthStatusColor(sentinelGreenStatus)}; margin-top: 0.25rem;">${res.sentinelDate === '-' ? 'S: -' : `S: ${sentinelDateFormatted} : ${displaySentinelGreen}${sentinelLBadge}`}</div>
                     <div style="font-size: 0.8rem; font-weight: 600; color: ${plGreenColor}; margin-top: 0.25rem; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 0.25rem;">${plGreenText}</div>
                 </td>
                 <td style="padding: 0.75rem;">
-                    <div style="font-size: 0.8rem; font-weight: 600; color: ${getHealthStatusColor(planetNitrogenStatus)};">Planet: ${displayPlanetNitrogen}</div>
-                    <div style="font-size: 0.8rem; font-weight: 600; color: ${getHealthStatusColor(sentinelNitrogenStatus)}; margin-top: 0.25rem;">Sentinel: ${displaySentinelNitrogen}</div>
+                    <div style="font-size: 0.8rem; font-weight: 600; color: ${getHealthStatusColor(planetNitrogenStatus)};">${res.planetDate === '-' ? 'P: -' : `P: ${planetDateFormatted} : ${displayPlanetNitrogen}${planetLBadge}`}</div>
+                    <div style="font-size: 0.8rem; font-weight: 600; color: ${getHealthStatusColor(sentinelNitrogenStatus)}; margin-top: 0.25rem;">${res.sentinelDate === '-' ? 'S: -' : `S: ${sentinelDateFormatted} : ${displaySentinelNitrogen}${sentinelLBadge}`}</div>
                     <div style="font-size: 0.8rem; font-weight: 600; color: ${plNitrogenColor}; margin-top: 0.25rem; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 0.25rem;">${plNitrogenText}</div>
                 </td>
                 <td style="padding: 0.75rem;">
-                    <div style="font-weight: 600; color: ${getHealthStatusColor(fWater)};">${displayWater}</div>
+                    <div style="font-size: 0.8rem; font-weight: 600; color: ${getHealthStatusColor(fWater)};">${res.sentinelDate === '-' ? '-' : `${sentinelDateFormatted} : ${displayWater}`}</div>
                     <div style="font-size: 0.8rem; font-weight: 600; color: ${plWaterColor}; margin-top: 0.25rem; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 0.25rem;">${plWaterText}</div>
                 </td>
                 <td style="padding: 0.75rem; color: ${res.isHarvested === 'Yes' ? '#10b981' : '#f59e0b'}; font-weight: 600;">${res.isHarvested}</td>

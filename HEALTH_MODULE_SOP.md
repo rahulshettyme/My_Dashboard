@@ -47,9 +47,13 @@ To provide a comparison timeline:
 1. **Date Selection**: After sorting all valid capture records DESC (latest first), the PL record is selected by filtering out all records captured on the same calendar day as the latest record. The **first record from a strictly previous calendar day** is selected as the Previous Latest (`PL`) record (prioritizing Planet if both providers have data on that previous day).
 2. **Sentinel-only LSWI PL**: Because LSWI is Sentinel-only, the PL water stress value is extracted by filtering out all Sentinel records captured on the same calendar day as the latest Sentinel record. The **first Sentinel record from a strictly previous Sentinel calendar day** is selected as the PL water stress record.
 3. **UI Layout**:
-   * Capture Date column: Displays `PL: <provider> : <date>` (e.g. `PL: P : 15-07-2026`).
-   * Greenness / Nutrient columns: Display `PL: <provider> : <date> : <status_or_value>` (e.g. `PL: P : 15-07-2026 : Normal`).
-   * Water Stress column: Displays `PL: <date> : <status_or_value>` (no provider prefix since LSWI is Sentinel-only, e.g. `PL: 14-07-2026 : Normal`).
+   * Greenness / Nutrient columns: Display:
+     * Planet: `P: <date> : <status_or_value>` + `L` badge if Planet is latest (or `P: -` if empty)
+     * Sentinel: `S: <date> : <status_or_value>` + `L` badge if Sentinel is latest (or `S: -` if empty)
+     * PL: `PL: <provider> : <date> : <status_or_value>` (or `PL: -` if empty)
+   * Water Stress column: Displays:
+     * Latest: `<date> : <status_or_value>` (no L badge, or `-` if empty)
+     * PL: `PL: <date> : <status_or_value>` (no provider prefix, or `PL: -` if empty)
 
 ---
 
@@ -63,3 +67,6 @@ To provide a comparison timeline:
 * **2026-08-10**: Injected inline date metadata directly into PL status displays.
 * **2026-08-11**: Updated analysis window bounds to start from today (inclusive) instead of yesterday.
 * **2026-08-12**: Updated PL and PL LSWI calculations to filter out same-day captures, resolving overlap issues by forcing PL to always refer to a strictly previous calendar day.
+* **2026-08-12**: Refined details table formatting to display formatted capture dates inline for all Planet and Sentinel status cells.
+* **2026-08-12**: Added a compact inline `L` (Latest) badge next to the newest provider in Greenness and Nutrient cells, omitting it from Sentinel-only Water Stress.
+* **2026-08-12**: Removed the redundant Capture Date column from the base details table to optimize screen layout space.
