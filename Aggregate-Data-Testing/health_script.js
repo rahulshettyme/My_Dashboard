@@ -623,7 +623,7 @@ function renderHealthKPIDashboard(results) {
 
     if (showGermination) {
         if (germinationCard) germinationCard.classList.remove('hidden');
-        if (grid) grid.style.gridTemplateColumns = 'repeat(4, 1fr)';
+        if (grid) grid.style.gridTemplateColumns = 'repeat(2, 1fr)';
         renderHealthCategoryKPI('germination', kpiResults);
     } else {
         if (germinationCard) germinationCard.classList.add('hidden');
@@ -739,9 +739,15 @@ function renderHealthCategoryKPI(type, results) {
             val = res.sentinelWaterStress;
             date = res.sentinelDate;
         } else if (type === 'germination') {
-            const target = getTargetProviderData(res, 'germination');
-            val = target.val;
-            date = target.date;
+            const onlyPlanet = document.getElementById('health-germination-only-planet')?.checked || false;
+            if (onlyPlanet) {
+                val = res.planetGermination;
+                date = res.planetGermDate;
+            } else {
+                const target = getTargetProviderData(res, 'germination');
+                val = target.val;
+                date = target.date;
+            }
         }
 
         let status = val;
@@ -972,9 +978,15 @@ function renderHealthSatelliteTable(results) {
                 val = res.sentinelWaterStress;
                 date = res.sentinelDate;
             } else if (type === 'germination') {
-                const target = getTargetProviderData(res, 'germination');
-                val = target.val;
-                date = target.date;
+                const onlyPlanet = document.getElementById('health-germination-only-planet')?.checked || false;
+                if (onlyPlanet) {
+                    val = res.planetGermination;
+                    date = res.planetGermDate;
+                } else {
+                    const target = getTargetProviderData(res, 'germination');
+                    val = target.val;
+                    date = target.date;
+                }
             }
 
             let plotStatus = val;

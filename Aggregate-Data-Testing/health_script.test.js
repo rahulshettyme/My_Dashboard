@@ -1,7 +1,7 @@
 const assert = require('assert');
 const healthScript = require('./health_script.js');
 
-const baselineCount = 8;
+const baselineCount = 10;
 
 const tests = [
     {

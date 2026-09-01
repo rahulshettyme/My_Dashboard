@@ -557,8 +557,14 @@
                         <h3 id="health-germination-title-text" style="margin-bottom: 1rem; color: #a855f7; font-weight: 700; font-size: 1.1rem;">
                             <i class="fas fa-seedling"></i> Germination
                         </h3>
-                        <div id="health-germination-analyzed" style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem; font-weight: 600; background: rgba(168, 85, 247, 0.05); padding: 0.4rem 0.6rem; border-radius: 4px; display: inline-block;">
-                            Plots Analyzed (Covered): 0
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+                            <label style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.8rem; color: var(--text-secondary); cursor: pointer; font-weight: 600;">
+                                <input type="checkbox" id="health-germination-only-planet" onchange="handleHealthApplyFilter('germination')">
+                                <span>Consider only Planet</span>
+                            </label>
+                            <div id="health-germination-analyzed" style="font-size: 0.85rem; color: var(--text-secondary); font-weight: 600; background: rgba(168, 85, 247, 0.05); padding: 0.4rem 0.6rem; border-radius: 4px; display: inline-block; margin: 0;">
+                                Plots Analyzed (Covered): 0
+                            </div>
                         </div>
                         <div style="margin-bottom: 1rem; padding: 0.5rem; background: rgba(99, 102, 241, 0.03); border: 1px solid rgba(99, 102, 241, 0.15); border-radius: 6px;">
                             <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
