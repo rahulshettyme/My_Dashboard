@@ -1495,6 +1495,148 @@ function convertHarvest(valueInTonnes, targetUnit, masterData = null) {
     return valueInTonnes * massFactor;
 }
 
+function formatTrendDate(dateStr) {
+    if (!dateStr) return '';
+    const parts = dateStr.split('T')[0].split('-');
+    if (parts.length === 3) {
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const mIdx = parseInt(parts[1], 10) - 1;
+        const day = parseInt(parts[2], 10);
+        return `${day < 10 ? '0' + day : day} ${months[mIdx] || ''}`;
+    }
+    return dateStr;
+}
+
+function extractPlotMultiModelData(d, yieldUnitOverride = null, harvestUnitOverride = null) {
+    if (!d || !Array.isArray(d.yieldRawRecords)) return null;
+
+    const bDaysRecord = d.yieldRawRecords.find(r => (r.modelType || '').toUpperCase() === 'BIOMASS_DAYS');
+    const tasumiRecord = d.yieldRawRecords.find(r => (r.modelType || '').toUpperCase() === 'TASUMI');
+
+    if (!bDaysRecord || !Array.isArray(bDaysRecord.gddPredictions) || bDaysRecord.gddPredictions.length === 0) {
+        return null;
+    }
+
+    const yieldUnit = yieldUnitOverride || (typeof getDataYieldUnit === 'function' ? getDataYieldUnit() : 'kgs_acre');
+    const harvestUnit = harvestUnitOverride || (typeof getDataHarvestUnit === 'function' ? getDataHarvestUnit() : 'kgs');
+
+    // Sort biomass days progression chronologically
+    const sortedGdd = [...bDaysRecord.gddPredictions].sort((a, b) => (a.cutoff_date || '').localeCompare(b.cutoff_date || ''));
+
+    const labels = [];
+    const yieldBiomassData = [];
+    const yieldBiomassMin = [];
+    const yieldBiomassMax = [];
+    const harvestBiomassData = [];
+    const harvestBiomassMin = [];
+    const harvestBiomassMax = [];
+
+    sortedGdd.forEach(p => {
+        labels.push(formatTrendDate(p.cutoff_date));
+
+        const rawYAvg = parseFloat(p.yieldAvg || p.yield_days || p.yieldMin || 0);
+        const rawYMin = parseFloat(p.yieldMin !== undefined ? p.yieldMin : rawYAvg);
+        const rawYMax = parseFloat(p.yieldMax !== undefined ? p.yieldMax : rawYAvg);
+
+        const rawHAvg = parseFloat(p.productionAvg || p.productionMin || 0);
+        const rawHMin = parseFloat(p.productionMin !== undefined ? p.productionMin : rawHAvg);
+        const rawHMax = parseFloat(p.productionMax !== undefined ? p.productionMax : rawHAvg);
+
+        yieldBiomassData.push(parseFloat(convertYield(rawYAvg, yieldUnit).toFixed(2)));
+        yieldBiomassMin.push(parseFloat(convertYield(Math.min(rawYMin, rawYMax), yieldUnit).toFixed(2)));
+        yieldBiomassMax.push(parseFloat(convertYield(Math.max(rawYMin, rawYMax), yieldUnit).toFixed(2)));
+
+        harvestBiomassData.push(parseFloat(convertHarvest(rawHAvg, harvestUnit).toFixed(2)));
+        harvestBiomassMin.push(parseFloat(convertHarvest(Math.min(rawHMin, rawHMax), harvestUnit).toFixed(2)));
+        harvestBiomassMax.push(parseFloat(convertHarvest(Math.max(rawHMin, rawHMax), harvestUnit).toFixed(2)));
+    });
+
+    let tasumiYieldAvg = null;
+    let tasumiYieldMin = null;
+    let tasumiYieldMax = null;
+    let tasumiHarvestAvg = null;
+    let tasumiHarvestMin = null;
+    let tasumiHarvestMax = null;
+    let tasumiDateStr = null;
+
+    if (tasumiRecord && tasumiRecord.parameters) {
+        const p = tasumiRecord.parameters;
+        const rawYAvg = parseFloat(p.yieldAvg || p.yieldMin || 0);
+        const rawYMin = parseFloat(p.yieldMin !== undefined ? p.yieldMin : rawYAvg);
+        const rawYMax = parseFloat(p.yieldMax !== undefined ? p.yieldMax : rawYAvg);
+
+        const rawHAvg = parseFloat(p.productionAvg || p.productionMin || 0);
+        const rawHMin = parseFloat(p.productionMin !== undefined ? p.productionMin : rawHAvg);
+        const rawHMax = parseFloat(p.productionMax !== undefined ? p.productionMax : rawHAvg);
+
+        tasumiYieldAvg = parseFloat(convertYield(rawYAvg, yieldUnit).toFixed(2));
+        tasumiYieldMin = parseFloat(convertYield(Math.min(rawYMin, rawYMax), yieldUnit).toFixed(2));
+        tasumiYieldMax = parseFloat(convertYield(Math.max(rawYMin, rawYMax), yieldUnit).toFixed(2));
+
+        tasumiHarvestAvg = parseFloat(convertHarvest(rawHAvg, harvestUnit).toFixed(2));
+        tasumiHarvestMin = parseFloat(convertHarvest(Math.min(rawHMin, rawHMax), harvestUnit).toFixed(2));
+        tasumiHarvestMax = parseFloat(convertHarvest(Math.max(rawHMin, rawHMax), harvestUnit).toFixed(2));
+
+        tasumiDateStr = tasumiRecord.createdDateTime 
+            ? formatTrendDate(tasumiRecord.createdDateTime.substring(0, 10)) 
+            : (tasumiRecord.predictionDate ? formatTrendDate(tasumiRecord.predictionDate.substring(0, 10)) : 'Latest');
+    }
+
+    const unifiedYieldTrend = [...yieldBiomassData];
+    const unifiedYieldMin = [...yieldBiomassMin];
+    const unifiedYieldMax = [...yieldBiomassMax];
+
+    const unifiedHarvestTrend = [...harvestBiomassData];
+    const unifiedHarvestMin = [...harvestBiomassMin];
+    const unifiedHarvestMax = [...harvestBiomassMax];
+
+    const unifiedLabels = [...labels];
+
+    if (tasumiYieldAvg !== null) {
+        unifiedLabels.push(tasumiDateStr || 'Latest');
+        unifiedYieldTrend.push(tasumiYieldAvg);
+        unifiedYieldMin.push(tasumiYieldMin);
+        unifiedYieldMax.push(tasumiYieldMax);
+
+        unifiedHarvestTrend.push(tasumiHarvestAvg);
+        unifiedHarvestMin.push(tasumiHarvestMin);
+        unifiedHarvestMax.push(tasumiHarvestMax);
+    }
+
+    const stdYield = parseFloat(Number(d.y1 || 0).toFixed(2));
+    const reYield = parseFloat(Number(d.y2 || 0).toFixed(2));
+    const maxYieldVal = Math.max(...unifiedYieldTrend, stdYield, reYield);
+    const maxAttainableYield = parseFloat((stdYield > 0 ? (stdYield * 1.85) : (maxYieldVal * 1.2)).toFixed(2));
+
+    const stdHarvest = parseFloat(Number(d.h1 || 0).toFixed(2));
+    const reHarvest = parseFloat(Number(d.h2 || 0).toFixed(2));
+    const maxHarvestVal = Math.max(...unifiedHarvestTrend, stdHarvest, reHarvest);
+    const maxAttainableHarvest = parseFloat((stdHarvest > 0 ? (stdHarvest * 1.85) : (maxHarvestVal * 1.2)).toFixed(2));
+
+    return {
+        labels: unifiedLabels,
+        biomassLabels: labels,
+        yieldTrend: unifiedYieldTrend,
+        yieldMinTrend: unifiedYieldMin,
+        yieldMaxTrend: unifiedYieldMax,
+        harvestTrend: unifiedHarvestTrend,
+        harvestMinTrend: unifiedHarvestMin,
+        harvestMaxTrend: unifiedHarvestMax,
+        stdYield, reYield, maxAttainableYield,
+        stdHarvest, reHarvest, maxAttainableHarvest,
+        tasumi: {
+            yieldAvg: tasumiYieldAvg,
+            yieldMin: tasumiYieldMin,
+            yieldMax: tasumiYieldMax,
+            harvestAvg: tasumiHarvestAvg,
+            harvestMin: tasumiHarvestMin,
+            harvestMax: tasumiHarvestMax,
+            date: tasumiDateStr,
+            index: tasumiYieldAvg !== null ? (unifiedLabels.length - 1) : -1
+        }
+    };
+}
+
 if (typeof module !== 'undefined') {
     module.exports = {
         isWithinAnalysisWindow,
@@ -1509,6 +1651,8 @@ if (typeof module !== 'undefined') {
         getDynamicFactor,
         getFallbackFactor,
         convertYield,
-        convertHarvest
+        convertHarvest,
+        formatTrendDate,
+        extractPlotMultiModelData
     };
 }

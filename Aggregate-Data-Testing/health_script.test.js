@@ -355,6 +355,128 @@ const tests = [
             const mtToKgFallback = healthScript.getDynamicFactor('tonne', 'kgs', 'Mass', null);
             assert.strictEqual(mtToKgFallback, 1000, 'Fallback for Tonne -> Kgs should be 1000');
         }
+    },
+    {
+        name: 'formatTrendDate_date_formatting',
+        fn: () => {
+            assert.strictEqual(healthScript.formatTrendDate('2026-05-31'), '31 May', '2026-05-31 -> 31 May');
+            assert.strictEqual(healthScript.formatTrendDate('2026-06-10T00:00:00.000Z'), '10 Jun', '2026-06-10 -> 10 Jun');
+            assert.strictEqual(healthScript.formatTrendDate('2026-08-29'), '29 Aug', '2026-08-29 -> 29 Aug');
+            assert.strictEqual(healthScript.formatTrendDate(''), '', 'Empty string -> empty');
+        }
+    },
+    {
+        name: 'extractPlotMultiModelData_biomass_and_tasumi_trend',
+        fn: () => {
+            const mockPlotWithBothModels = {
+                y1: 15000,
+                y2: 15000,
+                h1: 45300,
+                h2: 45300,
+                yieldRawRecords: [
+                    {
+                        modelType: 'TASUMI',
+                        createdDateTime: '2026-09-03T00:00:00.000Z',
+                        parameters: {
+                            yieldAvg: '7.932',
+                            yieldMin: '7.535',
+                            yieldMax: '8.328',
+                            productionAvg: '9.694',
+                            productionMin: '9.209',
+                            productionMax: '10.179'
+                        }
+                    },
+                    {
+                        modelType: 'BIOMASS_DAYS',
+                        gddPredictions: [
+                            { cutoff_date: '2026-05-31', yieldAvg: 4.942, yieldMin: 4.695, yieldMax: 5.189, productionAvg: 6.04, productionMin: 5.738, productionMax: 6.342 },
+                            { cutoff_date: '2026-06-10', yieldAvg: 9.63, yieldMin: 9.15, yieldMax: 10.11, productionAvg: 11.768, productionMin: 11.18, productionMax: 12.35 },
+                            { cutoff_date: '2026-08-29', yieldAvg: 34.34, yieldMin: 32.62, yieldMax: 36.05, productionAvg: 41.971, productionMin: 39.87, productionMax: 44.07 }
+                        ]
+                    }
+                ]
+            };
+
+            const data = healthScript.extractPlotMultiModelData(mockPlotWithBothModels, 'kgs_acre', 'kgs');
+            assert.ok(data, 'Data should not be null when BIOMASS_DAYS is present');
+            assert.strictEqual(data.labels.length, 4, 'Should contain 3 biomass points + 1 latest TASUMI point');
+            assert.strictEqual(data.labels[0], '31 May');
+            assert.strictEqual(data.labels[2], '29 Aug');
+            assert.strictEqual(data.labels[3], '03 Sep', 'Last point label should be TASUMI created date');
+
+            // TASUMI yieldAvg: 7.932 Tonnes/Ha * ~404.686267 = ~3209.97 Kg/Acre
+            assert.ok(data.tasumi.yieldAvg > 3200 && data.tasumi.yieldAvg < 3220, 'TASUMI yieldAvg should convert to ~3209.97 Kg/Acre');
+            // TASUMI harvestAvg: 9.694 Tonnes * 1000 = 9694 Kgs
+            assert.strictEqual(data.tasumi.harvestAvg, 9694, 'TASUMI harvestAvg should convert to 9,694 Kgs');
+
+            // Reference standards
+            assert.strictEqual(data.stdYield, 15000);
+            assert.strictEqual(data.stdHarvest, 45300);
+
+            // Test when BIOMASS_DAYS is absent
+            const plotWithoutBiomass = {
+                yieldRawRecords: [{ modelType: 'TASUMI', parameters: {} }]
+            };
+            assert.strictEqual(healthScript.extractPlotMultiModelData(plotWithoutBiomass), null, 'Should return null when BIOMASS_DAYS is absent');
+        }
+    },
+    {
+        name: 'extractPlotMultiModelData_min_max_and_avg_trend_arrays',
+        fn: () => {
+            const mockPlot = {
+                y1: 15000,
+                y2: 12000,
+                h1: 45300,
+                h2: 36240,
+                yieldRawRecords: [
+                    {
+                        modelType: 'TASUMI',
+                        createdDateTime: '2026-09-03T00:44:12.088Z',
+                        parameters: {
+                            yieldAvg: '7.932',
+                            yieldMin: '7.535',
+                            yieldMax: '8.328',
+                            productionAvg: '9.694',
+                            productionMin: '9.209',
+                            productionMax: '10.179'
+                        }
+                    },
+                    {
+                        modelType: 'BIOMASS_DAYS',
+                        gddPredictions: [
+                            { cutoff_date: '2026-08-04', yieldAvg: 26.0425, yieldMin: 24.74, yieldMax: 27.345, productionAvg: 31.828, productionMin: 30.236, productionMax: 33.42 }
+                        ]
+                    }
+                ]
+            };
+
+            const data = healthScript.extractPlotMultiModelData(mockPlot, 'kgs_acre', 'kgs');
+            assert.ok(data.yieldMinTrend, 'yieldMinTrend array must exist');
+            assert.ok(data.yieldMaxTrend, 'yieldMaxTrend array must exist');
+            assert.ok(data.harvestMinTrend, 'harvestMinTrend array must exist');
+            assert.ok(data.harvestMaxTrend, 'harvestMaxTrend array must exist');
+
+            // Point 0 (04 Aug Biomass Days):
+            // yieldMin: 24.74 * 404.686267 = ~10011.94
+            // yieldMax: 27.345 * 404.686267 = ~11066.15
+            // yieldAvg: 26.0425 * 404.686267 = ~10539.04
+            assert.ok(data.yieldMinTrend[0] > 10000 && data.yieldMinTrend[0] < 10020, 'Point 0 yieldMin should be ~10011.94');
+            assert.ok(data.yieldMaxTrend[0] > 11050 && data.yieldMaxTrend[0] < 11080, 'Point 0 yieldMax should be ~11066.15');
+            assert.ok(data.yieldTrend[0] > 10530 && data.yieldTrend[0] < 10550, 'Point 0 yieldAvg should be ~10539.04');
+
+            // Point 1 (03 Sep TASUMI):
+            // yieldMin: 7.535 * 404.686267 = ~3049.31
+            // yieldMax: 8.328 * 404.686267 = ~3370.23
+            // yieldAvg: 7.932 * 404.686267 = ~3209.97
+            assert.ok(data.yieldMinTrend[1] > 3040 && data.yieldMinTrend[1] < 3060, 'TASUMI yieldMin should be ~3049.31');
+            assert.ok(data.yieldMaxTrend[1] > 3360 && data.yieldMaxTrend[1] < 3380, 'TASUMI yieldMax should be ~3370.23');
+            assert.ok(data.yieldTrend[1] > 3200 && data.yieldTrend[1] < 3220, 'TASUMI yieldAvg should be ~3209.97');
+
+            // Harvest values for TASUMI (converted to Kgs):
+            assert.strictEqual(data.harvestMinTrend[1], 9209, 'TASUMI harvestMin should be 9209 Kgs');
+            assert.strictEqual(data.harvestMaxTrend[1], 10179, 'TASUMI harvestMax should be 10179 Kgs');
+            assert.strictEqual(data.harvestTrend[1], 9694, 'TASUMI harvestAvg should be 9694 Kgs');
+        }
     }
 ];
 

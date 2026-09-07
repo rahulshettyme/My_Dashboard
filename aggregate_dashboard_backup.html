@@ -1083,7 +1083,7 @@
                     <!-- Plot Yield Analysis -->
                     <div class="analysis-card">
                         <div class="analysis-header">
-                            <div class="analysis-title">Yield Analysis ℹ️</div>
+                            <div class="analysis-title" style="cursor: pointer;" onclick="openYieldGrowthModal('yield')" title="Click to view Yield Trend">Yield Analysis <span style="font-size: 0.9rem;">ℹ️</span></div>
                             <span class="analysis-unit" id="plot-yield-unit-label">Kgs/Acre</span>
                         </div>
                         <div class="metric-row">
@@ -1127,12 +1127,23 @@
                             </div>
                             <div class="metric-value"><span class="sub-text" id="plot-card-level">-</span></div>
                         </div>
+
+                        <!-- Embedded Trend Graph for Biomass Days -->
+                        <div id="plot-yield-chart-container" class="hidden" style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                                <div style="font-size: 0.85rem; font-weight: 600; color: #818cf8;">Yield Forecast Trend</div>
+                                <button type="button" class="btn-xs" onclick="openYieldGrowthModal('yield')" title="Enlarge Trend" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-secondary); border-radius: 4px; padding: 2px 6px; cursor: pointer; font-size: 0.75rem;">🔍 Enlarge</button>
+                            </div>
+                            <div style="height: 220px; position: relative;">
+                                <canvas id="plot-yield-trend-chart"></canvas>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Plot Harvest Analysis -->
                     <div class="analysis-card">
                         <div class="analysis-header">
-                            <div class="analysis-title">Harvest Analysis ℹ️</div>
+                            <div class="analysis-title" style="cursor: pointer;" onclick="openYieldGrowthModal('harvest')" title="Click to view Harvest Trend">Harvest Analysis <span style="font-size: 0.9rem;">ℹ️</span></div>
                             <span class="analysis-unit" id="plot-harvest-unit-label">Kgs</span>
                         </div>
                         <div class="metric-row">
@@ -1168,6 +1179,17 @@
                                 <div class="sub-text" id="plot-app-harvest-diff-re">
                                     <span class="value-green">↑ 0%</span> - <span class="value-green">↑ 0%</span>
                                 </div>
+                            </div>
+                        </div>
+
+                        <!-- Embedded Trend Graph for Biomass Days -->
+                        <div id="plot-harvest-chart-container" class="hidden" style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                                <div style="font-size: 0.85rem; font-weight: 600; color: #818cf8;">Harvest Analysis Trend</div>
+                                <button type="button" class="btn-xs" onclick="openYieldGrowthModal('harvest')" title="Enlarge Trend" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-secondary); border-radius: 4px; padding: 2px 6px; cursor: pointer; font-size: 0.75rem;">🔍 Enlarge</button>
+                            </div>
+                            <div style="height: 220px; position: relative;">
+                                <canvas id="plot-harvest-trend-chart"></canvas>
                             </div>
                         </div>
                     </div>
@@ -1792,6 +1814,50 @@
                     <button type="submit" class="btn-primary" id="modal-submit-btn">Save User</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Modal for Yield & Growth Analysis (Trend Graph) -->
+    <div id="yield-growth-modal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 850px; width: 90%; background: #ffffff; color: #1e293b; border-radius: 12px; padding: 1.5rem; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.1);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.75rem;">
+                <h2 style="font-size: 1.25rem; font-weight: 700; color: #0f172a; margin: 0;">Yield &amp; Growth</h2>
+                <span class="close-modal" onclick="closeYieldGrowthModal()" style="font-size: 1.5rem; cursor: pointer; color: #64748b; line-height: 1;">&times;</span>
+            </div>
+
+            <!-- Tab Navigation -->
+            <div style="display: flex; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 4px; margin-bottom: 1.25rem;">
+                <button type="button" id="modal-tab-yield" onclick="switchYieldGrowthTab('yield')" style="flex: 1; padding: 0.6rem 1rem; font-weight: 600; font-size: 0.95rem; border: none; border-radius: 6px; cursor: pointer; background: #ffffff; color: #16a34a; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-bottom: 2px solid #16a34a;">Yield Analysis</button>
+                <button type="button" id="modal-tab-harvest" onclick="switchYieldGrowthTab('harvest')" style="flex: 1; padding: 0.6rem 1rem; font-weight: 600; font-size: 0.95rem; border: none; border-radius: 6px; cursor: pointer; background: transparent; color: #64748b;">Harvest Analysis</button>
+            </div>
+
+            <!-- Top Summary Information -->
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; background: #f8fafc; padding: 1rem; border-radius: 8px; border: 1px solid #e2e8f0;">
+                <div>
+                    <div style="font-size: 0.85rem; color: #64748b; font-weight: 500;" id="modal-summary-label-std">Standard Yield</div>
+                    <div style="font-size: 0.75rem; color: #94a3b8;">From Crop Configuration <a href="javascript:void(0)" style="color: #16a34a; text-decoration: underline;">View</a></div>
+                    <div style="margin-top: 0.75rem; font-size: 0.85rem; color: #64748b; font-weight: 500;" id="modal-summary-label-pred">Forecasted Yield</div>
+                    <div style="font-size: 0.75rem; color: #16a34a; font-weight: 600;">🌿 Powered By Cropin AI</div>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-size: 1.4rem; font-weight: 700; color: #0f172a;" id="modal-summary-val-std">-</div>
+                    <div style="font-size: 0.75rem; color: #64748b;" id="modal-summary-unit-std">Kilogram/Acre</div>
+                    <div style="margin-top: 0.5rem; font-size: 1.3rem; font-weight: 700; color: #0f172a;" id="modal-summary-val-pred">-</div>
+                    <div style="font-size: 0.75rem; color: #64748b;" id="modal-summary-unit-pred">Kilogram/Acre</div>
+                </div>
+            </div>
+
+            <div style="font-size: 0.75rem; color: #64748b; margin-bottom: 1rem;" id="modal-update-time">
+                Showing latest data. Last updated 03 Sep '26.
+            </div>
+
+            <!-- Chart Container -->
+            <div style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 1rem; background: #ffffff;">
+                <div style="font-size: 0.95rem; font-weight: 700; color: #0f172a; margin-bottom: 0.75rem;" id="modal-chart-title">Yield Forecast Trend</div>
+                <div style="height: 350px; position: relative;">
+                    <canvas id="modal-trend-canvas"></canvas>
+                </div>
+            </div>
         </div>
     </div>
 

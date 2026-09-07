@@ -1558,7 +1558,8 @@ app.get('/api/user-aggregate/yield-prediction', (req, res) => {
                             productionAvg: parseFloat(params.productionAvg) || 'NA',
                             yieldMin: parseFloat(params.yieldMin) || 'NA',
                             yieldMax: parseFloat(params.yieldMax) || 'NA',
-                            yieldAvg: parseFloat(params.yieldAvg) || 'NA'
+                            yieldAvg: parseFloat(params.yieldAvg) || 'NA',
+                            records: jsonData.records || []
                         });
                     } else {
                         // No data available - mark as NA
@@ -1569,7 +1570,8 @@ app.get('/api/user-aggregate/yield-prediction', (req, res) => {
                             productionAvg: 'NA',
                             yieldMin: 'NA',
                             yieldMax: 'NA',
-                            yieldAvg: 'NA'
+                            yieldAvg: 'NA',
+                            records: []
                         });
                     }
                 } else {

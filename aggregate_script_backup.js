@@ -4,6 +4,11 @@ var growthStageChartInstance = null;
 var harvestWindowChartInstance = null;
 var harvestDailyChartInstance = null;
 var harvestWindowPieChart = null;
+var plotYieldChartInstance = null;
+var plotHarvestChartInstance = null;
+var modalTrendChartInstance = null;
+var currentModalTrendTab = 'yield';
+var activePlotForTrend = null;
 
 document.addEventListener('DOMContentLoaded', () => {
     // Auto-detect production environment
@@ -44,6 +49,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 processData(globalData);
                 updateUnitLabels();
                 if (paginationState.filteredData.length > 0) renderPaginatedTable();
+                if (activePlotForTrend) renderPlotTrendCharts(activePlotForTrend);
             }
         });
     });
@@ -785,7 +791,8 @@ function processData(rows) {
             modelType: row['Prediction Model'] || 'NA',
             noPrediction: !isPredictionAvailable,
             notEnabled: row['Yield Not Enabled'] || false,
-            harvestUnit: qUnit
+            harvestUnit: qUnit,
+            yieldRawRecords: row['yieldRawRecords'] || []
         };
     });
 
@@ -880,6 +887,8 @@ function updatePlotData(selectedPlot) {
                const el = document.getElementById(id);
                if(el) el.innerHTML = naHtml;
             });
+            document.getElementById('plot-yield-chart-container')?.classList.add('hidden');
+            document.getElementById('plot-harvest-chart-container')?.classList.add('hidden');
         } else {
             updatePlotPredictedDisplay(d);
         }
@@ -1288,6 +1297,512 @@ function updatePlotPredictedDisplay(d) {
 
     calculateDataTestRangeDiff('plot-app-harvest-diff-exp', predictedHarvestMin, predictedHarvestMax, d.h1);
     calculateDataTestRangeDiff('plot-app-harvest-diff-re', predictedHarvestMin, predictedHarvestMax, d.h2);
+
+    renderPlotTrendCharts(d);
+}
+
+// =======================================================
+// PLOT LEVEL TREND GRAPHS (BIOMASS DAYS & MULTI-MODEL UI)
+// =======================================================
+
+function formatTrendDate(dateStr) {
+    if (!dateStr) return '';
+    const parts = dateStr.split('T')[0].split('-');
+    if (parts.length === 3) {
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const mIdx = parseInt(parts[1], 10) - 1;
+        const day = parseInt(parts[2], 10);
+        return `${day < 10 ? '0' + day : day} ${months[mIdx] || ''}`;
+    }
+    return dateStr;
+}
+
+function extractPlotMultiModelData(d) {
+    if (!d || !Array.isArray(d.yieldRawRecords)) return null;
+
+    const bDaysRecord = d.yieldRawRecords.find(r => (r.modelType || '').toUpperCase() === 'BIOMASS_DAYS');
+    const tasumiRecord = d.yieldRawRecords.find(r => (r.modelType || '').toUpperCase() === 'TASUMI');
+
+    if (!bDaysRecord || !Array.isArray(bDaysRecord.gddPredictions) || bDaysRecord.gddPredictions.length === 0) {
+        return null;
+    }
+
+    const yieldUnit = getDataYieldUnit();
+    const harvestUnit = getDataHarvestUnit();
+
+    // Sort biomass days progression chronologically
+    const sortedGdd = [...bDaysRecord.gddPredictions].sort((a, b) => (a.cutoff_date || '').localeCompare(b.cutoff_date || ''));
+
+    const labels = [];
+    const yieldBiomassData = [];
+    const yieldBiomassMin = [];
+    const yieldBiomassMax = [];
+    const harvestBiomassData = [];
+    const harvestBiomassMin = [];
+    const harvestBiomassMax = [];
+
+    sortedGdd.forEach(p => {
+        labels.push(formatTrendDate(p.cutoff_date));
+
+        // Raw units in gddPredictions: Yield in Tonnes/Ha, Production in Tonnes
+        const rawYAvg = parseFloat(p.yieldAvg || p.yield_days || p.yieldMin || 0);
+        const rawYMin = parseFloat(p.yieldMin !== undefined ? p.yieldMin : rawYAvg);
+        const rawYMax = parseFloat(p.yieldMax !== undefined ? p.yieldMax : rawYAvg);
+
+        const rawHAvg = parseFloat(p.productionAvg || p.productionMin || 0);
+        const rawHMin = parseFloat(p.productionMin !== undefined ? p.productionMin : rawHAvg);
+        const rawHMax = parseFloat(p.productionMax !== undefined ? p.productionMax : rawHAvg);
+
+        yieldBiomassData.push(parseFloat(convertYield(rawYAvg, yieldUnit).toFixed(2)));
+        yieldBiomassMin.push(parseFloat(convertYield(Math.min(rawYMin, rawYMax), yieldUnit).toFixed(2)));
+        yieldBiomassMax.push(parseFloat(convertYield(Math.max(rawYMin, rawYMax), yieldUnit).toFixed(2)));
+
+        harvestBiomassData.push(parseFloat(convertHarvest(rawHAvg, harvestUnit).toFixed(2)));
+        harvestBiomassMin.push(parseFloat(convertHarvest(Math.min(rawHMin, rawHMax), harvestUnit).toFixed(2)));
+        harvestBiomassMax.push(parseFloat(convertHarvest(Math.max(rawHMin, rawHMax), harvestUnit).toFixed(2)));
+    });
+
+    // Extract authoritative TASUMI point
+    let tasumiYieldAvg = null;
+    let tasumiYieldMin = null;
+    let tasumiYieldMax = null;
+    let tasumiHarvestAvg = null;
+    let tasumiHarvestMin = null;
+    let tasumiHarvestMax = null;
+    let tasumiDateStr = null;
+
+    if (tasumiRecord && tasumiRecord.parameters) {
+        const p = tasumiRecord.parameters;
+        const rawYAvg = parseFloat(p.yieldAvg || p.yieldMin || 0);
+        const rawYMin = parseFloat(p.yieldMin !== undefined ? p.yieldMin : rawYAvg);
+        const rawYMax = parseFloat(p.yieldMax !== undefined ? p.yieldMax : rawYAvg);
+
+        const rawHAvg = parseFloat(p.productionAvg || p.productionMin || 0);
+        const rawHMin = parseFloat(p.productionMin !== undefined ? p.productionMin : rawHAvg);
+        const rawHMax = parseFloat(p.productionMax !== undefined ? p.productionMax : rawHAvg);
+
+        tasumiYieldAvg = parseFloat(convertYield(rawYAvg, yieldUnit).toFixed(2));
+        tasumiYieldMin = parseFloat(convertYield(Math.min(rawYMin, rawYMax), yieldUnit).toFixed(2));
+        tasumiYieldMax = parseFloat(convertYield(Math.max(rawYMin, rawYMax), yieldUnit).toFixed(2));
+
+        tasumiHarvestAvg = parseFloat(convertHarvest(rawHAvg, harvestUnit).toFixed(2));
+        tasumiHarvestMin = parseFloat(convertHarvest(Math.min(rawHMin, rawHMax), harvestUnit).toFixed(2));
+        tasumiHarvestMax = parseFloat(convertHarvest(Math.max(rawHMin, rawHMax), harvestUnit).toFixed(2));
+
+        tasumiDateStr = tasumiRecord.createdDateTime 
+            ? formatTrendDate(tasumiRecord.createdDateTime.substring(0, 10)) 
+            : (tasumiRecord.predictionDate ? formatTrendDate(tasumiRecord.predictionDate.substring(0, 10)) : 'Latest');
+    }
+
+    // Unified trend progression matching Image 2 & 3:
+    // Append the TASUMI point at the end of the trend line
+    const unifiedYieldTrend = [...yieldBiomassData];
+    const unifiedYieldMin = [...yieldBiomassMin];
+    const unifiedYieldMax = [...yieldBiomassMax];
+
+    const unifiedHarvestTrend = [...harvestBiomassData];
+    const unifiedHarvestMin = [...harvestBiomassMin];
+    const unifiedHarvestMax = [...harvestBiomassMax];
+
+    const unifiedLabels = [...labels];
+
+    if (tasumiYieldAvg !== null) {
+        unifiedLabels.push(tasumiDateStr || 'Latest');
+        unifiedYieldTrend.push(tasumiYieldAvg);
+        unifiedYieldMin.push(tasumiYieldMin);
+        unifiedYieldMax.push(tasumiYieldMax);
+
+        unifiedHarvestTrend.push(tasumiHarvestAvg);
+        unifiedHarvestMin.push(tasumiHarvestMin);
+        unifiedHarvestMax.push(tasumiHarvestMax);
+    }
+
+    // Reference values
+    const stdYield = parseFloat(Number(d.y1 || 0).toFixed(2));
+    const reYield = parseFloat(Number(d.y2 || 0).toFixed(2));
+    const maxYieldVal = Math.max(...unifiedYieldTrend, stdYield, reYield);
+    const maxAttainableYield = parseFloat((stdYield > 0 ? (stdYield * 1.85) : (maxYieldVal * 1.2)).toFixed(2));
+
+    const stdHarvest = parseFloat(Number(d.h1 || 0).toFixed(2));
+    const reHarvest = parseFloat(Number(d.h2 || 0).toFixed(2));
+    const maxHarvestVal = Math.max(...unifiedHarvestTrend, stdHarvest, reHarvest);
+    const maxAttainableHarvest = parseFloat((stdHarvest > 0 ? (stdHarvest * 1.85) : (maxHarvestVal * 1.2)).toFixed(2));
+
+    return {
+        labels: unifiedLabels,
+        biomassLabels: labels,
+        yieldTrend: unifiedYieldTrend,
+        yieldMinTrend: unifiedYieldMin,
+        yieldMaxTrend: unifiedYieldMax,
+        harvestTrend: unifiedHarvestTrend,
+        harvestMinTrend: unifiedHarvestMin,
+        harvestMaxTrend: unifiedHarvestMax,
+        yieldUnitLabel: YIELD_UNIT_LABELS[yieldUnit] || yieldUnit,
+        harvestUnitLabel: HARVEST_UNIT_LABELS[harvestUnit] || harvestUnit,
+        stdYield, reYield, maxAttainableYield,
+        stdHarvest, reHarvest, maxAttainableHarvest,
+        tasumi: {
+            yieldAvg: tasumiYieldAvg,
+            yieldMin: tasumiYieldMin,
+            yieldMax: tasumiYieldMax,
+            harvestAvg: tasumiHarvestAvg,
+            harvestMin: tasumiHarvestMin,
+            harvestMax: tasumiHarvestMax,
+            date: tasumiDateStr,
+            index: tasumiYieldAvg !== null ? (unifiedLabels.length - 1) : -1
+        }
+    };
+}
+
+function createTrendChart(canvas, opts) {
+    const isDark = !opts.isModal;
+    const textColor = isDark ? '#94a3b8' : '#64748b';
+    const gridColor = isDark ? 'rgba(255, 255, 255, 0.08)' : '#f1f5f9';
+    const primaryLineColor = isDark ? '#84cc16' : '#4d7c0f';
+    const fillColor = isDark ? 'rgba(132, 204, 22, 0.12)' : 'rgba(240, 253, 244, 0.6)';
+
+    // Point styling: distinguish Biomass Days points vs TASUMI latest point
+    const pointRadii = opts.labels.map((_, i) => (i === opts.tasumiIndex ? 6 : 4));
+    const pointBgColors = opts.labels.map((_, i) => (i === opts.tasumiIndex ? (isDark ? '#6366f1' : '#4d7c0f') : primaryLineColor));
+    const pointBorderColors = opts.labels.map((_, i) => (i === opts.tasumiIndex ? '#ffffff' : primaryLineColor));
+
+    const datasets = [
+        {
+            label: opts.metricType === 'yield' ? 'Forecasted Yield' : 'Forecasted Harvest',
+            data: opts.trendData,
+            borderColor: primaryLineColor,
+            backgroundColor: fillColor,
+            fill: true,
+            tension: 0.25,
+            borderWidth: 2.5,
+            pointRadius: pointRadii,
+            pointHoverRadius: 8,
+            pointBackgroundColor: pointBgColors,
+            pointBorderColor: pointBorderColors,
+            pointBorderWidth: 2,
+            order: 1
+        }
+    ];
+
+    // Reference line: Standard (Expected)
+    if (opts.stdVal > 0) {
+        datasets.push({
+            label: opts.metricType === 'yield' ? 'Standard Yield' : 'Standard Harvest',
+            data: opts.labels.map(() => opts.stdVal),
+            borderColor: isDark ? '#22c55e' : '#16a34a',
+            borderDash: [6, 6],
+            borderWidth: 1.8,
+            pointRadius: 0,
+            fill: false,
+            order: 2
+        });
+    }
+
+    // Reference line: Re-Estimated
+    if (opts.reVal > 0 && Math.abs(opts.reVal - opts.stdVal) > 0.01) {
+        datasets.push({
+            label: opts.metricType === 'yield' ? 'Re-Estimated Yield' : 'Re-Estimated Harvest',
+            data: opts.labels.map(() => opts.reVal),
+            borderColor: isDark ? '#38bdf8' : '#0284c7',
+            borderDash: [4, 4],
+            borderWidth: 1.8,
+            pointRadius: 0,
+            fill: false,
+            order: 3
+        });
+    }
+
+    // Reference line: Maximum Attainable
+    if (opts.maxVal > 0) {
+        datasets.push({
+            label: opts.metricType === 'yield' ? 'Maximum Attainable Yield' : 'Maximum Attainable Harvest',
+            data: opts.labels.map(() => opts.maxVal),
+            borderColor: isDark ? '#64748b' : '#334155',
+            borderDash: [6, 6],
+            borderWidth: 1.5,
+            pointRadius: 0,
+            fill: false,
+            order: 4
+        });
+    }
+
+    return new Chart(canvas, {
+        type: 'line',
+        data: {
+            labels: opts.labels,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false
+            },
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'bottom',
+                    labels: {
+                        color: textColor,
+                        boxWidth: 12,
+                        boxHeight: 2,
+                        usePointStyle: false,
+                        font: { size: opts.isModal ? 12 : 10 }
+                    }
+                },
+                tooltip: {
+                    backgroundColor: isDark ? 'rgba(15, 23, 42, 0.95)' : '#ffffff',
+                    titleColor: isDark ? '#f8fafc' : '#0f172a',
+                    bodyColor: isDark ? '#cbd5e1' : '#334155',
+                    borderColor: isDark ? '#334155' : '#e2e8f0',
+                    borderWidth: 1,
+                    padding: 10,
+                    displayColors: false,
+                    filter: function(tooltipItem) {
+                        return tooltipItem.datasetIndex === 0;
+                    },
+                    callbacks: {
+                        title: function(items) {
+                            if (!items.length) return '';
+                            const idx = items[0].dataIndex;
+                            const isTasumi = idx === opts.tasumiIndex;
+                            return items[0].label + (isTasumi ? ' (TASUMI Model - Latest)' : ' (Biomass Days Model)');
+                        },
+                        label: function(context) {
+                            const idx = context.dataIndex;
+                            const maxVal = (opts.maxData && opts.maxData[idx] !== undefined) ? opts.maxData[idx] : context.raw;
+                            const minVal = (opts.minData && opts.minData[idx] !== undefined) ? opts.minData[idx] : context.raw;
+                            const avgVal = context.raw;
+
+                            return [
+                                `Max Predicted: ${fmtSmart(maxVal)} ${opts.unitLabel}`,
+                                `Min Predicted: ${fmtSmart(minVal)} ${opts.unitLabel}`,
+                                `Average: ${fmtSmart(avgVal)} ${opts.unitLabel}`
+                            ];
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { color: gridColor, drawBorder: false },
+                    ticks: {
+                        color: textColor,
+                        font: { size: opts.isModal ? 11 : 9 },
+                        maxRotation: 45,
+                        minRotation: 0,
+                        autoSkip: true,
+                        maxTicksLimit: opts.isModal ? 12 : 6
+                    }
+                },
+                y: {
+                    grid: { color: gridColor, drawBorder: false },
+                    ticks: {
+                        color: textColor,
+                        font: { size: opts.isModal ? 11 : 9 },
+                        callback: function(v) {
+                            return v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v;
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+function renderPlotTrendCharts(d) {
+    activePlotForTrend = d;
+    const yieldContainer = document.getElementById('plot-yield-chart-container');
+    const harvestContainer = document.getElementById('plot-harvest-chart-container');
+
+    const modelData = extractPlotMultiModelData(d);
+
+    if (!modelData) {
+        if (yieldContainer) yieldContainer.classList.add('hidden');
+        if (harvestContainer) harvestContainer.classList.add('hidden');
+        if (plotYieldChartInstance) { plotYieldChartInstance.destroy(); plotYieldChartInstance = null; }
+        if (plotHarvestChartInstance) { plotHarvestChartInstance.destroy(); plotHarvestChartInstance = null; }
+        return;
+    }
+
+    if (yieldContainer) yieldContainer.classList.remove('hidden');
+    if (harvestContainer) harvestContainer.classList.remove('hidden');
+
+    // Render Embedded Yield Trend Chart
+    const yieldCanvas = document.getElementById('plot-yield-trend-chart');
+    if (yieldCanvas) {
+        if (plotYieldChartInstance) plotYieldChartInstance.destroy();
+        plotYieldChartInstance = createTrendChart(yieldCanvas, {
+            labels: modelData.labels,
+            trendData: modelData.yieldTrend,
+            minData: modelData.yieldMinTrend,
+            maxData: modelData.yieldMaxTrend,
+            stdVal: modelData.stdYield,
+            reVal: modelData.reYield,
+            maxVal: modelData.maxAttainableYield,
+            unitLabel: modelData.yieldUnitLabel,
+            tasumiIndex: modelData.tasumi.index,
+            tasumiRange: modelData.tasumi.yieldMin !== null ? `${fmtSmart(modelData.tasumi.yieldMin)} - ${fmtSmart(modelData.tasumi.yieldMax)}` : '',
+            metricType: 'yield',
+            isModal: false
+        });
+    }
+
+    // Render Embedded Harvest Trend Chart
+    const harvestCanvas = document.getElementById('plot-harvest-trend-chart');
+    if (harvestCanvas) {
+        if (plotHarvestChartInstance) plotHarvestChartInstance.destroy();
+        plotHarvestChartInstance = createTrendChart(harvestCanvas, {
+            labels: modelData.labels,
+            trendData: modelData.harvestTrend,
+            minData: modelData.harvestMinTrend,
+            maxData: modelData.harvestMaxTrend,
+            stdVal: modelData.stdHarvest,
+            reVal: modelData.reHarvest,
+            maxVal: modelData.maxAttainableHarvest,
+            unitLabel: modelData.harvestUnitLabel,
+            tasumiIndex: modelData.tasumi.index,
+            tasumiRange: modelData.tasumi.harvestMin !== null ? `${fmtSmart(modelData.tasumi.harvestMin)} - ${fmtSmart(modelData.tasumi.harvestMax)}` : '',
+            metricType: 'harvest',
+            isModal: false
+        });
+    }
+
+    // If modal is currently open, refresh it as well
+    const modal = document.getElementById('yield-growth-modal');
+    if (modal && modal.style.display !== 'none') {
+        renderModalTrendChart(modelData, currentModalTrendTab);
+    }
+}
+
+function openYieldGrowthModal(tab) {
+    currentModalTrendTab = tab || 'yield';
+    const modal = document.getElementById('yield-growth-modal');
+    if (!modal) return;
+
+    modal.style.display = 'block';
+
+    const selectedPlot = document.getElementById('plot-select-value')?.value;
+    const row = globalData.find(r => r._processed && r._processed.name === selectedPlot);
+    const d = row ? row._processed : activePlotForTrend;
+
+    if (d) {
+        activePlotForTrend = d;
+        const modelData = extractPlotMultiModelData(d);
+        if (modelData) {
+            renderModalTrendChart(modelData, currentModalTrendTab);
+        }
+    }
+}
+
+function closeYieldGrowthModal() {
+    const modal = document.getElementById('yield-growth-modal');
+    if (modal) modal.style.display = 'none';
+    if (modalTrendChartInstance) {
+        modalTrendChartInstance.destroy();
+        modalTrendChartInstance = null;
+    }
+}
+
+function switchYieldGrowthTab(tab) {
+    currentModalTrendTab = tab;
+    const btnYield = document.getElementById('modal-tab-yield');
+    const btnHarvest = document.getElementById('modal-tab-harvest');
+
+    if (tab === 'yield') {
+        if (btnYield) {
+            btnYield.style.background = '#ffffff';
+            btnYield.style.color = '#16a34a';
+            btnYield.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+            btnYield.style.borderBottom = '2px solid #16a34a';
+        }
+        if (btnHarvest) {
+            btnHarvest.style.background = 'transparent';
+            btnHarvest.style.color = '#64748b';
+            btnHarvest.style.boxShadow = 'none';
+            btnHarvest.style.borderBottom = 'none';
+        }
+    } else {
+        if (btnHarvest) {
+            btnHarvest.style.background = '#ffffff';
+            btnHarvest.style.color = '#16a34a';
+            btnHarvest.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+            btnHarvest.style.borderBottom = '2px solid #16a34a';
+        }
+        if (btnYield) {
+            btnYield.style.background = 'transparent';
+            btnYield.style.color = '#64748b';
+            btnYield.style.boxShadow = 'none';
+            btnYield.style.borderBottom = 'none';
+        }
+    }
+
+    if (activePlotForTrend) {
+        const modelData = extractPlotMultiModelData(activePlotForTrend);
+        if (modelData) {
+            renderModalTrendChart(modelData, tab);
+        }
+    }
+}
+
+function renderModalTrendChart(modelData, tab) {
+    const isYield = tab === 'yield';
+    const canvas = document.getElementById('modal-trend-canvas');
+    if (!canvas) return;
+
+    // Update Header Summary Values matching Image 2 & 3
+    const stdLabel = document.getElementById('modal-summary-label-std');
+    const predLabel = document.getElementById('modal-summary-label-pred');
+    const stdVal = document.getElementById('modal-summary-val-std');
+    const stdUnit = document.getElementById('modal-summary-unit-std');
+    const predVal = document.getElementById('modal-summary-val-pred');
+    const predUnit = document.getElementById('modal-summary-unit-pred');
+    const chartTitle = document.getElementById('modal-chart-title');
+
+    if (isYield) {
+        if (stdLabel) stdLabel.textContent = 'Standard Yield';
+        if (predLabel) predLabel.textContent = 'Forecasted Yield';
+        if (stdVal) stdVal.textContent = fmtSmart(modelData.stdYield);
+        if (stdUnit) stdUnit.textContent = modelData.yieldUnitLabel;
+        if (predVal) {
+            predVal.textContent = modelData.tasumi.yieldMin !== null
+                ? `${fmtSmart(modelData.tasumi.yieldMin)} - ${fmtSmart(modelData.tasumi.yieldMax)}`
+                : `${fmtSmart(modelData.yieldTrend[modelData.yieldTrend.length - 1])}`;
+        }
+        if (predUnit) predUnit.textContent = modelData.yieldUnitLabel;
+        if (chartTitle) chartTitle.textContent = 'Yield Forecast Trend';
+    } else {
+        if (stdLabel) stdLabel.textContent = 'Standard Harvest';
+        if (predLabel) predLabel.textContent = 'Forecasted Harvest';
+        if (stdVal) stdVal.textContent = fmtSmart(modelData.stdHarvest);
+        if (stdUnit) stdUnit.textContent = modelData.harvestUnitLabel;
+        if (predVal) {
+            predVal.textContent = modelData.tasumi.harvestMin !== null
+                ? `${fmtSmart(modelData.tasumi.harvestMin)} - ${fmtSmart(modelData.tasumi.harvestMax)}`
+                : `${fmtSmart(modelData.harvestTrend[modelData.harvestTrend.length - 1])}`;
+        }
+        if (predUnit) predUnit.textContent = modelData.harvestUnitLabel;
+        if (chartTitle) chartTitle.textContent = 'Harvest Analysis Trend';
+    }
+
+    if (modalTrendChartInstance) modalTrendChartInstance.destroy();
+    modalTrendChartInstance = createTrendChart(canvas, {
+        labels: modelData.labels,
+        trendData: isYield ? modelData.yieldTrend : modelData.harvestTrend,
+        minData: isYield ? modelData.yieldMinTrend : modelData.harvestMinTrend,
+        maxData: isYield ? modelData.yieldMaxTrend : modelData.harvestMaxTrend,
+        stdVal: isYield ? modelData.stdYield : modelData.stdHarvest,
+        reVal: isYield ? modelData.reYield : modelData.reHarvest,
+        maxVal: isYield ? modelData.maxAttainableYield : modelData.maxAttainableHarvest,
+        unitLabel: isYield ? modelData.yieldUnitLabel : modelData.harvestUnitLabel,
+        tasumiIndex: modelData.tasumi.index,
+        tasumiRange: isYield
+            ? (modelData.tasumi.yieldMin !== null ? `${fmtSmart(modelData.tasumi.yieldMin)} - ${fmtSmart(modelData.tasumi.yieldMax)}` : '')
+            : (modelData.tasumi.harvestMin !== null ? `${fmtSmart(modelData.tasumi.harvestMin)} - ${fmtSmart(modelData.tasumi.harvestMax)}` : ''),
+        metricType: isYield ? 'yield' : 'harvest',
+        isModal: true
+    });
 }
 
 function showSourceTab(tab) {
@@ -2003,7 +2518,8 @@ async function generateDataFromAPI() {
                 'Prediction Model': yieldData.modelType || 'NA',
                 'Yield Not Enabled': yieldData.notEnabled || false,
                 'plotHarvestUnit': rawUnit,
-                'plotAreaUnit': userAreaUnit // Data from API is assumed to be in user/company pref
+                'plotAreaUnit': userAreaUnit,
+                'yieldRawRecords': yieldData.records || []
             };
         } catch (error) {
             console.error(`Error fetching data for CA ${plot.caId}:`, error);
@@ -4290,6 +4806,14 @@ window.convertYield = convertYield;
 window.convertHarvest = convertHarvest;
 window.convertValueToMetricTon = convertValueToMetricTon;
 
+// Plot Multi-Model Trend Chart Exports
+window.renderPlotTrendCharts = renderPlotTrendCharts;
+window.openYieldGrowthModal = openYieldGrowthModal;
+window.closeYieldGrowthModal = closeYieldGrowthModal;
+window.switchYieldGrowthTab = switchYieldGrowthTab;
+window.extractPlotMultiModelData = extractPlotMultiModelData;
+window.formatTrendDate = formatTrendDate;
+
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         fetchTenantUnitMaster,
@@ -4298,6 +4822,8 @@ if (typeof module !== 'undefined' && module.exports) {
         convertYield,
         convertHarvest,
         convertValueToMetricTon,
+        formatTrendDate,
+        extractPlotMultiModelData,
         MASS_CONVERSIONS,
         AREA_CONVERSIONS
     };
