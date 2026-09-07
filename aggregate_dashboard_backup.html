@@ -285,11 +285,14 @@
         #all-plots-table {
             font-size: 0.8rem;
         }
-        #all-plots-table th, #all-plots-table td {
+
+        #all-plots-table th,
+        #all-plots-table td {
             padding: 0.5rem 0.6rem !important;
         }
     </style>
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect x='10' y='50' width='15' height='40' rx='2' fill='%236366f1'/%3E%3Crect x='35' y='30' width='15' height='60' rx='2' fill='%23818cf8'/%3E%3Crect x='60' y='10' width='15' height='80' rx='2' fill='%23c084fc'/%3E%3Cpath d='M75 10 Q90 10 90 25 Q90 40 75 40 Q60 40 60 25 Q60 10 75 10 Z' fill='%2310b981'/%3E%3C/svg%3E">
+    <link rel="icon"
+        href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect x='10' y='50' width='15' height='40' rx='2' fill='%236366f1'/%3E%3Crect x='35' y='30' width='15' height='60' rx='2' fill='%23818cf8'/%3E%3Crect x='60' y='10' width='15' height='80' rx='2' fill='%23c084fc'/%3E%3Cpath d='M75 10 Q90 10 90 25 Q90 40 75 40 Q60 40 60 25 Q60 10 75 10 Z' fill='%2310b981'/%3E%3C/svg%3E">
 </head>
 
 <body>
@@ -300,131 +303,143 @@
 
         <header>
             <h1 style="font-size: 2rem; margin-bottom: 0.5rem;">Aggregate Data Testing</h1>
-            <p style="color: var(--text-secondary); margin-bottom: 2rem;">Please login to your environment to continue</p>
+            <p style="color: var(--text-secondary); margin-bottom: 2rem;">Please login to your environment to continue
+            </p>
         </header>
 
 
 
         <!-- Login Section (Made Default and Visible) -->
         <section id="login-section" class="source-content">
-                <div
-                    style="background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 16px; padding: 2rem;">
-                    <!-- Login Form (shown when not logged in) -->
-                    <div id="login-form-container">
-                        <h3 style="color: var(--text-primary); margin-bottom: 1.5rem;">🔐 Login to Environment</h3>
+            <div
+                style="background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 16px; padding: 2rem;">
+                <!-- Login Form (shown when not logged in) -->
+                <div id="login-form-container">
+                    <h3 style="color: var(--text-primary); margin-bottom: 1.5rem;">🔐 Login to Environment</h3>
 
-                        <!-- Backend Server URL Input -->
-                        <div class="form-group" id="server-url-container" style="margin-bottom: 1.5rem;">
-                            <label for="server-url">Backend Server URL</label>
-                            <input type="text" id="server-url" value=""
-                                placeholder="e.g., http://localhost:3000"
-                                style="padding: 0.75rem; border-radius: 8px; background: rgba(99, 102, 241, 0.1); color: var(--text-primary); border: 1px solid var(--border-color); width: 100%;">
-                        </div>
-
-                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1.5rem;">
-                            <div class="form-group">
-                                <label for="environment">Environment</label>
-                                <select id="environment" style="padding: 0.75rem; border-radius: 8px; background: var(--input-bg, #1e1e2e); color: var(--text-primary); border: 1px solid var(--border-color); width: 100%;">
-                                    <option value="" disabled selected>Select Environment</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label for="tenant">Tenant</label>
-                                <select id="tenant" disabled style="padding: 0.75rem; border-radius: 8px; background: var(--input-bg, #1e1e2e); color: var(--text-primary); border: 1px solid var(--border-color); width: 100%;">
-                                    <option value="" disabled selected>Select Tenant</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label for="user">User</label>
-                                <div style="display: flex; gap: 0.5rem;">
-                                    <select id="user" disabled style="flex: 1; padding: 0.75rem; border-radius: 8px; background: var(--input-bg, #1e1e2e); color: var(--text-primary); border: 1px solid var(--border-color);">
-                                        <option value="" disabled selected>Select User</option>
-                                    </select>
-                                    <div id="user-actions" style="display: none; align-items: center; gap: 0.5rem;">
-                                        <button id="edit-user-btn" title="Edit User" style="background: none; border: none; cursor: pointer; font-size: 1.2rem;">✏️</button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div style="display: flex; gap: 1rem;">
-                            <button class="btn-secondary" id="add-user-btn" style="padding: 0.75rem 1.5rem; background: transparent; border: 1px solid var(--border-color); color: var(--text-secondary); border-radius: 8px; cursor: pointer; font-weight: 600;">Add New User</button>
-                            <button id="login-btn" onclick="handleLogin()" style="padding: 0.75rem 2rem; background: var(--primary-color); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">Login to Application</button>
-                        </div>
-                        <p id="login-error" class="hidden" style="margin-top: 1rem; color: #f87171;"></p>
+                    <!-- Backend Server URL Input -->
+                    <div class="form-group" id="server-url-container" style="margin-bottom: 1.5rem;">
+                        <label for="server-url">Backend Server URL</label>
+                        <input type="text" id="server-url" value="" placeholder="e.g., http://localhost:3000"
+                            style="padding: 0.75rem; border-radius: 8px; background: rgba(99, 102, 241, 0.1); color: var(--text-primary); border: 1px solid var(--border-color); width: 100%;">
                     </div>
 
-                    <!-- Project Selection (shown after login) -->
-                    <div id="project-container" class="hidden">
-                        <div
-                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-                            <h3 style="color: var(--text-primary); margin: 0;">📁 Select Project</h3>
-                            <div style="display: flex; gap: 0.75rem; align-items: center;">
-                                <button id="export-pdf-btn" onclick="exportDashboardToPDF()" class="export-btn" disabled
-                                    style="padding: 0.5rem 1rem; background: #ef4444; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 600; display: flex; align-items: center; gap: 0.4rem; opacity: 0.5; transition: all 0.3s; box-shadow: 0 4px 10px rgba(239, 68, 68, 0.2);">
-                                    <i class="fas fa-file-pdf"></i> Export Full Report (PDF)
-                                </button>
-                                <button onclick="handleLogout()"
-                                    style="padding: 0.5rem 1rem; background: transparent; border: 1px solid var(--border-color); color: var(--text-secondary); border-radius: 6px; cursor: pointer; font-size: 0.85rem;">
-                                    Logout
-                                </button>
-                            </div>
+                    <div
+                        style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1.5rem;">
+                        <div class="form-group">
+                            <label for="environment">Environment</label>
+                            <select id="environment"
+                                style="padding: 0.75rem; border-radius: 8px; background: var(--input-bg, #1e1e2e); color: var(--text-primary); border: 1px solid var(--border-color); width: 100%;">
+                                <option value="" disabled selected>Select Environment</option>
+                            </select>
                         </div>
-                        <div style="margin-bottom: 1rem; color: var(--text-secondary); font-size: 0.9rem;">
-                            <span id="session-info"></span>
+                        <div class="form-group">
+                            <label for="tenant">Tenant</label>
+                            <select id="tenant" disabled
+                                style="padding: 0.75rem; border-radius: 8px; background: var(--input-bg, #1e1e2e); color: var(--text-primary); border: 1px solid var(--border-color); width: 100%;">
+                                <option value="" disabled selected>Select Tenant</option>
+                            </select>
                         </div>
-                        <div style="display: flex; align-items: center; gap: 0.5rem;">
-                            <!-- Custom Multi-Select Dropdown -->
-                            <div class="custom-select-container" style="position: relative; flex: 1; max-width: 380px;">
-                                <div id="selected-projects-trigger" onclick="toggleMultiSelect(event)"
-
-                                    style="padding: 0.75rem; border-radius: 8px; background: var(--input-bg, #1e1e2e); color: var(--text-primary); border: 1px solid var(--border-color); cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
-                                    <span id="trigger-text">Select Projects (Max 5)</span>
-                                    <span style="font-size: 0.8rem;">▼</span>
-                                </div>
-                                <div id="projects-dropdown-list" class="hidden"
-                                    style="position: absolute; top: 100%; left: 0; right: 0; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px; margin-top: 0.5rem; max-height: 300px; overflow-y: auto; z-index: 1000; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
-                                    <!-- Checkboxes will be injected here -->
+                        <div class="form-group">
+                            <label for="user">User</label>
+                            <div style="display: flex; gap: 0.5rem;">
+                                <select id="user" disabled
+                                    style="flex: 1; padding: 0.75rem; border-radius: 8px; background: var(--input-bg, #1e1e2e); color: var(--text-primary); border: 1px solid var(--border-color);">
+                                    <option value="" disabled selected>Select User</option>
+                                </select>
+                                <div id="user-actions" style="display: none; align-items: center; gap: 0.5rem;">
+                                    <button id="edit-user-btn" title="Edit User"
+                                        style="background: none; border: none; cursor: pointer; font-size: 1.2rem;">✏️</button>
                                 </div>
                             </div>
+                        </div>
+                    </div>
 
-                            <button id="projects-sort-icon" onclick="sortProjectsToggle()"
-                                title="API order (click to sort A-Z)"
-                                style="padding: 0.5rem 0.75rem; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px; cursor: pointer; font-size: 1.1rem;">
-                                📋
+                    <div style="display: flex; gap: 1rem;">
+                        <button class="btn-secondary" id="add-user-btn"
+                            style="padding: 0.75rem 1.5rem; background: transparent; border: 1px solid var(--border-color); color: var(--text-secondary); border-radius: 8px; cursor: pointer; font-weight: 600;">Add
+                            New User</button>
+                        <button id="login-btn" onclick="handleLogin()"
+                            style="padding: 0.75rem 2rem; background: var(--primary-color); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">Login
+                            to Application</button>
+                    </div>
+                    <p id="login-error" class="hidden" style="margin-top: 1rem; color: #f87171;"></p>
+                </div>
+
+                <!-- Project Selection (shown after login) -->
+                <div id="project-container" class="hidden">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                        <h3 style="color: var(--text-primary); margin: 0;">📁 Select Project</h3>
+                        <div style="display: flex; gap: 0.75rem; align-items: center;">
+                            <button id="export-pdf-btn" onclick="exportDashboardToPDF()" class="export-btn" disabled
+                                style="padding: 0.5rem 1rem; background: #ef4444; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 600; display: flex; align-items: center; gap: 0.4rem; opacity: 0.5; transition: all 0.3s; box-shadow: 0 4px 10px rgba(239, 68, 68, 0.2);">
+                                <i class="fas fa-file-pdf"></i> Export Full Report (PDF)
                             </button>
-                            <button id="verify-plots-btn" onclick="handleVerifyPlots()" disabled
-                                style="padding: 0.5rem 1rem; background: #818cf8; opacity: 0.5; color: white; border: 1px solid var(--border-color); border-radius: 8px; cursor: not-allowed; transition: all 0.3s; font-weight: 700; font-size: 0.9rem;">
-                                🔍 Verify & Load Plots
+                            <button onclick="handleLogout()"
+                                style="padding: 0.5rem 1rem; background: transparent; border: 1px solid var(--border-color); color: var(--text-secondary); border-radius: 6px; cursor: pointer; font-size: 0.85rem;">
+                                Logout
                             </button>
                         </div>
-                        
-                        <div id="plot-info" class="hidden"
-                            style="margin-top: 1rem; padding: 1rem; background: rgba(99, 102, 241, 0.1); border-radius: 8px;">
-                            <span style="color: var(--text-secondary);">Total Plots: </span>
-                            <strong id="plot-count" style="color: var(--text-primary);">-</strong>
-                            <span style="color: var(--text-secondary); margin-left: 1.5rem;">Plot Risk Enabled: </span>
-                            <strong id="plot-risk-count" style="color: var(--text-primary);">-</strong>
-                            <span id="plot-loading" class="hidden"
-                                style="margin-left: 1rem; color: var(--text-secondary);">Loading...</span>
-                            <span id="generate-progress" class="hidden"
-                                style="margin-left: 1rem; color: var(--text-secondary);">
-                                (Processing: <span id="progress-text">0/0</span>)
-                            </span>
+                    </div>
+                    <div style="margin-bottom: 1rem; color: var(--text-secondary); font-size: 0.9rem;">
+                        <span id="session-info"></span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <!-- Custom Multi-Select Dropdown -->
+                        <div class="custom-select-container" style="position: relative; flex: 1; max-width: 380px;">
+                            <div id="selected-projects-trigger" onclick="toggleMultiSelect(event)"
+                                style="padding: 0.75rem; border-radius: 8px; background: var(--input-bg, #1e1e2e); color: var(--text-primary); border: 1px solid var(--border-color); cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                                <span id="trigger-text">Select Projects (Max 5)</span>
+                                <span style="font-size: 0.8rem;">▼</span>
+                            </div>
+                            <div id="projects-dropdown-list" class="hidden"
+                                style="position: absolute; top: 100%; left: 0; right: 0; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px; margin-top: 0.5rem; max-height: 300px; overflow-y: auto; z-index: 1000; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
+                                <!-- Checkboxes will be injected here -->
+                            </div>
                         </div>
+
+                        <button id="projects-sort-icon" onclick="sortProjectsToggle()"
+                            title="API order (click to sort A-Z)"
+                            style="padding: 0.5rem 0.75rem; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px; cursor: pointer; font-size: 1.1rem;">
+                            📋
+                        </button>
+                        <button id="verify-plots-btn" onclick="handleVerifyPlots()" disabled
+                            style="padding: 0.5rem 1rem; background: #818cf8; opacity: 0.5; color: white; border: 1px solid var(--border-color); border-radius: 8px; cursor: not-allowed; transition: all 0.3s; font-weight: 700; font-size: 0.9rem;">
+                            🔍 Verify & Load Plots
+                        </button>
+                    </div>
+
+                    <div id="plot-info" class="hidden"
+                        style="margin-top: 1rem; padding: 1rem; background: rgba(99, 102, 241, 0.1); border-radius: 8px;">
+                        <span style="color: var(--text-secondary);">Total Plots: </span>
+                        <strong id="plot-count" style="color: var(--text-primary);">-</strong>
+                        <span style="color: var(--text-secondary); margin-left: 1.5rem;">Plot Risk Enabled: </span>
+                        <strong id="plot-risk-count" style="color: var(--text-primary);">-</strong>
+                        <span id="plot-loading" class="hidden"
+                            style="margin-left: 1rem; color: var(--text-secondary);">Loading...</span>
+                        <span id="generate-progress" class="hidden"
+                            style="margin-left: 1rem; color: var(--text-secondary);">
+                            (Processing: <span id="progress-text">0/0</span>)
+                        </span>
                     </div>
                 </div>
-            </section>
+            </div>
+        </section>
 
-            <!-- 🏥 Health Data Section -->
+        <!-- 🏥 Health Data Section -->
         <section class="dashboard-section hidden" id="health-data-section" style="margin-top: 2rem;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; border-bottom: 2px solid #06b6d4; padding-bottom: 0.75rem;">
-                <h2 style="font-size: 1.75rem; font-weight: 700; color: var(--text-primary); margin: 0; display: flex; align-items: center; gap: 0.75rem;">
+            <div
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; border-bottom: 2px solid #06b6d4; padding-bottom: 0.75rem;">
+                <h2
+                    style="font-size: 1.75rem; font-weight: 700; color: var(--text-primary); margin: 0; display: flex; align-items: center; gap: 0.75rem;">
                     <i class="fas fa-heartbeat" style="color: #06b6d4;"></i> Health
                 </h2>
                 <div style="display: flex; gap: 1rem; align-items: center;">
-                    <span id="health-status" style="font-size: 0.85rem; font-weight: 600; color: #06b6d4; margin-right: 0.5rem;"></span>
-                    <label id="health-load-germination-wrapper" class="hidden" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; color: var(--text-primary); font-weight: 500; font-size: 0.85rem;">
+                    <span id="health-status"
+                        style="font-size: 0.85rem; font-weight: 600; color: #06b6d4; margin-right: 0.5rem;"></span>
+                    <label id="health-load-germination-wrapper" class="hidden"
+                        style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; color: var(--text-primary); font-weight: 500; font-size: 0.85rem;">
                         <input type="checkbox" id="health-load-germination-checkbox">
                         <span>Load Germination Data</span>
                     </label>
@@ -434,60 +449,85 @@
                     </button>
                 </div>
             </div>
-            
+
 
 
             <!-- 🎴 Health KPI Summary Section -->
             <div id="health-cards-container" class="hidden" style="margin-top: 1rem;">
-                <div class="metrics-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 2rem;">
+                <div class="metrics-grid"
+                    style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 2rem;">
                     <div class="metric-card" style="text-align: center; border-left: 4px solid #3b82f6;">
-                        <h4 style="color: var(--text-secondary); margin-bottom: 0.5rem; font-size: 0.9rem;">Total Plots Loaded</h4>
-                        <div id="health-stat-total-plots" style="font-size: 1.75rem; font-weight: 700; color: var(--text-primary);">-</div>
+                        <h4 style="color: var(--text-secondary); margin-bottom: 0.5rem; font-size: 0.9rem;">Total Plots
+                            Loaded</h4>
+                        <div id="health-stat-total-plots"
+                            style="font-size: 1.75rem; font-weight: 700; color: var(--text-primary);">-</div>
                     </div>
                     <div class="metric-card" style="text-align: center; border-left: 4px solid #10b981;">
-                        <h4 style="color: var(--text-secondary); margin-bottom: 0.5rem; font-size: 0.9rem;">PR Enabled</h4>
-                        <div id="health-stat-plots-covered" style="font-size: 1.75rem; font-weight: 700; color: #10b981;">-</div>
+                        <h4 style="color: var(--text-secondary); margin-bottom: 0.5rem; font-size: 0.9rem;">PR Enabled
+                        </h4>
+                        <div id="health-stat-plots-covered"
+                            style="font-size: 1.75rem; font-weight: 700; color: #10b981;">-</div>
                     </div>
                     <div class="metric-card" style="text-align: center; border-left: 4px solid #f59e0b;">
-                        <h4 style="color: var(--text-secondary); margin-bottom: 0.5rem; font-size: 0.9rem;">Plots Already Harvested</h4>
-                        <div id="health-stat-plots-harvested" style="font-size: 1.75rem; font-weight: 700; color: #f59e0b;">-</div>
+                        <h4 style="color: var(--text-secondary); margin-bottom: 0.5rem; font-size: 0.9rem;">Plots
+                            Already Harvested</h4>
+                        <div id="health-stat-plots-harvested"
+                            style="font-size: 1.75rem; font-weight: 700; color: #f59e0b;">-</div>
                     </div>
                 </div>
 
-                <div style="display: flex; gap: 2rem; margin-bottom: 1.5rem; background: rgba(99, 102, 241, 0.05); padding: 1rem; border-radius: 8px;">
-                    <label class="toggle-container" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                <div
+                    style="display: flex; gap: 2rem; margin-bottom: 1.5rem; background: rgba(99, 102, 241, 0.05); padding: 1rem; border-radius: 8px;">
+                    <label class="toggle-container"
+                        style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
                         <input type="checkbox" id="health-include-harvested" onchange="handleHealthToggleChange()">
-                        <span style="color: var(--text-primary); font-weight: 500;">Include Harvested Plots in Analysis</span>
+                        <span style="color: var(--text-primary); font-weight: 500;">Include Harvested Plots in
+                            Analysis</span>
                     </label>
-                    <label class="toggle-container" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                    <label class="toggle-container"
+                        style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
                         <input type="checkbox" id="health-sentinel-only-toggle" onchange="handleHealthToggleChange()">
-                        <span style="color: var(--text-primary); font-weight: 500;">Use Sentinel Data Only (Bypass Planet)</span>
+                        <span style="color: var(--text-primary); font-weight: 500;">Use Sentinel Data Only (Bypass
+                            Planet)</span>
                     </label>
-                    <label class="toggle-container" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                        <input type="checkbox" id="health-provider-preference-toggle" onchange="handleHealthToggleChange()">
+                    <label class="toggle-container"
+                        style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                        <input type="checkbox" id="health-provider-preference-toggle"
+                            onchange="handleHealthToggleChange()">
                         <span style="color: var(--text-primary); font-weight: 500;">Show Provider Preference</span>
                     </label>
                 </div>
 
                 <!-- KPI Analysis Grid (Greenness, Nitrogen, Water Stress) -->
-                <div id="health-kpi-grid" class="metrics-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; margin-bottom: 2rem;">
+                <div id="health-kpi-grid" class="metrics-grid"
+                    style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; margin-bottom: 2rem;">
                     <!-- Greenness Section -->
                     <div class="metric-card" style="padding: 1.25rem;">
-                        <h3 id="health-greenness-title-text" style="margin-bottom: 1rem; color: #10b981; font-weight: 700; font-size: 1.1rem;">
+                        <h3 id="health-greenness-title-text"
+                            style="margin-bottom: 1rem; color: #10b981; font-weight: 700; font-size: 1.1rem;">
                             <i class="fas fa-leaf"></i> Crop Greenness Status
                         </h3>
-                        <div id="health-greenness-analyzed" style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem; font-weight: 600; background: rgba(16, 185, 129, 0.05); padding: 0.4rem 0.6rem; border-radius: 4px; display: inline-block;">
+                        <div id="health-greenness-analyzed"
+                            style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem; font-weight: 600; background: rgba(16, 185, 129, 0.05); padding: 0.4rem 0.6rem; border-radius: 4px; display: inline-block;">
                             Plots Analyzed (Covered): 0
                         </div>
-                        <div style="margin-bottom: 1rem; padding: 0.5rem; background: rgba(99, 102, 241, 0.03); border: 1px solid rgba(99, 102, 241, 0.15); border-radius: 6px;">
-                            <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
-                                <span style="font-size: 0.8rem; color: var(--text-secondary); font-weight: 500;">Analysis Window (Days)</span>
+                        <div
+                            style="margin-bottom: 1rem; padding: 0.5rem; background: rgba(99, 102, 241, 0.03); border: 1px solid rgba(99, 102, 241, 0.15); border-radius: 6px;">
+                            <div
+                                style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
+                                <span
+                                    style="font-size: 0.8rem; color: var(--text-secondary); font-weight: 500;">Analysis
+                                    Window (Days)</span>
                                 <div style="display: flex; gap: 0.25rem; align-items: center;">
-                                    <input type="number" id="health-greenness-window" value="15" min="1" style="width: 55px; padding: 0.25rem; font-size: 0.8rem; border-radius: 4px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: var(--text-primary); text-align: center;">
-                                    <button onclick="handleHealthApplyFilter('greenness')" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; border-radius: 4px; background: #10b981; border: none; color: white; cursor: pointer; font-weight: 600;">Apply Filter</button>
+                                    <input type="number" id="health-greenness-window" value="15" min="1"
+                                        style="width: 55px; padding: 0.25rem; font-size: 0.8rem; border-radius: 4px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: var(--text-primary); text-align: center;">
+                                    <button onclick="handleHealthApplyFilter('greenness')"
+                                        style="padding: 0.25rem 0.5rem; font-size: 0.75rem; border-radius: 4px; background: #10b981; border: none; color: white; cursor: pointer; font-weight: 600;">Apply
+                                        Filter</button>
                                 </div>
                             </div>
-                            <div id="health-greenness-date-window" style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 0.35rem; font-style: italic; text-align: left; display: flex; align-items: center; gap: 0.25rem;">
+                            <div id="health-greenness-date-window"
+                                style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 0.35rem; font-style: italic; text-align: left; display: flex; align-items: center; gap: 0.25rem;">
                                 <i class="far fa-calendar-alt"></i> Date Window: Calculating...
                             </div>
                         </div>
@@ -495,26 +535,38 @@
                             <canvas id="health-greenness-pie"></canvas>
                         </div>
                         <div id="health-greenness-table"></div>
-                        <p id="health-greenness-insight" style="margin-top: 1rem; font-size: 0.85rem; color: var(--text-secondary); line-height: 1.4; border-top: 1px solid var(--border-color); padding-top: 0.75rem;"></p>
+                        <p id="health-greenness-insight"
+                            style="margin-top: 1rem; font-size: 0.85rem; color: var(--text-secondary); line-height: 1.4; border-top: 1px solid var(--border-color); padding-top: 0.75rem;">
+                        </p>
                     </div>
 
                     <!-- Nitrogen Section -->
                     <div class="metric-card" style="padding: 1.25rem;">
-                        <h3 id="health-nitrogen-title-text" style="margin-bottom: 1rem; color: #f59e0b; font-weight: 700; font-size: 1.1rem;">
+                        <h3 id="health-nitrogen-title-text"
+                            style="margin-bottom: 1rem; color: #f59e0b; font-weight: 700; font-size: 1.1rem;">
                             <i class="fas fa-microchip"></i> Nutrient Uptake
                         </h3>
-                        <div id="health-nitrogen-analyzed" style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem; font-weight: 600; background: rgba(245, 158, 11, 0.05); padding: 0.4rem 0.6rem; border-radius: 4px; display: inline-block;">
+                        <div id="health-nitrogen-analyzed"
+                            style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem; font-weight: 600; background: rgba(245, 158, 11, 0.05); padding: 0.4rem 0.6rem; border-radius: 4px; display: inline-block;">
                             Plots Analyzed (Covered): 0
                         </div>
-                        <div style="margin-bottom: 1rem; padding: 0.5rem; background: rgba(99, 102, 241, 0.03); border: 1px solid rgba(99, 102, 241, 0.15); border-radius: 6px;">
-                            <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
-                                <span style="font-size: 0.8rem; color: var(--text-secondary); font-weight: 500;">Analysis Window (Days)</span>
+                        <div
+                            style="margin-bottom: 1rem; padding: 0.5rem; background: rgba(99, 102, 241, 0.03); border: 1px solid rgba(99, 102, 241, 0.15); border-radius: 6px;">
+                            <div
+                                style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
+                                <span
+                                    style="font-size: 0.8rem; color: var(--text-secondary); font-weight: 500;">Analysis
+                                    Window (Days)</span>
                                 <div style="display: flex; gap: 0.25rem; align-items: center;">
-                                    <input type="number" id="health-nitrogen-window" value="15" min="1" style="width: 55px; padding: 0.25rem; font-size: 0.8rem; border-radius: 4px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: var(--text-primary); text-align: center;">
-                                    <button onclick="handleHealthApplyFilter('nitrogen')" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; border-radius: 4px; background: #f59e0b; border: none; color: white; cursor: pointer; font-weight: 600;">Apply Filter</button>
+                                    <input type="number" id="health-nitrogen-window" value="15" min="1"
+                                        style="width: 55px; padding: 0.25rem; font-size: 0.8rem; border-radius: 4px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: var(--text-primary); text-align: center;">
+                                    <button onclick="handleHealthApplyFilter('nitrogen')"
+                                        style="padding: 0.25rem 0.5rem; font-size: 0.75rem; border-radius: 4px; background: #f59e0b; border: none; color: white; cursor: pointer; font-weight: 600;">Apply
+                                        Filter</button>
                                 </div>
                             </div>
-                            <div id="health-nitrogen-date-window" style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 0.35rem; font-style: italic; text-align: left; display: flex; align-items: center; gap: 0.25rem;">
+                            <div id="health-nitrogen-date-window"
+                                style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 0.35rem; font-style: italic; text-align: left; display: flex; align-items: center; gap: 0.25rem;">
                                 <i class="far fa-calendar-alt"></i> Date Window: Calculating...
                             </div>
                         </div>
@@ -522,26 +574,38 @@
                             <canvas id="health-nitrogen-pie"></canvas>
                         </div>
                         <div id="health-nitrogen-table"></div>
-                        <p id="health-nitrogen-insight" style="margin-top: 1rem; font-size: 0.85rem; color: var(--text-secondary); line-height: 1.4; border-top: 1px solid var(--border-color); padding-top: 0.75rem;"></p>
+                        <p id="health-nitrogen-insight"
+                            style="margin-top: 1rem; font-size: 0.85rem; color: var(--text-secondary); line-height: 1.4; border-top: 1px solid var(--border-color); padding-top: 0.75rem;">
+                        </p>
                     </div>
 
                     <!-- Water Stress Section -->
                     <div class="metric-card" style="padding: 1.25rem;">
-                        <h3 id="health-water-title-text" style="margin-bottom: 1rem; color: #3b82f6; font-weight: 700; font-size: 1.1rem;">
+                        <h3 id="health-water-title-text"
+                            style="margin-bottom: 1rem; color: #3b82f6; font-weight: 700; font-size: 1.1rem;">
                             <i class="fas fa-tint"></i> Water Stress Status
                         </h3>
-                        <div id="health-water-analyzed" style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem; font-weight: 600; background: rgba(59, 130, 246, 0.05); padding: 0.4rem 0.6rem; border-radius: 4px; display: inline-block;">
+                        <div id="health-water-analyzed"
+                            style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem; font-weight: 600; background: rgba(59, 130, 246, 0.05); padding: 0.4rem 0.6rem; border-radius: 4px; display: inline-block;">
                             Plots Analyzed (Covered): 0
                         </div>
-                        <div style="margin-bottom: 1rem; padding: 0.5rem; background: rgba(99, 102, 241, 0.03); border: 1px solid rgba(99, 102, 241, 0.15); border-radius: 6px;">
-                            <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
-                                <span style="font-size: 0.8rem; color: var(--text-secondary); font-weight: 500;">Analysis Window (Days)</span>
+                        <div
+                            style="margin-bottom: 1rem; padding: 0.5rem; background: rgba(99, 102, 241, 0.03); border: 1px solid rgba(99, 102, 241, 0.15); border-radius: 6px;">
+                            <div
+                                style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
+                                <span
+                                    style="font-size: 0.8rem; color: var(--text-secondary); font-weight: 500;">Analysis
+                                    Window (Days)</span>
                                 <div style="display: flex; gap: 0.25rem; align-items: center;">
-                                    <input type="number" id="health-water-window" value="15" min="1" style="width: 55px; padding: 0.25rem; font-size: 0.8rem; border-radius: 4px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: var(--text-primary); text-align: center;">
-                                    <button onclick="handleHealthApplyFilter('water')" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; border-radius: 4px; background: #3b82f6; border: none; color: white; cursor: pointer; font-weight: 600;">Apply Filter</button>
+                                    <input type="number" id="health-water-window" value="15" min="1"
+                                        style="width: 55px; padding: 0.25rem; font-size: 0.8rem; border-radius: 4px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: var(--text-primary); text-align: center;">
+                                    <button onclick="handleHealthApplyFilter('water')"
+                                        style="padding: 0.25rem 0.5rem; font-size: 0.75rem; border-radius: 4px; background: #3b82f6; border: none; color: white; cursor: pointer; font-weight: 600;">Apply
+                                        Filter</button>
                                 </div>
                             </div>
-                            <div id="health-water-date-window" style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 0.35rem; font-style: italic; text-align: left; display: flex; align-items: center; gap: 0.25rem;">
+                            <div id="health-water-date-window"
+                                style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 0.35rem; font-style: italic; text-align: left; display: flex; align-items: center; gap: 0.25rem;">
                                 <i class="far fa-calendar-alt"></i> Date Window: Calculating...
                             </div>
                         </div>
@@ -549,32 +613,47 @@
                             <canvas id="health-water-pie"></canvas>
                         </div>
                         <div id="health-water-table"></div>
-                        <p id="health-water-insight" style="margin-top: 1rem; font-size: 0.85rem; color: var(--text-secondary); line-height: 1.4; border-top: 1px solid var(--border-color); padding-top: 0.75rem;"></p>
+                        <p id="health-water-insight"
+                            style="margin-top: 1rem; font-size: 0.85rem; color: var(--text-secondary); line-height: 1.4; border-top: 1px solid var(--border-color); padding-top: 0.75rem;">
+                        </p>
                     </div>
 
                     <!-- Germination Section -->
                     <div id="health-germination-card" class="metric-card hidden" style="padding: 1.25rem;">
-                        <h3 id="health-germination-title-text" style="margin-bottom: 1rem; color: #a855f7; font-weight: 700; font-size: 1.1rem;">
+                        <h3 id="health-germination-title-text"
+                            style="margin-bottom: 1rem; color: #a855f7; font-weight: 700; font-size: 1.1rem;">
                             <i class="fas fa-seedling"></i> Germination
                         </h3>
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
-                            <label style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.8rem; color: var(--text-secondary); cursor: pointer; font-weight: 600;">
-                                <input type="checkbox" id="health-germination-only-planet" onchange="handleHealthApplyFilter('germination')">
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+                            <label
+                                style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.8rem; color: var(--text-secondary); cursor: pointer; font-weight: 600;">
+                                <input type="checkbox" id="health-germination-only-planet"
+                                    onchange="handleHealthApplyFilter('germination')">
                                 <span>Consider only Planet</span>
                             </label>
-                            <div id="health-germination-analyzed" style="font-size: 0.85rem; color: var(--text-secondary); font-weight: 600; background: rgba(168, 85, 247, 0.05); padding: 0.4rem 0.6rem; border-radius: 4px; display: inline-block; margin: 0;">
+                            <div id="health-germination-analyzed"
+                                style="font-size: 0.85rem; color: var(--text-secondary); font-weight: 600; background: rgba(168, 85, 247, 0.05); padding: 0.4rem 0.6rem; border-radius: 4px; display: inline-block; margin: 0;">
                                 Plots Analyzed (Covered): 0
                             </div>
                         </div>
-                        <div style="margin-bottom: 1rem; padding: 0.5rem; background: rgba(99, 102, 241, 0.03); border: 1px solid rgba(99, 102, 241, 0.15); border-radius: 6px;">
-                            <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
-                                <span style="font-size: 0.8rem; color: var(--text-secondary); font-weight: 500;">Analysis Window (Days)</span>
+                        <div
+                            style="margin-bottom: 1rem; padding: 0.5rem; background: rgba(99, 102, 241, 0.03); border: 1px solid rgba(99, 102, 241, 0.15); border-radius: 6px;">
+                            <div
+                                style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
+                                <span
+                                    style="font-size: 0.8rem; color: var(--text-secondary); font-weight: 500;">Analysis
+                                    Window (Days)</span>
                                 <div style="display: flex; gap: 0.25rem; align-items: center;">
-                                    <input type="number" id="health-germination-window" value="15" min="1" style="width: 55px; padding: 0.25rem; font-size: 0.8rem; border-radius: 4px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: var(--text-primary); text-align: center;">
-                                    <button onclick="handleHealthApplyFilter('germination')" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; border-radius: 4px; background: #a855f7; border: none; color: white; cursor: pointer; font-weight: 600;">Apply Filter</button>
+                                    <input type="number" id="health-germination-window" value="15" min="1"
+                                        style="width: 55px; padding: 0.25rem; font-size: 0.8rem; border-radius: 4px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.2); color: var(--text-primary); text-align: center;">
+                                    <button onclick="handleHealthApplyFilter('germination')"
+                                        style="padding: 0.25rem 0.5rem; font-size: 0.75rem; border-radius: 4px; background: #a855f7; border: none; color: white; cursor: pointer; font-weight: 600;">Apply
+                                        Filter</button>
                                 </div>
                             </div>
-                            <div id="health-germination-date-window" style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 0.35rem; font-style: italic; text-align: left; display: flex; align-items: center; gap: 0.25rem;">
+                            <div id="health-germination-date-window"
+                                style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 0.35rem; font-style: italic; text-align: left; display: flex; align-items: center; gap: 0.25rem;">
                                 <i class="far fa-calendar-alt"></i> Date Window: Calculating...
                             </div>
                         </div>
@@ -582,15 +661,21 @@
                             <canvas id="health-germination-pie"></canvas>
                         </div>
                         <div id="health-germination-table"></div>
-                        <p id="health-germination-insight" style="margin-top: 1rem; font-size: 0.85rem; color: var(--text-secondary); line-height: 1.4; border-top: 1px solid var(--border-color); padding-top: 0.75rem;"></p>
+                        <p id="health-germination-insight"
+                            style="margin-top: 1rem; font-size: 0.85rem; color: var(--text-secondary); line-height: 1.4; border-top: 1px solid var(--border-color); padding-top: 0.75rem;">
+                        </p>
                     </div>
                 </div>
 
                 <!-- Dynamic Drill-down List (Initially Hidden) -->
-                <div id="health-kpi-drilldown-container" class="hidden" style="margin-bottom: 2rem; background: var(--card-bg); border: 2px solid #06b6d4; border-radius: 12px; padding: 1.5rem; box-shadow: 0 10px 25px rgba(0,0,0,0.4);">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem;">
-                        <h3 id="health-kpi-drilldown-title" style="margin: 0; font-size: 1.25rem; font-weight: 700;">Plot Details</h3>
-                        <button onclick="closeHealthDrillDown('health-kpi-drilldown-container')" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.5rem;">&times;</button>
+                <div id="health-kpi-drilldown-container" class="hidden"
+                    style="margin-bottom: 2rem; background: var(--card-bg); border: 2px solid #06b6d4; border-radius: 12px; padding: 1.5rem; box-shadow: 0 10px 25px rgba(0,0,0,0.4);">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem;">
+                        <h3 id="health-kpi-drilldown-title" style="margin: 0; font-size: 1.25rem; font-weight: 700;">
+                            Plot Details</h3>
+                        <button onclick="closeHealthDrillDown('health-kpi-drilldown-container')"
+                            style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.5rem;">&times;</button>
                     </div>
                     <div style="max-height: 400px; overflow-y: auto;">
                         <table style="width: 100%; border-collapse: collapse;">
@@ -609,17 +694,24 @@
                 <!-- Detailed Satellite Health Table Section -->
                 <!-- Unified Base Table Toggle (Matches Growth Module Style) -->
                 <div style="display: flex; justify-content: center; margin-top: 2rem;">
-                    <button id="toggle-health-table-btn" onclick="toggleHealthTableVisibility()" class="export-btn" style="background: #8b5cf6; padding: 0.8rem 2rem; display: flex; align-items: center; gap: 0.75rem; border: none; border-radius: 8px; color: white; cursor: pointer; font-weight: 700; box-shadow: 0 4px 12px rgba(139, 92, 246, 0.2);">
+                    <button id="toggle-health-table-btn" onclick="toggleHealthTableVisibility()" class="export-btn"
+                        style="background: #8b5cf6; padding: 0.8rem 2rem; display: flex; align-items: center; gap: 0.75rem; border: none; border-radius: 8px; color: white; cursor: pointer; font-weight: 700; box-shadow: 0 4px 12px rgba(139, 92, 246, 0.2);">
                         <i class="fas fa-table"></i> <span id="toggle-health-table-text">View Base Plot Data</span>
                     </button>
                 </div>
-                
-                <div id="base-health-table-wrapper" class="hidden" style="margin-top: 2rem; border-top: 1px solid var(--border-color); padding-top: 2rem;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                        <h3 style="margin: 0; font-size: 1.1rem; font-weight: 600; color: var(--text-primary);">Base Plot Level Analysis - Detail Table</h3>
-                        <label class="toggle-container" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                            <input type="checkbox" id="health-hide-harvested-base-table" onchange="handleHealthBaseTableToggleChange()">
-                            <span style="color: var(--text-primary); font-size: 0.9rem; font-weight: 500;">Hide harvested plots</span>
+
+                <div id="base-health-table-wrapper" class="hidden"
+                    style="margin-top: 2rem; border-top: 1px solid var(--border-color); padding-top: 2rem;">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <h3 style="margin: 0; font-size: 1.1rem; font-weight: 600; color: var(--text-primary);">Base
+                            Plot Level Analysis - Detail Table</h3>
+                        <label class="toggle-container"
+                            style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                            <input type="checkbox" id="health-hide-harvested-base-table"
+                                onchange="handleHealthBaseTableToggleChange()">
+                            <span style="color: var(--text-primary); font-size: 0.9rem; font-weight: 500;">Hide
+                                harvested plots</span>
                         </label>
                     </div>
                     <div id="health-table-container"></div>
@@ -627,38 +719,47 @@
             </div>
 
             <!-- Optional: Health Harvest Status Section (Re-implemented for parity) -->
-            <div id="health-harvest-data-v2" class="hidden" style="margin-top: 3rem; padding-top: 2rem; border-top: 2px dashed var(--border-color);">
+            <div id="health-harvest-data-v2" class="hidden"
+                style="margin-top: 3rem; padding-top: 2rem; border-top: 2px dashed var(--border-color);">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
                     <h2 style="font-size: 1.5rem; font-weight: 700; color: var(--text-primary); margin: 0;">
-                        <i class="fas fa-truck-loading" style="color: #f59e0b;"></i> Harvest Verification (Health Results)
+                        <i class="fas fa-truck-loading" style="color: #f59e0b;"></i> Harvest Verification (Health
+                        Results)
                     </h2>
                 </div>
-                
-                <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 2rem; background: rgba(245, 158, 11, 0.05); padding: 1.25rem; border-radius: 12px; border: 1px solid rgba(245, 158, 11, 0.2);">
-                    <input type="text" id="health-harvest-plantype-id" placeholder="Enter Plantype ID (e.g. 5)" 
-                           style="padding: 0.75rem; border-radius: 8px; background: var(--input-bg); color: var(--text-primary); border: 1px solid var(--border-color); flex: 1; max-width: 300px;">
+
+                <div
+                    style="display: flex; gap: 1rem; align-items: center; margin-bottom: 2rem; background: rgba(245, 158, 11, 0.05); padding: 1.25rem; border-radius: 12px; border: 1px solid rgba(245, 158, 11, 0.2);">
+                    <input type="text" id="health-harvest-plantype-id" placeholder="Enter Plantype ID (e.g. 5)"
+                        style="padding: 0.75rem; border-radius: 8px; background: var(--input-bg); color: var(--text-primary); border: 1px solid var(--border-color); flex: 1; max-width: 300px;">
                     <button id="load-health-harvest-status-btn" onclick="handleLoadHealthHarvestStatus()"
-                            style="padding: 0.75rem 1.5rem; background: #f59e0b; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 700;">
+                        style="padding: 0.75rem 1.5rem; background: #f59e0b; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 700;">
                         📥 Load Collected Harvest
                     </button>
                 </div>
 
                 <div id="health-harvest-status-results" class="hidden">
-                    <div class="metrics-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-bottom: 2rem;">
-                         <div class="metric-card" style="text-align: center; border-left: 4px solid #f59e0b;">
-                            <h4 style="color: var(--text-secondary); margin-bottom: 0.5rem; font-size: 0.9rem;">Plots With Harvest Data</h4>
-                            <div id="health-stat-harvest-plots-covered" style="font-size: 1.75rem; font-weight: 700; color: var(--text-primary);">-</div>
+                    <div class="metrics-grid"
+                        style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-bottom: 2rem;">
+                        <div class="metric-card" style="text-align: center; border-left: 4px solid #f59e0b;">
+                            <h4 style="color: var(--text-secondary); margin-bottom: 0.5rem; font-size: 0.9rem;">Plots
+                                With Harvest Data</h4>
+                            <div id="health-stat-harvest-plots-covered"
+                                style="font-size: 1.75rem; font-weight: 700; color: var(--text-primary);">-</div>
                         </div>
                         <div class="metric-card" style="text-align: center; border-left: 4px solid #10b981;">
-                            <h4 style="color: var(--text-secondary); margin-bottom: 0.5rem; font-size: 0.9rem;">Total Collected Weight</h4>
-                            <div id="health-stat-harvest-collected" style="font-size: 1.75rem; font-weight: 700; color: #10b981;">-</div>
+                            <h4 style="color: var(--text-secondary); margin-bottom: 0.5rem; font-size: 0.9rem;">Total
+                                Collected Weight</h4>
+                            <div id="health-stat-harvest-collected"
+                                style="font-size: 1.75rem; font-weight: 700; color: #10b981;">-</div>
                         </div>
                     </div>
 
                     <div id="health-harvest-window-status-container" class="hidden" style="margin-bottom: 2rem;">
                         <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 1.5rem;">
                             <div class="metric-card">
-                                <h4 style="margin-bottom: 1rem; color: var(--text-secondary);">Harvest Window Status</h4>
+                                <h4 style="margin-bottom: 1rem; color: var(--text-secondary);">Harvest Window Status
+                                </h4>
                                 <div style="height: 200px; position: relative;">
                                     <canvas id="health-harvest-window-pie-chart"></canvas>
                                 </div>
@@ -680,7 +781,8 @@
                         </div>
                     </div>
 
-                    <h4 style="margin-bottom: 1rem; color: var(--text-primary); font-weight: 700;">Base Harvest Task Detail</h4>
+                    <h4 style="margin-bottom: 1rem; color: var(--text-primary); font-weight: 700;">Base Harvest Task
+                        Detail</h4>
                     <div class="metric-card" style="padding: 0; overflow-x: auto;">
                         <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
                             <thead>
@@ -705,20 +807,23 @@
         </section>
 
         <!-- 🌿 Yield and Harvest Major Section -->
-            <section class="dashboard-section hidden" id="yield-harvest-section" style="margin-top: 2rem;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; border-bottom: 2px solid var(--primary-color); padding-bottom: 0.75rem;">
-                    <h2 style="font-size: 1.75rem; font-weight: 700; color: var(--text-primary); margin: 0; display: flex; align-items: center; gap: 0.75rem;">
-                        <i class="fas fa-chart-line" style="color: var(--primary-color);"></i> Yield and Harvest
-                    </h2>
-                    <div style="display: flex; gap: 1rem; align-items: center;">
-                        <span id="yield-status" style="font-size: 0.85rem; font-weight: 600; color: var(--primary-color); margin-right: 0.5rem;"></span>
-                        <button id="load-data-btn" onclick="handleLoadPlots()" disabled
-                            style="padding: 0.7rem 1.5rem; background: var(--primary-color); opacity: 0.5; color: white; border: none; border-radius: 8px; cursor: not-allowed; transition: all 0.3s; font-weight: 700; box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);">
-                            📊 Load Yield & Harvest Data
-                        </button>
-                    </div>
+        <section class="dashboard-section hidden" id="yield-harvest-section" style="margin-top: 2rem;">
+            <div
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; border-bottom: 2px solid var(--primary-color); padding-bottom: 0.75rem;">
+                <h2
+                    style="font-size: 1.75rem; font-weight: 700; color: var(--text-primary); margin: 0; display: flex; align-items: center; gap: 0.75rem;">
+                    <i class="fas fa-chart-line" style="color: var(--primary-color);"></i> Yield and Harvest
+                </h2>
+                <div style="display: flex; gap: 1rem; align-items: center;">
+                    <span id="yield-status"
+                        style="font-size: 0.85rem; font-weight: 600; color: var(--primary-color); margin-right: 0.5rem;"></span>
+                    <button id="load-data-btn" onclick="handleLoadPlots()" disabled
+                        style="padding: 0.7rem 1.5rem; background: var(--primary-color); opacity: 0.5; color: white; border: none; border-radius: 8px; cursor: not-allowed; transition: all 0.3s; font-weight: 700; box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);">
+                        📊 Load Yield & Harvest Data
+                    </button>
                 </div>
-            </section>
+            </div>
+        </section>
 
         <!-- Data Unit Configuration (Shown after upload) -->
         <section id="unit-config-section" class="hidden" style="margin-bottom: 2rem;">
@@ -770,9 +875,13 @@
                         <span style="margin-right: 2rem;">Total Area: <span id="agg-total-area">-</span></span>
                         <span>Data available plots: <span id="agg-plots-count">-</span></span>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 0.6rem; background: rgba(255, 255, 255, 0.05); padding: 0.4rem 0.8rem; border-radius: 6px; border: 1px solid var(--border-color);">
-                        <input type="checkbox" id="include-no-prediction-agg" style="cursor: pointer; width: 16px; height: 16px;">
-                        <label for="include-no-prediction-agg" style="font-size: 0.85rem; color: var(--text-primary); cursor: pointer; user-select: none;">Include no prediction plots</label>
+                    <div
+                        style="display: flex; align-items: center; gap: 0.6rem; background: rgba(255, 255, 255, 0.05); padding: 0.4rem 0.8rem; border-radius: 6px; border: 1px solid var(--border-color);">
+                        <input type="checkbox" id="include-no-prediction-agg"
+                            style="cursor: pointer; width: 16px; height: 16px;">
+                        <label for="include-no-prediction-agg"
+                            style="font-size: 0.85rem; color: var(--text-primary); cursor: pointer; user-select: none;">Include
+                            no prediction plots</label>
                     </div>
                 </div>
                 <div class="cards-row">
@@ -861,35 +970,56 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="metric-row" id="agg-collected-harvest-row" onclick="toggleCollectedHarvestDrillDown()" style="margin-top: 1rem; padding-top: 1rem; border-top: 1px dashed var(--border-color); cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='rgba(16, 185, 129, 0.05)'" onmouseout="this.style.background='transparent'">
+                        <div class="metric-row" id="agg-collected-harvest-row"
+                            onclick="toggleCollectedHarvestDrillDown()"
+                            style="margin-top: 1rem; padding-top: 1rem; border-top: 1px dashed var(--border-color); cursor: pointer; transition: background 0.2s;"
+                            onmouseover="this.style.background='rgba(16, 185, 129, 0.05)'"
+                            onmouseout="this.style.background='transparent'">
                             <div>
-                                <div class="metric-label" style="color: #10b981;">Collected Harvest <i class="fas fa-chevron-down" style="font-size: 0.8rem; margin-left: 0.3rem; opacity: 0.7;"></i></div>
+                                <div class="metric-label" style="color: #10b981;">Collected Harvest <i
+                                        class="fas fa-chevron-down"
+                                        style="font-size: 0.8rem; margin-left: 0.3rem; opacity: 0.7;"></i></div>
                                 <span class="sub-text">(Predicted-available plots)</span>
                             </div>
                             <div class="metric-value" style="color: #10b981;">
                                 <span id="agg-collected-harvest">-</span>
-                                <span id="agg-collected-plots-count" style="font-size: 0.85rem; font-weight: 400; opacity: 0.8; margin-left: 0.3rem;"></span>
+                                <span id="agg-collected-plots-count"
+                                    style="font-size: 0.85rem; font-weight: 400; opacity: 0.8; margin-left: 0.3rem;"></span>
                             </div>
                         </div>
                     </div>
                 </div>
 
                 <!-- Collected Harvest Drill-down Table -->
-                <div id="collected-harvest-drilldown-container" class="hidden" style="margin-top: 1.5rem; background: var(--card-bg); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border-color);">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                        <h4 id="collected-harvest-drilldown-title" style="margin: 0; color: var(--text-primary);">Collected Harvest Details</h4>
-                        <button onclick="document.getElementById('collected-harvest-drilldown-container').classList.add('hidden')" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.25rem; padding: 0.25rem 0.5rem; border-radius: 4px; transition: all 0.2s;" title="Close Table">
+                <div id="collected-harvest-drilldown-container" class="hidden"
+                    style="margin-top: 1.5rem; background: var(--card-bg); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border-color);">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <h4 id="collected-harvest-drilldown-title" style="margin: 0; color: var(--text-primary);">
+                            Collected Harvest Details</h4>
+                        <button
+                            onclick="document.getElementById('collected-harvest-drilldown-container').classList.add('hidden')"
+                            style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.25rem; padding: 0.25rem 0.5rem; border-radius: 4px; transition: all 0.2s;"
+                            title="Close Table">
                             <i class="fas fa-times"></i>
                         </button>
                     </div>
                     <div style="max-height: 500px; overflow-y: auto;">
                         <table class="plots-table" style="width: 100%; border-collapse: collapse;">
                             <thead>
-                                <tr style="text-align: left; position: sticky; top: 0; background: var(--card-bg); z-index: 5;">
-                                    <th style="padding: 0.75rem; border-bottom: 2px solid var(--secondary-color);">Description</th>
-                                    <th style="padding: 0.75rem; border-bottom: 2px solid var(--secondary-color); text-align: center;">Quantity</th>
-                                    <th style="padding: 0.75rem; border-bottom: 2px solid var(--secondary-color); text-align: center;">Unit</th>
-                                    <th style="padding: 0.75rem; border-bottom: 2px solid var(--secondary-color); text-align: right;">Metric Tonnes</th>
+                                <tr
+                                    style="text-align: left; position: sticky; top: 0; background: var(--card-bg); z-index: 5;">
+                                    <th style="padding: 0.75rem; border-bottom: 2px solid var(--secondary-color);">
+                                        Description</th>
+                                    <th
+                                        style="padding: 0.75rem; border-bottom: 2px solid var(--secondary-color); text-align: center;">
+                                        Quantity</th>
+                                    <th
+                                        style="padding: 0.75rem; border-bottom: 2px solid var(--secondary-color); text-align: center;">
+                                        Unit</th>
+                                    <th
+                                        style="padding: 0.75rem; border-bottom: 2px solid var(--secondary-color); text-align: right;">
+                                        Metric Tonnes</th>
                                 </tr>
                             </thead>
                             <tbody id="collected-harvest-drilldown-tbody">
@@ -1047,20 +1177,25 @@
 
         <!-- Unified Base Table Toggle for Yield Module -->
         <div style="display: flex; justify-content: center; margin: 2rem 0;">
-            <button id="toggle-yield-table-btn" onclick="toggleYieldTableVisibility()" class="export-btn" style="background: #8b5cf6; padding: 0.8rem 2rem; display: flex; align-items: center; gap: 0.75rem; border: none; border-radius: 8px; color: white; cursor: pointer; font-weight: 700; box-shadow: 0 4px 12px rgba(139, 92, 246, 0.2); display: none;">
+            <button id="toggle-yield-table-btn" onclick="toggleYieldTableVisibility()" class="export-btn"
+                style="background: #8b5cf6; padding: 0.8rem 2rem; display: flex; align-items: center; gap: 0.75rem; border: none; border-radius: 8px; color: white; cursor: pointer; font-weight: 700; box-shadow: 0 4px 12px rgba(139, 92, 246, 0.2); display: none;">
                 <i class="fas fa-table"></i> <span id="toggle-yield-table-text">View Base Plot Data</span>
             </button>
         </div>
 
-        <div id="base-yield-table-wrapper" class="hidden" style="margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 2rem; padding-bottom: 2rem;">
+        <div id="base-yield-table-wrapper" class="hidden"
+            style="margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 2rem; padding-bottom: 2rem;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                <h3 style="margin: 0; font-size: 1.1rem; font-weight: 600; color: var(--text-primary);">Base Plot Level Analysis - Detail Table</h3>
+                <h3 style="margin: 0; font-size: 1.1rem; font-weight: 600; color: var(--text-primary);">Base Plot Level
+                    Analysis - Detail Table</h3>
             </div>
 
             <!-- Controls Section -->
-            <div class="table-controls" style="margin-bottom: 1.5rem; background: rgba(255, 255, 255, 0.05); padding: 1rem; border-radius: 12px; border: 1px solid var(--border-color);">
+            <div class="table-controls"
+                style="margin-bottom: 1.5rem; background: rgba(255, 255, 255, 0.05); padding: 1rem; border-radius: 12px; border: 1px solid var(--border-color);">
                 <div class="table-search-container">
-                    <input type="text" id="table-search" class="table-search-input" oninput="filterTableData(this.value)" placeholder="🔍 Search plots...">
+                    <input type="text" id="table-search" class="table-search-input"
+                        oninput="filterTableData(this.value)" placeholder="🔍 Search plots...">
                 </div>
                 <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
                     <div class="sort-controls">
@@ -1077,9 +1212,11 @@
                             <option value="harvestMaxExp">Harvest Max vs Exp %</option>
                             <option value="harvestMaxRe">Harvest Max vs Est %</option>
                         </select>
-                        <button id="sort-order-btn" class="sort-order-btn" onclick="toggleSortOrder()" title="Toggle sort order">↑ Asc</button>
+                        <button id="sort-order-btn" class="sort-order-btn" onclick="toggleSortOrder()"
+                            title="Toggle sort order">↑ Asc</button>
                     </div>
-                    <button id="export-excel-btn" class="export-btn" onclick="exportToExcel()" style="background: #10b981;">
+                    <button id="export-excel-btn" class="export-btn" onclick="exportToExcel()"
+                        style="background: #10b981;">
                         📥 Export Excel
                     </button>
                     <div class="table-pagination-controls">
@@ -1095,20 +1232,45 @@
             </div>
 
             <!-- Scrollable Table Section -->
-            <div style="overflow-x: auto; background: var(--card-bg); border-radius: 12px; border: 1px solid var(--border-color);">
+            <div
+                style="overflow-x: auto; background: var(--card-bg); border-radius: 12px; border: 1px solid var(--border-color);">
                 <table id="all-plots-table" class="plots-table" style="width: 100%; border-collapse: collapse;">
                     <thead>
                         <tr style="background: rgba(139, 92, 246, 0.1); text-align: left;">
                             <th style="padding: 1rem; border-bottom: 2px solid var(--secondary-color);">Plot Name</th>
-                            <th id="th-audited-area" style="padding: 1rem; border-bottom: 2px solid var(--secondary-color); cursor: pointer;" onclick="sortTable('auditedArea')">Audited Area <span id="sort-icon-auditedArea" class="ml-1"></span></th>
-                            <th id="th-exp-harvest" style="padding: 1rem; border-bottom: 2px solid var(--secondary-color); cursor: pointer;" onclick="sortTable('h1')">Exp Harvest <span id="sort-icon-h1" class="ml-1"></span></th>
-                            <th id="th-re-harvest" style="padding: 1rem; border-bottom: 2px solid var(--secondary-color); cursor: pointer;" onclick="sortTable('h2')">Re-est Harvest <span id="sort-icon-h2" class="ml-1"></span></th>
-                            <th id="th-pred-harvest-min" style="padding: 1rem; border-bottom: 2px solid var(--secondary-color); cursor: pointer;" onclick="sortTable('h3_min')">Pred Harv Min <span id="sort-icon-h3_min" class="ml-1"></span></th>
-                            <th id="th-pred-harvest-max" style="padding: 1rem; border-bottom: 2px solid var(--secondary-color); cursor: pointer;" onclick="sortTable('h3_max')">Pred Harv Max <span id="sort-icon-h3_max" class="ml-1"></span></th>
-                            <th id="th-exp-yield" style="padding: 1rem; border-bottom: 2px solid var(--secondary-color); cursor: pointer;" onclick="sortTable('y1')">Exp Yield <span id="sort-icon-y1" class="ml-1"></span></th>
-                            <th id="th-re-yield" style="padding: 1rem; border-bottom: 2px solid var(--secondary-color); cursor: pointer;" onclick="sortTable('y2')">Re-est Yield <span id="sort-icon-y2" class="ml-1"></span></th>
-                            <th id="th-pred-yield-min" style="padding: 1rem; border-bottom: 2px solid var(--secondary-color); cursor: pointer;" onclick="sortTable('y3_min')">Pred Yield Min <span id="sort-icon-y3_min" class="ml-1"></span></th>
-                            <th id="th-pred-yield-max" style="padding: 1rem; border-bottom: 2px solid var(--secondary-color); cursor: pointer;" onclick="sortTable('y3_max')">Pred Yield Max <span id="sort-icon-y3_max" class="ml-1"></span></th>
+                            <th id="th-audited-area"
+                                style="padding: 1rem; border-bottom: 2px solid var(--secondary-color); cursor: pointer;"
+                                onclick="sortTable('auditedArea')">Audited Area <span id="sort-icon-auditedArea"
+                                    class="ml-1"></span></th>
+                            <th id="th-exp-harvest"
+                                style="padding: 1rem; border-bottom: 2px solid var(--secondary-color); cursor: pointer;"
+                                onclick="sortTable('h1')">Exp Harvest <span id="sort-icon-h1" class="ml-1"></span></th>
+                            <th id="th-re-harvest"
+                                style="padding: 1rem; border-bottom: 2px solid var(--secondary-color); cursor: pointer;"
+                                onclick="sortTable('h2')">Re-est Harvest <span id="sort-icon-h2" class="ml-1"></span>
+                            </th>
+                            <th id="th-pred-harvest-min"
+                                style="padding: 1rem; border-bottom: 2px solid var(--secondary-color); cursor: pointer;"
+                                onclick="sortTable('h3_min')">Pred Harv Min <span id="sort-icon-h3_min"
+                                    class="ml-1"></span></th>
+                            <th id="th-pred-harvest-max"
+                                style="padding: 1rem; border-bottom: 2px solid var(--secondary-color); cursor: pointer;"
+                                onclick="sortTable('h3_max')">Pred Harv Max <span id="sort-icon-h3_max"
+                                    class="ml-1"></span></th>
+                            <th id="th-exp-yield"
+                                style="padding: 1rem; border-bottom: 2px solid var(--secondary-color); cursor: pointer;"
+                                onclick="sortTable('y1')">Exp Yield <span id="sort-icon-y1" class="ml-1"></span></th>
+                            <th id="th-re-yield"
+                                style="padding: 1rem; border-bottom: 2px solid var(--secondary-color); cursor: pointer;"
+                                onclick="sortTable('y2')">Re-est Yield <span id="sort-icon-y2" class="ml-1"></span></th>
+                            <th id="th-pred-yield-min"
+                                style="padding: 1rem; border-bottom: 2px solid var(--secondary-color); cursor: pointer;"
+                                onclick="sortTable('y3_min')">Pred Yield Min <span id="sort-icon-y3_min"
+                                    class="ml-1"></span></th>
+                            <th id="th-pred-yield-max"
+                                style="padding: 1rem; border-bottom: 2px solid var(--secondary-color); cursor: pointer;"
+                                onclick="sortTable('y3_max')">Pred Yield Max <span id="sort-icon-y3_max"
+                                    class="ml-1"></span></th>
                         </tr>
                     </thead>
                     <tbody id="all-plots-tbody">
@@ -1117,51 +1279,63 @@
                 </table>
             </div>
 
-            <div id="pagination-info" style="text-align: center; margin-top: 1rem; font-size: 0.9rem; color: var(--text-secondary);"></div>
-            <div id="pagination-controls" style="margin-top: 0.5rem; display: flex; justify-content: center; gap: 0.5rem;">
+            <div id="pagination-info"
+                style="text-align: center; margin-top: 1rem; font-size: 0.9rem; color: var(--text-secondary);"></div>
+            <div id="pagination-controls"
+                style="margin-top: 0.5rem; display: flex; justify-content: center; gap: 0.5rem;">
                 <!-- Pagination buttons injected by JS -->
             </div>
         </div>
 
         <!-- 3. Growth Data Section -->
         <section class="dashboard-section hidden" id="growth-data-section">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; border-bottom: 2px solid var(--secondary-color); padding-bottom: 0.75rem;">
-                <h2 style="font-size: 1.75rem; font-weight: 700; color: var(--text-primary); margin: 0; display: flex; align-items: center; gap: 0.75rem;">
+            <div
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; border-bottom: 2px solid var(--secondary-color); padding-bottom: 0.75rem;">
+                <h2
+                    style="font-size: 1.75rem; font-weight: 700; color: var(--text-primary); margin: 0; display: flex; align-items: center; gap: 0.75rem;">
                     <i class="fas fa-seedling" style="color: var(--secondary-color);"></i> Growth
                 </h2>
                 <div style="display: flex; gap: 1rem; align-items: center;">
-                    <span id="growth-status" style="font-size: 0.85rem; font-weight: 600; color: var(--secondary-color); margin-right: 0.5rem;"></span>
+                    <span id="growth-status"
+                        style="font-size: 0.85rem; font-weight: 600; color: var(--secondary-color); margin-right: 0.5rem;"></span>
                     <button id="load-growth-data-btn" onclick="handleLoadGrowthData()" disabled
                         style="padding: 0.7rem 1.5rem; background: var(--secondary-color); opacity: 0.5; color: white; border: none; border-radius: 8px; cursor: not-allowed; transition: all 0.3s; font-weight: 700; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);">
                         🌱 Load Growth Data
                     </button>
                 </div>
             </div>
-            
+
 
             <!-- Placeholder for Growth Cards -->
             <div id="growth-cards-container" class="hidden">
 
                 <!-- Growth Controls -->
                 <div style="display: flex; justify-content: flex-end; margin-bottom: 1rem;">
-                    <label style="color: var(--text-secondary); font-size: 0.95rem; display: flex; align-items: center; gap: 0.5rem; cursor: pointer; background: var(--card-bg); padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid var(--border-color);">
-                        <input type="checkbox" id="hide-harvested-chart" onchange="updateGrowthChart()"> 
+                    <label
+                        style="color: var(--text-secondary); font-size: 0.95rem; display: flex; align-items: center; gap: 0.5rem; cursor: pointer; background: var(--card-bg); padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid var(--border-color);">
+                        <input type="checkbox" id="hide-harvested-chart" onchange="updateGrowthChart()">
                         <span style="font-weight: 500;">Hide Harvested Plots</span>
                     </label>
                 </div>
 
                 <!-- Growth Progression Chart Section -->
                 <div class="analysis-card">
-                    <div style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: flex-start;">
-                        <h3 style="margin: 0; font-size: 1.25rem; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem;">
-                            Growth project data - Progression window 
-                            <i class="fas fa-info-circle" style="font-size: 0.9rem; color: var(--text-secondary); cursor: help;" title="Displays the distribution of crop stage progression percentages"></i>
+                    <div
+                        style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: flex-start;">
+                        <h3
+                            style="margin: 0; font-size: 1.25rem; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem;">
+                            Growth project data - Progression window
+                            <i class="fas fa-info-circle"
+                                style="font-size: 0.9rem; color: var(--text-secondary); cursor: help;"
+                                title="Displays the distribution of crop stage progression percentages"></i>
                         </h3>
                     </div>
-                    
+
                     <div style="margin-bottom: 1.5rem; font-size: 0.95rem; color: var(--text-secondary);">
-                        <div style="margin-bottom: 0.5rem;">No of Plots - <strong id="growth-prog-total" style="color: var(--text-primary);">- / -</strong></div>
-                        <div>Total Plots Harvested - <strong id="growth-prog-harvested" style="color: var(--text-primary);">- / -</strong></div>
+                        <div style="margin-bottom: 0.5rem;">No of Plots - <strong id="growth-prog-total"
+                                style="color: var(--text-primary);">- / -</strong></div>
+                        <div>Total Plots Harvested - <strong id="growth-prog-harvested"
+                                style="color: var(--text-primary);">- / -</strong></div>
                     </div>
 
                     <div style="position: relative; height: 300px; width: 100%;">
@@ -1170,10 +1344,15 @@
                 </div>
 
                 <!-- Progression Window Drill-down (REPOSITIONED) -->
-                <div id="growth-progression-plots-container" class="hidden" style="margin-top: 1.5rem; background: var(--card-bg); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border-color);">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                        <h4 id="growth-progression-plots-title" style="margin: 0; color: var(--text-primary);">Plots in Range</h4>
-                        <button onclick="closeGrowthDrillDown('growth-progression-plots-container')" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.25rem; padding: 0.25rem 0.5rem; border-radius: 4px; transition: all 0.2s;" title="Close Table">
+                <div id="growth-progression-plots-container" class="hidden"
+                    style="margin-top: 1.5rem; background: var(--card-bg); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border-color);">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <h4 id="growth-progression-plots-title" style="margin: 0; color: var(--text-primary);">Plots in
+                            Range</h4>
+                        <button onclick="closeGrowthDrillDown('growth-progression-plots-container')"
+                            style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.25rem; padding: 0.25rem 0.5rem; border-radius: 4px; transition: all 0.2s;"
+                            title="Close Table">
                             <i class="fas fa-times"></i>
                         </button>
                     </div>
@@ -1181,15 +1360,33 @@
                         <table class="plots-table" style="width: 100%;">
                             <thead>
                                 <tr>
-                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Plot Name</th>
-                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Audited Area (Acre)</th>
-                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Expected Harvest (Ton)</th>
-                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Is Harvested</th>
-                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Date</th>
-                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Stage</th>
-                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Prog %</th>
-                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">H-Start</th>
-                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">H-End</th>
+                                    <th
+                                        style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                                        Plot Name</th>
+                                    <th
+                                        style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                                        Audited Area (Acre)</th>
+                                    <th
+                                        style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                                        Expected Harvest (Ton)</th>
+                                    <th
+                                        style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                                        Is Harvested</th>
+                                    <th
+                                        style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                                        Date</th>
+                                    <th
+                                        style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                                        Stage</th>
+                                    <th
+                                        style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                                        Prog %</th>
+                                    <th
+                                        style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                                        H-Start</th>
+                                    <th
+                                        style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                                        H-End</th>
                                 </tr>
                             </thead>
                             <tbody id="growth-progression-plots-tbody"></tbody>
@@ -1199,23 +1396,32 @@
 
                 <!-- Stage Window Chart Section -->
                 <div class="analysis-card" style="margin-top: 2rem;">
-                    <div style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: flex-start;">
-                        <h3 style="margin: 0; font-size: 1.25rem; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem;">
-                            Growth project data - Stage window 
-                            <i class="fas fa-info-circle" style="font-size: 0.9rem; color: var(--text-secondary); cursor: help;" title="Displays plots categorized by their current growth stage"></i>
+                    <div
+                        style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: flex-start;">
+                        <h3
+                            style="margin: 0; font-size: 1.25rem; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem;">
+                            Growth project data - Stage window
+                            <i class="fas fa-info-circle"
+                                style="font-size: 0.9rem; color: var(--text-secondary); cursor: help;"
+                                title="Displays plots categorized by their current growth stage"></i>
                         </h3>
                     </div>
-                    
+
                     <div style="position: relative; height: 300px; width: 100%;">
                         <canvas id="growthStageChart"></canvas>
                     </div>
                 </div>
 
                 <!-- Stage Window Drill-down -->
-                <div id="growth-stage-plots-container" class="hidden" style="margin-top: 1.5rem; background: var(--card-bg); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border-color);">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                        <h4 id="growth-stage-plots-title" style="margin: 0; color: var(--text-primary);">Plots in Stage</h4>
-                        <button onclick="closeGrowthStageDrillDown()" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.25rem; padding: 0.25rem 0.5rem; border-radius: 4px; transition: all 0.2s;" title="Close Table">
+                <div id="growth-stage-plots-container" class="hidden"
+                    style="margin-top: 1.5rem; background: var(--card-bg); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border-color);">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <h4 id="growth-stage-plots-title" style="margin: 0; color: var(--text-primary);">Plots in Stage
+                        </h4>
+                        <button onclick="closeGrowthStageDrillDown()"
+                            style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.25rem; padding: 0.25rem 0.5rem; border-radius: 4px; transition: all 0.2s;"
+                            title="Close Table">
                             <i class="fas fa-times"></i>
                         </button>
                     </div>
@@ -1223,13 +1429,27 @@
                         <table class="plots-table" style="width: 100%;">
                             <thead>
                                 <tr>
-                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Plot Name</th>
-                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Audited Area (Acre)</th>
-                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Expected Harvest (Ton)</th>
-                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Stage</th>
-                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Prog %</th>
-                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">H-Start</th>
-                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">H-End</th>
+                                    <th
+                                        style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                                        Plot Name</th>
+                                    <th
+                                        style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                                        Audited Area (Acre)</th>
+                                    <th
+                                        style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                                        Expected Harvest (Ton)</th>
+                                    <th
+                                        style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                                        Stage</th>
+                                    <th
+                                        style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                                        Prog %</th>
+                                    <th
+                                        style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                                        H-Start</th>
+                                    <th
+                                        style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                                        H-End</th>
                                 </tr>
                             </thead>
                             <tbody id="growth-stage-plots-tbody"></tbody>
@@ -1239,10 +1459,14 @@
 
                 <!-- Harvest Window Chart Section -->
                 <div class="analysis-card" style="margin-top: 2rem;">
-                    <div style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: flex-start;">
-                        <h3 style="margin: 0; font-size: 1.25rem; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem;">
-                            Growth project data - Harvest window 
-                            <i class="fas fa-info-circle" style="font-size: 0.9rem; color: var(--text-secondary); cursor: help;" title="Displays the distribution of plots by their expected harvest week"></i>
+                    <div
+                        style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: flex-start;">
+                        <h3
+                            style="margin: 0; font-size: 1.25rem; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem;">
+                            Growth project data - Harvest window - Weekly
+                            <i class="fas fa-info-circle"
+                                style="font-size: 0.9rem; color: var(--text-secondary); cursor: help;"
+                                title="Displays the distribution of plots by their expected harvest week"></i>
                         </h3>
                     </div>
                     <div style="position: relative; height: 300px; width: 100%;">
@@ -1251,10 +1475,15 @@
                 </div>
 
                 <!-- Harvest Window Drill-down -->
-                <div id="harvest-window-plots-container" class="hidden" style="margin-top: 1.5rem; background: var(--card-bg); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border-color);">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                        <h4 id="harvest-window-plots-title" style="margin: 0; color: var(--text-primary);">Plots in Harvest Window</h4>
-                        <button onclick="closeGrowthDrillDown('harvest-window-plots-container')" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.25rem; padding: 0.25rem 0.5rem; border-radius: 4px; transition: all 0.2s;" title="Close Table">
+                <div id="harvest-window-plots-container" class="hidden"
+                    style="margin-top: 1.5rem; background: var(--card-bg); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border-color);">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <h4 id="harvest-window-plots-title" style="margin: 0; color: var(--text-primary);">Plots in
+                            Harvest Window</h4>
+                        <button onclick="closeGrowthDrillDown('harvest-window-plots-container')"
+                            style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.25rem; padding: 0.25rem 0.5rem; border-radius: 4px; transition: all 0.2s;"
+                            title="Close Table">
                             <i class="fas fa-times"></i>
                         </button>
                     </div>
@@ -1262,12 +1491,24 @@
                         <table class="plots-table" style="width: 100%;">
                             <thead>
                                 <tr>
-                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Plot Name</th>
-                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Audited Area (Acre)</th>
-                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Expected Harvest (Ton)</th>
-                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Stage</th>
-                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">H-Start</th>
-                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">H-End</th>
+                                    <th
+                                        style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                                        Plot Name</th>
+                                    <th
+                                        style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                                        Audited Area (Acre)</th>
+                                    <th
+                                        style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                                        Expected Harvest (Ton)</th>
+                                    <th
+                                        style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                                        Stage</th>
+                                    <th
+                                        style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                                        H-Start</th>
+                                    <th
+                                        style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                                        H-End</th>
                                 </tr>
                             </thead>
                             <tbody id="harvest-window-plots-tbody"></tbody>
@@ -1277,15 +1518,21 @@
 
                 <!-- Harvest Window - Daily Chart Section -->
                 <div class="analysis-card" style="margin-top: 2rem;">
-                    <div style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div
+                        style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: flex-start;">
                         <div style="display: flex; flex-direction: column; gap: 0.25rem;">
-                            <h3 style="margin: 0; font-size: 1.25rem; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem;">
+                            <h3
+                                style="margin: 0; font-size: 1.25rem; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem;">
                                 Growth project data - Harvest window - Daily
-                                <i class="fas fa-info-circle" style="font-size: 0.9rem; color: var(--text-secondary); cursor: help;" title="Daily distribution of plots in the harvest window"></i>
+                                <i class="fas fa-info-circle"
+                                    style="font-size: 0.9rem; color: var(--text-secondary); cursor: help;"
+                                    title="Daily distribution of plots in the harvest window"></i>
                             </h3>
                             <div style="font-size: 0.85rem; color: var(--text-secondary);">
-                                Plots Covered: <span id="harvest-plots-covered" style="font-weight: 600; color: var(--text-primary);">0</span> | 
-                                Range: <span id="harvest-window-range" style="font-weight: 600; color: var(--text-primary);">-</span>
+                                Plots Covered: <span id="harvest-plots-covered"
+                                    style="font-weight: 600; color: var(--text-primary);">0</span> |
+                                Range: <span id="harvest-window-range"
+                                    style="font-weight: 600; color: var(--text-primary);">-</span>
                             </div>
                         </div>
                     </div>
@@ -1295,10 +1542,15 @@
                 </div>
 
                 <!-- Harvest Window Drill-down - Daily -->
-                <div id="harvest-window-daily-plots-container" class="hidden" style="margin-top: 1.5rem; background: var(--card-bg); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border-color);">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                        <h4 id="harvest-window-daily-plots-title" style="margin: 0; color: var(--text-primary);">Plots in Harvest Window (Daily)</h4>
-                        <button onclick="closeGrowthDrillDown('harvest-window-daily-plots-container')" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.25rem; padding: 0.25rem 0.5rem; border-radius: 4px; transition: all 0.2s;" title="Close Table">
+                <div id="harvest-window-daily-plots-container" class="hidden"
+                    style="margin-top: 1.5rem; background: var(--card-bg); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border-color);">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <h4 id="harvest-window-daily-plots-title" style="margin: 0; color: var(--text-primary);">Plots
+                            in Harvest Window (Daily)</h4>
+                        <button onclick="closeGrowthDrillDown('harvest-window-daily-plots-container')"
+                            style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.25rem; padding: 0.25rem 0.5rem; border-radius: 4px; transition: all 0.2s;"
+                            title="Close Table">
                             <i class="fas fa-times"></i>
                         </button>
                     </div>
@@ -1306,12 +1558,24 @@
                         <table class="plots-table" style="width: 100%;">
                             <thead>
                                 <tr>
-                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Plot Name</th>
-                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Audited Area (Acre)</th>
-                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Expected Harvest (Ton)</th>
-                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Stage</th>
-                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">H-Start</th>
-                                    <th style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">H-End</th>
+                                    <th
+                                        style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                                        Plot Name</th>
+                                    <th
+                                        style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                                        Audited Area (Acre)</th>
+                                    <th
+                                        style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                                        Expected Harvest (Ton)</th>
+                                    <th
+                                        style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                                        Stage</th>
+                                    <th
+                                        style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                                        H-Start</th>
+                                    <th
+                                        style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                                        H-End</th>
                                 </tr>
                             </thead>
                             <tbody id="harvest-window-daily-plots-tbody"></tbody>
@@ -1322,42 +1586,60 @@
                 <!-- Harvest Status Section (KPI) -->
                 <!-- Unified Harvest Status Card -->
                 <div id="harvest-status-section" class="hidden" style="margin-top: 2rem;">
-                    <div class="analysis-card" style="padding: 2rem; border-radius: 12px; background: var(--card-bg); border: 1px solid var(--border-color); box-shadow: 0 4px 20px rgba(0,0,0,0.1);">
+                    <div class="analysis-card"
+                        style="padding: 2rem; border-radius: 12px; background: var(--card-bg); border: 1px solid var(--border-color); box-shadow: 0 4px 20px rgba(0,0,0,0.1);">
                         <!-- 1. Header Row -->
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2.5rem; background: rgba(99, 102, 241, 0.05); padding: 1.25rem; border-radius: 12px; border: 1px solid rgba(99, 102, 241, 0.2);">
-                            <h3 style="margin: 0; color: var(--text-primary); font-size: 1.5rem; font-weight: 700; display: flex; align-items: center; gap: 0.75rem;">
-                                <i class="fas fa-clipboard-check" style="color: var(--primary-color);"></i> Plot Harvest Status
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2.5rem; background: rgba(99, 102, 241, 0.05); padding: 1.25rem; border-radius: 12px; border: 1px solid rgba(99, 102, 241, 0.2);">
+                            <h3
+                                style="margin: 0; color: var(--text-primary); font-size: 1.5rem; font-weight: 700; display: flex; align-items: center; gap: 0.75rem;">
+                                <i class="fas fa-clipboard-check" style="color: var(--primary-color);"></i> Plot Harvest
+                                Status
                             </h3>
-                            
+
                             <div style="display: flex; gap: 1rem; align-items: center;">
-                                <input type="text" id="harvest-plantype-id" placeholder="Enter Plantype ID (e.g. 5)" 
-                                       style="padding: 0.75rem; border-radius: 8px; background: var(--input-bg); color: var(--text-primary); border: 1px solid var(--border-color); width: 200px;">
+                                <input type="text" id="harvest-plantype-id" placeholder="Enter Plantype ID (e.g. 5)"
+                                    style="padding: 0.75rem; border-radius: 8px; background: var(--input-bg); color: var(--text-primary); border: 1px solid var(--border-color); width: 200px;">
                                 <button id="load-harvest-status-btn" onclick="handleLoadHarvestStatus()"
-                                        style="padding: 0.75rem 1.5rem; background: var(--primary-color); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 700;">
+                                    style="padding: 0.75rem 1.5rem; background: var(--primary-color); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 700;">
                                     📥 Load Collected Harvest
                                 </button>
                             </div>
                         </div>
 
                         <!-- 2. Health-Style Metrics Row -->
-                        <div id="harvest-status-results" class="metrics-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 2rem; margin-bottom: 3rem; padding: 1rem 0;">
-                            <div class="metric-card" style="text-align: center; border-left: 4px solid var(--primary-color); padding: 0.5rem 1.5rem;">
-                                <h4 style="color: var(--text-secondary); margin-bottom: 0.5rem; font-size: 1rem; font-weight: 500;">Plots Covered</h4>
-                                <div id="stat-harvest-plots-covered" style="font-size: 2.25rem; font-weight: 700; color: var(--text-primary);">-</div>
+                        <div id="harvest-status-results" class="metrics-grid"
+                            style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 2rem; margin-bottom: 3rem; padding: 1rem 0;">
+                            <div class="metric-card"
+                                style="text-align: center; border-left: 4px solid var(--primary-color); padding: 0.5rem 1.5rem;">
+                                <h4
+                                    style="color: var(--text-secondary); margin-bottom: 0.5rem; font-size: 1rem; font-weight: 500;">
+                                    Plots Covered</h4>
+                                <div id="stat-harvest-plots-covered"
+                                    style="font-size: 2.25rem; font-weight: 700; color: var(--text-primary);">-</div>
                             </div>
-                            <div class="metric-card" style="text-align: center; border-left: 4px solid var(--secondary-color); padding: 0.5rem 1.5rem;">
-                                <h4 style="color: var(--text-secondary); margin-bottom: 0.5rem; font-size: 1rem; font-weight: 500;">Collected Harvest</h4>
-                                <div id="stat-harvest-collected" style="font-size: 2.25rem; font-weight: 700; color: var(--secondary-color);">-</div>
+                            <div class="metric-card"
+                                style="text-align: center; border-left: 4px solid var(--secondary-color); padding: 0.5rem 1.5rem;">
+                                <h4
+                                    style="color: var(--text-secondary); margin-bottom: 0.5rem; font-size: 1rem; font-weight: 500;">
+                                    Collected Harvest</h4>
+                                <div id="stat-harvest-collected"
+                                    style="font-size: 2.25rem; font-weight: 700; color: var(--secondary-color);">-</div>
                             </div>
                         </div>
 
                         <!-- 3. Alignment Summary & Distribution -->
-                        <div id="harvest-window-status-container" class="hidden" style="margin-bottom: 3rem; border-top: 1px solid var(--border-color); padding-top: 2rem;">
-                            <p style="margin-bottom: 1.5rem; color: var(--text-primary); font-weight: 600; font-size: 1.1rem;">Expected Harvest window <span id="harvest-window-range-text"></span></p>
+                        <div id="harvest-window-status-container" class="hidden"
+                            style="margin-bottom: 3rem; border-top: 1px solid var(--border-color); padding-top: 2rem;">
+                            <p
+                                style="margin-bottom: 1.5rem; color: var(--text-primary); font-weight: 600; font-size: 1.1rem;">
+                                Expected Harvest window <span id="harvest-window-range-text"></span></p>
 
-                            <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 3rem; align-items: flex-start;">
+                            <div
+                                style="display: grid; grid-template-columns: 1fr 2fr; gap: 3rem; align-items: flex-start;">
                                 <!-- LEFT: Pie Chart -->
-                                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(255,255,255,0.02); padding: 2rem; border-radius: 12px;">
+                                <div
+                                    style="display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(255,255,255,0.02); padding: 2rem; border-radius: 12px;">
                                     <div style="height: 250px; width: 250px; position: relative;">
                                         <canvas id="harvest-window-pie-chart"></canvas>
                                     </div>
@@ -1368,12 +1650,16 @@
                                     <div style="max-height: 400px; overflow-y: auto;">
                                         <table class="plots-table" style="width: 100%;">
                                             <thead>
-                                                <tr style="font-size: 0.85rem; border-bottom: 2px solid var(--border-color);">
+                                                <tr
+                                                    style="font-size: 0.85rem; border-bottom: 2px solid var(--border-color);">
                                                     <th style="padding: 1rem;">Status</th>
                                                     <th style="padding: 1rem; text-align: center;">No. of plots</th>
-                                                    <th style="padding: 1rem; text-align: center;">Collected Production(tons)</th>
-                                                    <th style="padding: 1rem; text-align: center;">Expected Production(tons)</th>
-                                                    <th style="padding: 1rem; text-align: center;">Predicted Production(tons)</th>
+                                                    <th style="padding: 1rem; text-align: center;">Collected
+                                                        Production(tons)</th>
+                                                    <th style="padding: 1rem; text-align: center;">Expected
+                                                        Production(tons)</th>
+                                                    <th style="padding: 1rem; text-align: center;">Predicted
+                                                        Production(tons)</th>
                                                 </tr>
                                             </thead>
                                             <tbody id="harvest-window-summary-tbody"></tbody>
@@ -1383,14 +1669,19 @@
                             </div>
 
                             <!-- BOTTOM: Insight Summary Text -->
-                            <div id="harvest-insight-container" class="hidden" style="margin-top: 2rem; padding: 1.5rem; background: rgba(59, 130, 246, 0.05); border-radius: 12px; border: 1px solid rgba(59, 130, 246, 0.1);">
-                                <p id="harvest-insight-summary" style="margin: 0; color: #60a5fa; font-size: 1.05rem; line-height: 1.6; font-weight: 500;"></p>
+                            <div id="harvest-insight-container" class="hidden"
+                                style="margin-top: 2rem; padding: 1.5rem; background: rgba(59, 130, 246, 0.05); border-radius: 12px; border: 1px solid rgba(59, 130, 246, 0.1);">
+                                <p id="harvest-insight-summary"
+                                    style="margin: 0; color: #60a5fa; font-size: 1.05rem; line-height: 1.6; font-weight: 500;">
+                                </p>
                             </div>
                         </div>
 
                         <!-- 4. Detailed Table (Inside the same card) -->
                         <div style="border-top: 1px solid var(--border-color); padding-top: 2rem;">
-                            <h4 style="margin-top: 0; margin-bottom: 1.5rem; color: var(--text-primary); font-size: 1.2rem; font-weight: 700;">Detailed Harvest Analysis</h4>
+                            <h4
+                                style="margin-top: 0; margin-bottom: 1.5rem; color: var(--text-primary); font-size: 1.2rem; font-weight: 700;">
+                                Detailed Harvest Analysis</h4>
                             <div style="max-height: 500px; overflow-y: auto;">
                                 <table class="plots-table" style="width: 100%;">
                                     <thead>
@@ -1412,88 +1703,97 @@
                     </div>
                 </div>
 
-            <!-- Toggle Button for Base Table -->
-            <div style="display: flex; justify-content: center; margin-top: 2rem;">
-                <button id="toggle-growth-table-btn" onclick="toggleGrowthTableVisibility()" class="export-btn" style="background: var(--primary-color); padding: 0.8rem 2rem; display: flex; align-items: center; gap: 0.75rem;">
-                    <i class="fas fa-table"></i> <span id="toggle-growth-table-text">View Base Plot Data</span>
-                </button>
-            </div>
-
-            <!-- Base Table Container (Hidden by default) -->
-            <div id="base-growth-table-wrapper" class="hidden" style="margin-top: 2rem; border-top: 1px solid var(--border-color); padding-top: 2rem;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                    <h3 style="margin: 0; font-size: 1.1rem; font-weight: 600; color: var(--text-primary);">Base Plot Data - Detail Table</h3>
-                    <div style="display: flex; align-items: center; gap: 1rem;" id="growth-table-controls-container">
-                        <button id="reset-growth-table-btn" onclick="resetGrowthTable()" class="hidden" style="background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); padding: 0.4rem 0.8rem; border-radius: 6px; font-size: 0.8rem; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; transition: all 0.2s;">
-                            <i class="fas fa-times-circle"></i> Clear Filter/Sort
-                        </button>
-                        <label style="color: var(--text-secondary); font-size: 0.9rem; display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                            <input type="checkbox" id="hide-harvested-table" onchange="updateGrowthTable()"> Hide Harvested Plots
-                        </label>
-                    </div>
+                <!-- Toggle Button for Base Table -->
+                <div style="display: flex; justify-content: center; margin-top: 2rem;">
+                    <button id="toggle-growth-table-btn" onclick="toggleGrowthTableVisibility()" class="export-btn"
+                        style="background: var(--primary-color); padding: 0.8rem 2rem; display: flex; align-items: center; gap: 0.75rem;">
+                        <i class="fas fa-table"></i> <span id="toggle-growth-table-text">View Base Plot Data</span>
+                    </button>
                 </div>
-                <div id="growth-table-container"></div>
-            </div>
 
-            <div id="growth-empty-state" class="hidden" style="text-align: center; padding: 3rem; color: var(--text-secondary); background: rgba(255,255,255,0.5); border-radius: 12px; border: 2px dashed var(--border-color);">
-                <div style="font-size: 3rem; margin-bottom: 1rem;">📊</div>
-                <h3>No Growth Data Loaded</h3>
-                <p>Select a project and click "Load Growth Data" to analyze vegetation health.</p>
-            </div>
+                <!-- Base Table Container (Hidden by default) -->
+                <div id="base-growth-table-wrapper" class="hidden"
+                    style="margin-top: 2rem; border-top: 1px solid var(--border-color); padding-top: 2rem;">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <h3 style="margin: 0; font-size: 1.1rem; font-weight: 600; color: var(--text-primary);">Base
+                            Plot Data - Detail Table</h3>
+                        <div style="display: flex; align-items: center; gap: 1rem;"
+                            id="growth-table-controls-container">
+                            <button id="reset-growth-table-btn" onclick="resetGrowthTable()" class="hidden"
+                                style="background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); padding: 0.4rem 0.8rem; border-radius: 6px; font-size: 0.8rem; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; transition: all 0.2s;">
+                                <i class="fas fa-times-circle"></i> Clear Filter/Sort
+                            </button>
+                            <label
+                                style="color: var(--text-secondary); font-size: 0.9rem; display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="checkbox" id="hide-harvested-table" onchange="updateGrowthTable()"> Hide
+                                Harvested Plots
+                            </label>
+                        </div>
+                    </div>
+                    <div id="growth-table-container"></div>
+                </div>
+
+                <div id="growth-empty-state" class="hidden"
+                    style="text-align: center; padding: 3rem; color: var(--text-secondary); background: rgba(255,255,255,0.5); border-radius: 12px; border: 2px dashed var(--border-color);">
+                    <div style="font-size: 3rem; margin-bottom: 1rem;">📊</div>
+                    <h3>No Growth Data Loaded</h3>
+                    <p>Select a project and click "Load Growth Data" to analyze vegetation health.</p>
+                </div>
         </section>
 
     </div>
 
-        <!-- Modal for Add/Edit User -->
-        <div id="user-modal" class="modal">
-            <div class="modal-content">
-                <span class="close-modal">&times;</span>
-                <h2 id="modal-title">Add New User</h2>
-                <form id="user-form">
-                    <input type="hidden" id="user-id">
+    <!-- Modal for Add/Edit User -->
+    <div id="user-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h2 id="modal-title">Add New User</h2>
+            <form id="user-form">
+                <input type="hidden" id="user-id">
 
-                    <div class="form-group">
-                        <label for="modal-env">Environment</label>
-                        <select id="modal-env" required>
-                            <option value="" disabled selected>Select Environment</option>
-                        </select>
-                    </div>
+                <div class="form-group">
+                    <label for="modal-env">Environment</label>
+                    <select id="modal-env" required>
+                        <option value="" disabled selected>Select Environment</option>
+                    </select>
+                </div>
 
-                    <div class="form-group">
-                        <label for="modal-tenant">Tenant</label>
-                        <div class="tenant-input-group">
-                            <div style="display: flex; gap: 0.5rem;">
-                                <select id="modal-tenant-select" style="flex: 1;">
-                                    <option value="" disabled selected>Select Tenant</option>
-                                    <option value="new">+ Add New Tenant</option>
-                                </select>
-                                <button type="button" id="delete-tenant-btn" title="Delete Tenant"
-                                    style="display: none; padding: 0.5rem; background: #ef4444; border: none; border-radius: 4px; cursor: pointer;">🗑️</button>
-                            </div>
-                            <input type="text" id="modal-tenant-input" placeholder="Enter new tenant name"
-                                style="display: none;">
+                <div class="form-group">
+                    <label for="modal-tenant">Tenant</label>
+                    <div class="tenant-input-group">
+                        <div style="display: flex; gap: 0.5rem;">
+                            <select id="modal-tenant-select" style="flex: 1;">
+                                <option value="" disabled selected>Select Tenant</option>
+                                <option value="new">+ Add New Tenant</option>
+                            </select>
+                            <button type="button" id="delete-tenant-btn" title="Delete Tenant"
+                                style="display: none; padding: 0.5rem; background: #ef4444; border: none; border-radius: 4px; cursor: pointer;">🗑️</button>
                         </div>
+                        <input type="text" id="modal-tenant-input" placeholder="Enter new tenant name"
+                            style="display: none;">
                     </div>
+                </div>
 
-                    <div class="form-group">
-                        <label for="modal-username">Username</label>
-                        <input type="text" id="modal-username" placeholder="Enter username" required>
-                    </div>
+                <div class="form-group">
+                    <label for="modal-username">Username</label>
+                    <input type="text" id="modal-username" placeholder="Enter username" required>
+                </div>
 
-                    <div class="form-group">
-                        <label for="modal-password">Password</label>
-                        <input type="password" id="modal-password" placeholder="Enter password" required>
-                    </div>
+                <div class="form-group">
+                    <label for="modal-password">Password</label>
+                    <input type="password" id="modal-password" placeholder="Enter password" required>
+                </div>
 
-                    <div class="modal-footer"
-                        style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem;">
-                        <button type="button" class="btn-secondary" id="modal-delete-user-btn"
-                            style="background: var(--danger-color); display: none;">Delete User</button>
-                        <button type="submit" class="btn-primary" id="modal-submit-btn">Save User</button>
-                    </div>
-                </form>
-            </div>
+                <div class="modal-footer"
+                    style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem;">
+                    <button type="button" class="btn-secondary" id="modal-delete-user-btn"
+                        style="background: var(--danger-color); display: none;">Delete User</button>
+                    <button type="submit" class="btn-primary" id="modal-submit-btn">Save User</button>
+                </div>
+            </form>
         </div>
+    </div>
 
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>

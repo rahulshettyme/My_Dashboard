@@ -147,8 +147,11 @@ function getServerUrl() {
 }
 
 // =============================================
-// UNIT CONVERSION SYSTEM
+// UNIT CONVERSION SYSTEM (DYNAMIC MASTER RULES)
 // =============================================
+var tenantUnitMasterData = null;
+
+// Baseline fallback factors used only if master API rule is missing
 const MASS_CONVERSIONS = {
     tonne: 1,         // Metric Tonne = 1:1
     kgs: 1000,        // 1 Tonne = 1000 Kgs
@@ -190,25 +193,195 @@ function getDataHarvestUnit() {
     return selector ? selector.value : 'kgs';
 }
 
+/**
+ * One-time session fetch for Master Unit & Conversion rules.
+ * Prevents per-plot latency by caching into tenantUnitMasterData / window.tenantUnitMasterCache.
+ */
+async function fetchTenantUnitMaster(forceRefresh = false) {
+    if (tenantUnitMasterData && !forceRefresh) {
+        return tenantUnitMasterData;
+    }
+    const baseUrl = getServerUrl();
+    const envParam = (typeof currentEnvironment !== 'undefined' && currentEnvironment) ? `?environment=${encodeURIComponent(currentEnvironment)}` : '';
+    const headers = (typeof authToken !== 'undefined' && authToken) ? { 'Authorization': `Bearer ${authToken}` } : {};
+
+    try {
+        const response = await fetch(`${baseUrl}/api/user-aggregate/unit-master${envParam}`, { headers });
+        const data = await response.json();
+        if (data && (Array.isArray(data['unit-master']) || Array.isArray(data.unitMaster))) {
+            tenantUnitMasterData = {
+                'unit-master': data['unit-master'] || data.unitMaster || [],
+                'unit-conversion': data['unit-conversion'] || data.unitConversion || []
+            };
+            if (typeof window !== 'undefined') {
+                window.tenantUnitMasterCache = tenantUnitMasterData;
+            }
+            console.log(`[INFO] Loaded Master Unit Rules: ${tenantUnitMasterData['unit-master'].length} units, ${tenantUnitMasterData['unit-conversion'].length} conversion rules.`);
+            return tenantUnitMasterData;
+        }
+    } catch (error) {
+        console.warn('Error fetching tenant unit master rules, using defaults:', error);
+    }
+    return tenantUnitMasterData;
+}
+
+/**
+ * Step 2B: Dynamically resolves unit ID from unit-master by name/symbol/code.
+ * NO hardcoded IDs: supports any tenant ID mapping.
+ */
+function resolveUnitId(unitType, candidateKeys, masterData = null) {
+    const data = masterData || tenantUnitMasterData || (typeof window !== 'undefined' ? window.tenantUnitMasterCache : null);
+    if (!data || !Array.isArray(data['unit-master'])) return null;
+
+    const targetType = (unitType || '').toLowerCase();
+    const candidates = (Array.isArray(candidateKeys) ? candidateKeys : [candidateKeys])
+        .filter(k => k !== null && k !== undefined)
+        .map(k => String(k).trim().toLowerCase());
+
+    if (candidates.length === 0) return null;
+
+    const unitsOfType = data['unit-master'].filter(u => 
+        (u.unitType || '').toLowerCase() === targetType
+    );
+
+    // 1. Exact match on unitCode, name, unitSymbol, or unitShortCode
+    for (const cand of candidates) {
+        const match = unitsOfType.find(u => 
+            (u.unitCode && u.unitCode.toLowerCase() === cand) ||
+            (u.name && u.name.toLowerCase() === cand) ||
+            (u.unitSymbol && u.unitSymbol.toLowerCase() === cand) ||
+            (u.unitShortCode && u.unitShortCode.toLowerCase() === cand)
+        );
+        if (match) return match.id;
+    }
+
+    // 2. Loose / alias normalized matching
+    for (const cand of candidates) {
+        const match = unitsOfType.find(u => {
+            const uName = (u.name || '').toLowerCase();
+            const uCode = (u.unitCode || '').toLowerCase();
+            const uSym = (u.unitSymbol || '').toLowerCase();
+
+            if (targetType === 'mass') {
+                if ((cand === 'kgs' || cand === 'kg' || cand === 'kilogram' || cand === 'kilograms') &&
+                    (uCode === 'kilogram' || uName === 'kilogram' || uSym === 'kg')) return true;
+                if ((cand === 'tonne' || cand === 'tonnes' || cand === 'mt' || cand === 'metric ton' || cand === 'ton (metric)') &&
+                    (uCode.includes('metric') || uName.includes('metric') || uSym === 'mt')) return true;
+                if ((cand === 'ton' || cand === 'tons' || cand === 'us ton') &&
+                    (uCode === 'ton' || uName === 'ton' || uSym === 'ton')) return true;
+                if ((cand === 'quintal' || cand === 'qtl') &&
+                    (uCode === 'quintal' || uName === 'quintal')) return true;
+                if ((cand === 'gram' || cand === 'g') &&
+                    (uCode === 'gram' || uName === 'gram' || uSym === 'g')) return true;
+            }
+
+            if (targetType === 'area') {
+                if ((cand === 'acre' || cand === 'acres' || cand === 'ac') &&
+                    (uCode === 'acre' || uName === 'acre' || uSym === 'acre')) return true;
+                if ((cand === 'ha' || cand === 'hectare' || cand === 'hectares') &&
+                    (uCode === 'hectare' || uName === 'hectare' || uSym === 'ha' || uSym.toLowerCase() === 'hectare')) return true;
+                if ((cand === 'sq mt' || cand === 'square meter' || cand === 'sqm') &&
+                    (uCode.includes('square_meter') || uName.includes('square meter'))) return true;
+                if ((cand === 'bigha') && (uCode === 'bigha' || uName === 'bigha')) return true;
+                if ((cand === 'gunta') && (uCode === 'gunta' || uName === 'gunta')) return true;
+            }
+
+            return false;
+        });
+        if (match) return match.id;
+    }
+
+    return null;
+}
+
+/**
+ * Step 2B: Looks up the dynamic conversion factor between source and target units.
+ */
+function getDynamicFactor(srcCandidate, tgtCandidate, unitType, masterData = null) {
+    const data = masterData || tenantUnitMasterData || (typeof window !== 'undefined' ? window.tenantUnitMasterCache : null);
+
+    const sStr = String(Array.isArray(srcCandidate) ? srcCandidate[0] : srcCandidate || '').trim().toLowerCase();
+    const tStr = String(Array.isArray(tgtCandidate) ? tgtCandidate[0] : tgtCandidate || '').trim().toLowerCase();
+
+    if (sStr === tStr) return 1.0;
+
+    const srcId = resolveUnitId(unitType, srcCandidate, data);
+    const tgtId = resolveUnitId(unitType, tgtCandidate, data);
+
+    if (srcId !== null && tgtId !== null) {
+        if (srcId === tgtId) return 1.0;
+
+        if (data && Array.isArray(data['unit-conversion'])) {
+            // Direct rule: fromUnitId == srcId && toUnitId == tgtId
+            const direct = data['unit-conversion'].find(r => 
+                Number(r.fromUnitId) === Number(srcId) && Number(r.toUnitId) === Number(tgtId)
+            );
+            if (direct && !isNaN(parseFloat(direct.conversionFactor))) {
+                return parseFloat(direct.conversionFactor);
+            }
+
+            // Reciprocal rule: fromUnitId == tgtId && toUnitId == srcId
+            const reciprocal = data['unit-conversion'].find(r => 
+                Number(r.fromUnitId) === Number(tgtId) && Number(r.toUnitId) === Number(srcId)
+            );
+            if (reciprocal && !isNaN(parseFloat(reciprocal.conversionFactor)) && parseFloat(reciprocal.conversionFactor) !== 0) {
+                return 1.0 / parseFloat(reciprocal.conversionFactor);
+            }
+        }
+    }
+
+    // Safety fallback
+    return getFallbackFactor(sStr, tStr, unitType);
+}
+
+function getFallbackFactor(src, tgt, unitType) {
+    const type = (unitType || '').toLowerCase();
+    if (type === 'area') {
+        const isSrcAcre = src.includes('acre') || src === 'ac';
+        const isSrcHa = src.includes('ha') || src.includes('hectare');
+        const isTgtAcre = tgt.includes('acre') || tgt === 'ac';
+        const isTgtHa = tgt.includes('ha') || tgt.includes('hectare');
+
+        if (isSrcHa && isTgtAcre) return 2.47105;
+        if (isSrcAcre && isTgtHa) return 0.404686;
+        return 1.0;
+    }
+    if (type === 'mass') {
+        const toTon = (u) => {
+            if (u.includes('metric') || u === 'tonne' || u === 'tonnes' || u === 'mt') return 1.0;
+            if (u === 'kgs' || u === 'kg' || u.includes('kilogram')) return 0.001;
+            if (u === 'ton' || u === 'tons') return 0.9071847;
+            if (u === 'quintal') return 0.1;
+            if (u === 'gram' || u === 'g') return 0.000001;
+            return 1.0;
+        };
+        const srcToTon = toTon(src);
+        const tgtToTon = toTon(tgt);
+        return tgtToTon > 0 ? (srcToTon / tgtToTon) : 1.0;
+    }
+    return 1.0;
+}
+
 function convertYield(valueInTonnePerHa, targetUnit) {
     const [massUnit, areaUnit] = targetUnit.split('_');
-    const massConverted = valueInTonnePerHa * MASS_CONVERSIONS[massUnit];
-    const areaConverted = massConverted / AREA_CONVERSIONS[areaUnit];
-    return areaConverted;
+    const massFactor = getDynamicFactor(['METRIC_TON', 'Ton (Metric)', 'MT', 'Tonnes'], massUnit, 'Mass');
+    const areaFactor = getDynamicFactor(['HECTARE', 'Hectare', 'ha'], areaUnit, 'Area');
+    return areaFactor > 0 ? (valueInTonnePerHa * massFactor / areaFactor) : valueInTonnePerHa;
 }
 
 function convertHarvest(valueInTonnes, targetUnit) {
-    return valueInTonnes * MASS_CONVERSIONS[targetUnit];
+    const massFactor = getDynamicFactor(['METRIC_TON', 'Ton (Metric)', 'MT', 'Tonnes'], targetUnit, 'Mass');
+    return valueInTonnes * massFactor;
 }
 
 async function fetchUnitConversions() {
+    // Keep legacy unit-conversions fetch alongside master rules
     const baseUrl = getServerUrl();
     try {
         const response = await fetch(`${baseUrl}/api/unit-conversions`);
         const data = await response.json();
         if (Array.isArray(data)) {
             unitConversions = data;
-            console.log(`[INFO] Loaded ${unitConversions.length} unit conversion factors.`);
         }
     } catch (error) {
         console.error('Error fetching unit conversions:', error);
@@ -219,21 +392,25 @@ function convertValueToMetricTon(value, unitCode) {
     const val = parseFloat(value);
     if (isNaN(val)) return 0;
     if (!unitCode) return val;
+
+    // Use dynamic factor if available (from unitCode to METRIC_TON)
+    const factor = getDynamicFactor(unitCode, ['METRIC_TON', 'Ton (Metric)', 'MT', 'Tonnes'], 'Mass');
+    if (factor && !isNaN(factor) && factor !== 1.0) {
+        return val * factor;
+    }
     
     const factorObj = unitConversions.find(u => u.unit_code.toUpperCase() === unitCode.toUpperCase());
     if (factorObj) {
-        const factor = parseFloat(factorObj.conversion_factor);
-        return val * (isNaN(factor) ? 1 : factor);
+        const f = parseFloat(factorObj.conversion_factor);
+        return val * (isNaN(f) ? 1 : f);
     }
-    // Fallback logic for common units if factor not found in db.json
+
     const code = unitCode.toLowerCase();
     if (code === 'kilogram' || code === 'kgs' || code === 'kg') return val * 0.001;
     if (code === 'gram') return val * 0.000001;
     if (code === 'quintal') return val * 0.1;
     if (code === 'metric_ton' || code === 'tonnes' || code === 'mt') return val;
     
-    // User Request: If unit not present, default to factor 1
-    console.log(`[DEBUG] Unknown unit '${unitCode}', defaulting factor to 1`);
     return val; 
 }
 
@@ -548,13 +725,13 @@ function processData(rows) {
         const qUnit = (row['plotHarvestUnit'] || getDataHarvestUnit()).toLowerCase();
         const aUnit = (row['plotAreaUnit'] || getDataAreaUnit()).toLowerCase();
         
-        // Conversions to Standard (Tonne, Ha) for aggregate
-        const massFactor = MASS_CONVERSIONS[qUnit] || MASS_CONVERSIONS.kgs;
-        const areaFactor = AREA_CONVERSIONS[aUnit] || AREA_CONVERSIONS.acre;
+        // Conversions to Standard (Tonne, Ha) for aggregate using dynamic rules
+        const areaToHa = getDynamicFactor(aUnit, ['HECTARE', 'Hectare', 'ha'], 'Area');
+        const massToTon = getDynamicFactor(qUnit, ['METRIC_TON', 'Ton (Metric)', 'MT', 'Tonnes'], 'Mass');
         
-        const areaHa = area / areaFactor;
-        const h1Ton = h1 / massFactor;
-        const h2Ton = h2 / massFactor;
+        const areaHa = area * areaToHa;
+        const h1Ton = h1 * massToTon;
+        const h2Ton = h2 * massToTon;
 
         const isNA = h3_min === 'NA' || y3_min === 'NA' || row['Harvest Min predicted'] === 'NA';
         const isZero = (h3_min === 0 || h3_min === null) && (h3_max === 0 || h3_max === null) && (y3_min === 0 || y3_min === null) && (y3_max === 0 || y3_max === null);
@@ -605,6 +782,7 @@ function processData(rows) {
             h1, h2,
             h3_min: h3MinTon, 
             h3_max: h3MaxTon,
+            modelType: row['Prediction Model'] || 'NA',
             noPrediction: !isPredictionAvailable,
             notEnabled: row['Yield Not Enabled'] || false,
             harvestUnit: qUnit
@@ -893,17 +1071,17 @@ function renderPaginatedTable() {
         // Table for All Plots should use Metric Tonnes and Tonne/HA
         const qUnit = (d.harvestUnit || 'kgs').toLowerCase();
         const aUnit = (d.areaUnit || 'ha').toLowerCase();
-        const massFactor = MASS_CONVERSIONS[qUnit] || MASS_CONVERSIONS.kgs;
-        const areaFactor = AREA_CONVERSIONS[aUnit] || AREA_CONVERSIONS.ha;
+        const massToTon = getDynamicFactor(qUnit, ['METRIC_TON', 'Ton (Metric)', 'MT', 'Tonnes'], 'Mass');
+        const areaToHa = getDynamicFactor(aUnit, ['HECTARE', 'Hectare', 'ha'], 'Area');
 
-        const h1Ton = d.h1 / massFactor;
-        const h2Ton = d.h2 / massFactor;
-        const areaHa = d.auditedArea / areaFactor;
+        const h1Ton = d.h1 * massToTon;
+        const h2Ton = d.h2 * massToTon;
+        const areaHa = d.auditedArea * areaToHa;
         const y1TonHa = areaHa > 0 ? h1Ton / areaHa : 0;
         const y2TonHa = areaHa > 0 ? h2Ton / areaHa : 0;
 
         // Convert to target units for display
-        const targetAreaFactor = AREA_CONVERSIONS[getDataAreaUnit()] || 1;
+        const targetAreaFactor = getDynamicFactor(['HECTARE', 'Hectare', 'ha'], getDataAreaUnit(), 'Area');
         const areaDisplay = areaHa * targetAreaFactor;
 
         const h1Display = convertHarvest(h1Ton, harvestUnit);
@@ -1082,12 +1260,12 @@ function updatePlotPredictedDisplay(d) {
     const aUnit = (d.areaUnit || 'ha').toLowerCase();
     
     // AI Predictions are in Tonnes (mass) and Tonnes/Ha (yield)
-    const massFactor = MASS_CONVERSIONS[qUnit] || MASS_CONVERSIONS.kgs;
-    const areaFactor = AREA_CONVERSIONS[aUnit] || AREA_CONVERSIONS.ha;
+    const massFactor = getDynamicFactor(['METRIC_TON', 'Ton (Metric)', 'MT', 'Tonnes'], qUnit, 'Mass');
+    const areaFactor = getDynamicFactor(['HECTARE', 'Hectare', 'ha'], aUnit, 'Area');
 
     // Convert AI Yield (Tonnes/Ha) to Plot Yield (qUnit / aUnit)
     // 1 Tonne/Ha = massFactor / areaFactor in Plot Units
-    const yieldConversionFactor = massFactor / areaFactor;
+    const yieldConversionFactor = areaFactor > 0 ? (massFactor / areaFactor) : massFactor;
     
     const predictedYieldMin = d.y3_min * yieldConversionFactor;
     const predictedYieldMax = d.y3_max * yieldConversionFactor;
@@ -1427,7 +1605,7 @@ async function handleLogin() {
         document.getElementById('project-container').classList.remove('hidden');
         document.getElementById('session-info').textContent = `${environment} | ${tenant} | ${username} | Loading Prefs...`;
 
-        await Promise.all([loadProjects(), fetchUserInfo(), fetchHealthIndicatorsConfig()]);
+        await Promise.all([loadProjects(), fetchUserInfo(), fetchHealthIndicatorsConfig(), fetchTenantUnitMaster()]);
 
     } catch (error) {
         loginError.textContent = error.message;
@@ -1554,6 +1732,7 @@ function clearAllDataUI() {
     plotsWithoutPrediction = [];
     plotsNotEnabled = [];
     plotsData = [];
+    window.verifiedHealthPlots = [];
     userPrefs = {};
     companyPrefs = {};
     selectedProjectIds = [];
@@ -1736,6 +1915,19 @@ try {
 // });
 
 async function generateDataFromAPI() {
+    const targetPlots = (window.verifiedHealthPlots && window.verifiedHealthPlots.length > 0)
+        ? window.verifiedHealthPlots
+        : [];
+
+    if (targetPlots.length === 0) {
+        if (typeof plotsData !== 'undefined' && plotsData.length > 0) {
+            alert("No Plot Risk-enabled plots found for the selected project(s). Yield data is only loaded for plots with PR enabled.");
+        } else {
+            alert("Please click '🔍 Verify & Load Plots' first to identify compatible plots.");
+        }
+        return;
+    }
+
     const progressSpan = document.getElementById('generate-progress');
     const progressText = document.getElementById('progress-text');
     const yieldStatus = document.getElementById('yield-status');
@@ -1743,12 +1935,12 @@ async function generateDataFromAPI() {
 
     progressSpan && progressSpan.classList.remove('hidden');
     if (yieldStatus) {
-        yieldStatus.textContent = 'Processing plots: 0/' + plotsData.length;
+        yieldStatus.textContent = 'Processing plots: 0/' + targetPlots.length;
         yieldStatus.style.color = 'var(--primary-color)';
     }
 
     const generatedData = [];
-    const total = plotsData.length;
+    const total = targetPlots.length;
     const BATCH_SIZE = 5;
 
     async function fetchPlotData(plot) {
@@ -1808,6 +2000,7 @@ async function generateDataFromAPI() {
                 'Yield Min predicted': yieldData.yieldMin,
                 'Yield Max predicted': yieldData.yieldMax,
                 'Yield Average predicted': yieldData.yieldAvg,
+                'Prediction Model': yieldData.modelType || 'NA',
                 'Yield Not Enabled': yieldData.notEnabled || false,
                 'plotHarvestUnit': rawUnit,
                 'plotAreaUnit': userAreaUnit // Data from API is assumed to be in user/company pref
@@ -1819,8 +2012,8 @@ async function generateDataFromAPI() {
     }
 
     let completed = 0;
-    for (let i = 0; i < plotsData.length; i += BATCH_SIZE) {
-        const batch = plotsData.slice(i, Math.min(i + BATCH_SIZE, plotsData.length));
+    for (let i = 0; i < targetPlots.length; i += BATCH_SIZE) {
+        const batch = targetPlots.slice(i, Math.min(i + BATCH_SIZE, targetPlots.length));
         const batchResults = await Promise.allSettled(
             batch.map(plot => fetchPlotData(plot))
         );
@@ -1832,7 +2025,7 @@ async function generateDataFromAPI() {
         });
 
         completed += batch.length;
-        progressText.textContent = `${completed}/${total}`;
+        if (progressText) progressText.textContent = `${completed}/${total}`;
         if (yieldStatus) yieldStatus.textContent = `Processing plots: ${completed}/${total}`;
     }
     
@@ -1860,16 +2053,14 @@ async function generateDataFromAPI() {
 
     setUnit('data-area-unit', userAreaUnit);
 
-    const HA_TO_ACRE = 2.47105;
+    const companyToUserAreaFactor = getDynamicFactor(companyAreaUnit, userAreaUnit, 'Area');
 
     generatedData.forEach(d => {
-        // Convert Company Unit (Source) -> User Unit (Target)
+        // Convert Company Unit (Source) -> User Unit (Target) using dynamic rules
         let sourceVal = d['Audited Area'] || 0;
 
-        if (companyAreaUnit === 'ha' && userAreaUnit === 'acre') {
-            d['Audited Area'] = sourceVal * HA_TO_ACRE;
-        } else if (companyAreaUnit === 'acre' && userAreaUnit === 'ha') {
-            d['Audited Area'] = sourceVal / HA_TO_ACRE;
+        if (companyToUserAreaFactor && companyToUserAreaFactor !== 1.0) {
+            d['Audited Area'] = sourceVal * companyToUserAreaFactor;
         }
         // If units match, no conversion needed
 
@@ -2041,48 +2232,45 @@ function handleProjectSelection(id, isSelected) {
 
 
 async function handleLoadPlots() {
-    if (selectedProjectIds.length === 0) return;
+    if (selectedProjectIds.length === 0) {
+        alert("Please select at least one project first.");
+        return;
+    }
 
-    // STEP BY STEP: Handle MULTIPLE projects
-    const projectId = selectedProjectIds.join(',');
+    const targetPlots = (window.verifiedHealthPlots && window.verifiedHealthPlots.length > 0)
+        ? window.verifiedHealthPlots
+        : [];
 
-    const plotInfo = document.getElementById('plot-info');
-    const plotCount = document.getElementById('plot-count');
-    const plotLoading = document.getElementById('plot-loading');
-    const baseUrl = getServerUrl();
+    if (targetPlots.length === 0) {
+        if (typeof plotsData !== 'undefined' && plotsData.length > 0) {
+            alert("No Plot Risk-enabled plots found for the selected project(s). Yield data is only loaded for plots with PR enabled.");
+        } else {
+            alert("Please click '🔍 Verify & Load Plots' first to identify compatible plots.");
+        }
+        return;
+    }
 
-    // Show loading UI
-    plotInfo.classList.remove('hidden');
-    plotLoading.classList.remove('hidden');
-    plotCount.textContent = '-';
+    const loadBtn = document.getElementById('load-data-btn');
+    if (loadBtn) {
+        loadBtn.disabled = true;
+        loadBtn.innerHTML = '⌛ Loading Yield Data...';
+        loadBtn.style.opacity = '0.7';
+    }
 
     try {
-        console.log(`[DEBUG] Loading plots for Project ID: ${projectId}`);
-        const response = await fetch(`${baseUrl}/api/user-aggregate/plots?environment=${encodeURIComponent(currentEnvironment)}&projectId=${encodeURIComponent(projectId)}`, {
-            headers: {
-                'Authorization': `Bearer ${authToken}`,
-                'ngrok-skip-browser-warning': 'true'
-            }
-        });
-
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error || 'Failed to load plots');
-
-        plotsData = data.plots || [];
-        plotCount.textContent = plotsData.length;
-        console.log(`[DEBUG] Loaded ${plotsData.length} plots`);
-
-        if (plotsData.length > 0) {
-            // Auto-generate data after loading plots (as per previous flow logic)
-            await generateDataFromAPI();
+        if (!tenantUnitMasterData) {
+            await fetchTenantUnitMaster();
         }
-
+        await generateDataFromAPI();
     } catch (error) {
-        console.error('Error loading plots:', error);
-        plotCount.textContent = 'Error';
-        alert(`Failed to load plots: ${error.message}`);
+        console.error('Error loading yield data:', error);
+        alert(`Failed to load yield data: ${error.message}`);
     } finally {
-        plotLoading.classList.add('hidden');
+        if (loadBtn) {
+            loadBtn.disabled = false;
+            loadBtn.innerHTML = '📊 Load Yield & Harvest Data';
+            loadBtn.style.opacity = '1';
+        }
     }
 }
 
@@ -2178,11 +2366,11 @@ async function handleVerifyPlots() {
     verifyBtn.innerHTML = '🔍 Verify & Load Plots';
     
     // Enable all module load buttons
-    const canLoad = plotsData.length > 0;
+    const canLoad = verifiedPlots.length > 0;
     const loadBtn = document.getElementById('load-data-btn');
     const growthLoadBtn = document.getElementById('load-growth-data-btn');
 
-    [loadBtn, growthLoadBtn].forEach(btn => {
+    [loadBtn, growthLoadBtn, healthLoadBtn].forEach(btn => {
         if (btn) {
             btn.disabled = !canLoad;
             btn.style.opacity = canLoad ? '1' : '0.5';
@@ -2204,46 +2392,18 @@ async function handleLoadGrowthData() {
         alert("Please select at least one project first.");
         return;
     }
-    if (plotsData.length === 0) {
-        // User Request: Remove strict dependency. Auto-load plots if not present but projects are selected.
-        const projectId = selectedProjectIds.join(',');
-        const plotInfo = document.getElementById('plot-info');
-        const plotCount = document.getElementById('plot-count');
-        const plotLoading = document.getElementById('plot-loading');
 
-        if (plotInfo) plotInfo.classList.remove('hidden');
-        if (plotLoading) plotLoading.classList.remove('hidden');
-        if (plotCount) plotCount.textContent = 'Identifying plots...';
+    const targetPlots = (window.verifiedHealthPlots && window.verifiedHealthPlots.length > 0)
+        ? window.verifiedHealthPlots
+        : [];
 
-        const baseUrl = getServerUrl();
-        try {
-            console.log(`[DEBUG] Decoupled Flow: Auto-fetching plots for Project ID: ${projectId}`);
-            const response = await fetch(`${baseUrl}/api/user-aggregate/plots?environment=${encodeURIComponent(currentEnvironment)}&projectId=${encodeURIComponent(projectId)}`, {
-                headers: {
-                    'Authorization': `Bearer ${authToken}`,
-                    'ngrok-skip-browser-warning': 'true'
-                }
-            });
-
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.error || 'Failed to load plots');
-
-            plotsData = data.plots || [];
-            if (plotCount) plotCount.textContent = plotsData.length;
-            console.log(`[DEBUG] Decoupled Flow: Loaded ${plotsData.length} plots`);
-
-            if (plotsData.length === 0) {
-                alert("No plots found for the selected projects.");
-                return;
-            }
-        } catch (error) {
-            console.error('Error auto-loading plots for growth:', error);
-            if (plotCount) plotCount.textContent = 'Error';
-            alert(`Failed to identify plots: ${error.message}`);
-            return;
-        } finally {
-            if (plotLoading) plotLoading.classList.add('hidden');
+    if (targetPlots.length === 0) {
+        if (typeof plotsData !== 'undefined' && plotsData.length > 0) {
+            alert("No Plot Risk-enabled plots found for the selected project(s). Growth data is only loaded for plots with PR enabled.");
+        } else {
+            alert("Please click '🔍 Verify & Load Plots' first to identify compatible plots.");
         }
+        return;
     }
 
     const loadBtn = document.getElementById('load-growth-data-btn');
@@ -2258,7 +2418,7 @@ async function handleLoadGrowthData() {
     loadBtn.style.opacity = '0.7';
     
     if (growthStatus) {
-        growthStatus.textContent = "Analyzing " + plotsData.length + " plots...";
+        growthStatus.textContent = "Analyzing " + targetPlots.length + " Plot Risk-Enabled plots...";
         growthStatus.style.color = "var(--primary-color)";
     }
 
@@ -2380,11 +2540,11 @@ async function handleLoadGrowthData() {
     }
 
     try {
-        for (let i = 0; i < plotsData.length; i += BATCH_SIZE) {
-            const batch = plotsData.slice(i, i + BATCH_SIZE);
+        for (let i = 0; i < targetPlots.length; i += BATCH_SIZE) {
+            const batch = targetPlots.slice(i, i + BATCH_SIZE);
             const results = await Promise.all(batch.map(p => processPlotGrowth(p)));
             results.forEach(res => { if (res) growthResults.push(res); });
-            growthStatus.textContent = `Processing plots: ${Math.min(i + BATCH_SIZE, plotsData.length)}/${plotsData.length}`;
+            growthStatus.textContent = `Processing plots: ${Math.min(i + BATCH_SIZE, targetPlots.length)}/${targetPlots.length}`;
         }
 
         window.currentGrowthResults = growthResults;
@@ -4121,3 +4281,24 @@ window.showHarvestWindowDailyPlots = showHarvestWindowDailyPlots;
 window.showHarvestWindowPlots = showHarvestWindowPlots;
 window.showGrowthProgressionPlots = showGrowthProgressionPlots;
 window.toggleCollectedHarvestDrillDown = toggleCollectedHarvestDrillDown;
+
+// Dynamic Master Unit Conversion API Exports
+window.fetchTenantUnitMaster = fetchTenantUnitMaster;
+window.resolveUnitId = resolveUnitId;
+window.getDynamicFactor = getDynamicFactor;
+window.convertYield = convertYield;
+window.convertHarvest = convertHarvest;
+window.convertValueToMetricTon = convertValueToMetricTon;
+
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+        fetchTenantUnitMaster,
+        resolveUnitId,
+        getDynamicFactor,
+        convertYield,
+        convertHarvest,
+        convertValueToMetricTon,
+        MASS_CONVERSIONS,
+        AREA_CONVERSIONS
+    };
+}

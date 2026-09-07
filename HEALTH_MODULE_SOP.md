@@ -8,6 +8,7 @@ This document serves as the single source of truth for the features, calculation
 The Health Module aggregates satellite indices (primarily from Planet and Sentinel-2 providers) for agricultural plots to determine crop health anomalies. It operates in two configuration modes:
 1. **Legacy Mode**: Computes deviations from historical normal categories (Greenness, Nutrient Uptake, Water Stress).
 2. **Raw Index Mode (`HEALTH_INDICATORS_DISABLED` = true)**: Switches calculations to direct fractional index mean values (NDVI, NDRE, LSWI) and maps them to fixed mathematical ranges.
+3. **Plot Risk (PR) Filtered API Execution**: Health data processing and all associated API requests (Sustainability, Satellite, and Germination) are dispatched exclusively for Plot Risk-enabled plots (`window.verifiedHealthPlots`). Plots without PR capability in the project are bypassed to eliminate unnecessary API requests and maintain strict consistency with PR verification.
 
 ---
 
@@ -83,6 +84,7 @@ To provide a comparison timeline:
 * **2026-08-12**: Integrated "Germination" Crop Health Risk KPI card and table column with conditional load checkbox beside the Load Health Data button.
 * **2026-08-13**: Optimized the grid layout to a symmetric 2x2 style when Germination is selected to resolve layout squishing.
 * **2026-08-14**: Added the "Consider only Planet" checkbox to the Germination card header to filter the pie chart, KPI counts, and active drilldown table rows exclusively to Planet data.
+* **2026-09-01**: Restricted Health data loading (`handleLoadHealthData`) to execute exclusively against Plot Risk (PR) enabled plots (`window.verifiedHealthPlots`) instead of all project plots (`plotsData`), preventing API requests for non-PR plots and synchronizing batch processing indicators.
 
 
 

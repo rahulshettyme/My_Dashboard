@@ -30,6 +30,9 @@ function clearHealthUI() {
     currentHealthResults = null;
     window.lastSatelliteResults = null;
     activeHealthFilter = null;
+    if (typeof window !== 'undefined') {
+        window.verifiedHealthPlots = null;
+    }
     
     // Destroy charts if they exist
     if (healthGreennessPieChart) { healthGreennessPieChart.destroy(); healthGreennessPieChart = null; }
@@ -118,15 +121,32 @@ function getTargetProviderData(res, type) {
 }
 
 /**
+ * Helper to get the list of Plot Risk (PR) enabled plots to process for Health.
+ * Health analysis should only hit APIs for plots with PR enabled.
+ */
+function getPrEnabledPlots() {
+    if (typeof window !== 'undefined' && window.verifiedHealthPlots && Array.isArray(window.verifiedHealthPlots)) {
+        return window.verifiedHealthPlots;
+    }
+    return [];
+}
+
+/**
  * Main entry point to load Health Data
  */
 async function handleLoadHealthData() {
-    if (selectedProjectIds.length === 0) {
+    if (typeof selectedProjectIds !== 'undefined' && selectedProjectIds.length === 0) {
         alert("Please select at least one project first.");
         return;
     }
-    if (plotsData.length === 0) {
-        alert("Please click '🔍 Verify & Load Plots' first to identify compatible plots.");
+
+    const targetPlots = getPrEnabledPlots();
+    if (targetPlots.length === 0) {
+        if (typeof plotsData !== 'undefined' && plotsData.length > 0) {
+            alert("No Plot Risk-enabled plots found for the selected project(s). Health data is only loaded for plots with PR enabled.");
+        } else {
+            alert("Please click '🔍 Verify & Load Plots' first to identify compatible plots.");
+        }
         return;
     }
 
@@ -150,7 +170,7 @@ async function handleLoadHealthData() {
     
     if (healthInfo) healthInfo.classList.remove('hidden');
     if (healthStatus) {
-        healthStatus.textContent = "Analyzing " + plotsData.length + " Plot Risk-Enabled plots...";
+        healthStatus.textContent = "Analyzing " + targetPlots.length + " Plot Risk-Enabled plots...";
         healthStatus.style.color = "var(--primary-color)";
     }
 
@@ -467,11 +487,11 @@ async function handleLoadHealthData() {
     }
 
     try {
-        for (let i = 0; i < plotsData.length; i += BATCH_SIZE) {
-            const batch = plotsData.slice(i, i + BATCH_SIZE);
+        for (let i = 0; i < targetPlots.length; i += BATCH_SIZE) {
+            const batch = targetPlots.slice(i, i + BATCH_SIZE);
             const batchResults = await Promise.all(batch.map(p => processPlotHealth(p)));
             batchResults.forEach(res => { if (res) healthResults.push(res); });
-            if (healthStatus) healthStatus.textContent = `Processing plots: ${Math.min(i + BATCH_SIZE, plotsData.length)}/${plotsData.length}`;
+            if (healthStatus) healthStatus.textContent = `Processing plots: ${Math.min(i + BATCH_SIZE, targetPlots.length)}/${targetPlots.length}`;
         }
 
         currentHealthResults = healthResults;
@@ -636,13 +656,14 @@ function renderHealthKPIDashboard(results) {
 
 function updateHealthSummaryCards(results) {
     // Total plots: All the eligible plots
-    const totalPlots = plotsData.length;
+    const totalPlots = (typeof plotsData !== 'undefined' && plotsData.length > 0) ? plotsData.length : results.length;
     
     // Plots Harvested: count of harvested
     const plotsHarvested = results.filter(r => r.isHarvested === "Yes").length;
     
     // PR Enabled: all compatible plots loaded in results
-    const plotsCovered = results.length;
+    const prPlots = getPrEnabledPlots();
+    const plotsCovered = prPlots.length > 0 ? prPlots.length : results.length;
     
     document.getElementById('health-stat-total-plots').textContent = totalPlots;
     document.getElementById('health-stat-plots-covered').textContent = plotsCovered;
@@ -1334,6 +1355,146 @@ function renderHealthHarvestWindowStatus(aggregates) {
     }
 }
 
+// =============================================
+// DYNAMIC UNIT CONVERSION SYSTEM (TESTABLE ENGINE)
+// =============================================
+function resolveUnitId(unitType, candidateKeys, masterData = null) {
+    const data = masterData || (typeof window !== 'undefined' ? window.tenantUnitMasterCache : null);
+    if (!data || !Array.isArray(data['unit-master'])) return null;
+
+    const targetType = (unitType || '').toLowerCase();
+    const candidates = (Array.isArray(candidateKeys) ? candidateKeys : [candidateKeys])
+        .filter(k => k !== null && k !== undefined)
+        .map(k => String(k).trim().toLowerCase());
+
+    if (candidates.length === 0) return null;
+
+    const unitsOfType = data['unit-master'].filter(u => 
+        (u.unitType || '').toLowerCase() === targetType
+    );
+
+    for (const cand of candidates) {
+        const match = unitsOfType.find(u => 
+            (u.unitCode && u.unitCode.toLowerCase() === cand) ||
+            (u.name && u.name.toLowerCase() === cand) ||
+            (u.unitSymbol && u.unitSymbol.toLowerCase() === cand) ||
+            (u.unitShortCode && u.unitShortCode.toLowerCase() === cand)
+        );
+        if (match) return match.id;
+    }
+
+    for (const cand of candidates) {
+        const match = unitsOfType.find(u => {
+            const uName = (u.name || '').toLowerCase();
+            const uCode = (u.unitCode || '').toLowerCase();
+            const uSym = (u.unitSymbol || '').toLowerCase();
+
+            if (targetType === 'mass') {
+                if ((cand === 'kgs' || cand === 'kg' || cand === 'kilogram' || cand === 'kilograms') &&
+                    (uCode === 'kilogram' || uName === 'kilogram' || uSym === 'kg')) return true;
+                if ((cand === 'tonne' || cand === 'tonnes' || cand === 'mt' || cand === 'metric ton' || cand === 'ton (metric)') &&
+                    (uCode.includes('metric') || uName.includes('metric') || uSym === 'mt')) return true;
+                if ((cand === 'ton' || cand === 'tons' || cand === 'us ton') &&
+                    (uCode === 'ton' || uName === 'ton' || uSym === 'ton')) return true;
+                if ((cand === 'quintal' || cand === 'qtl') &&
+                    (uCode === 'quintal' || uName === 'quintal')) return true;
+                if ((cand === 'gram' || cand === 'g') &&
+                    (uCode === 'gram' || uName === 'gram' || uSym === 'g')) return true;
+            }
+
+            if (targetType === 'area') {
+                if ((cand === 'acre' || cand === 'acres' || cand === 'ac') &&
+                    (uCode === 'acre' || uName === 'acre' || uSym === 'acre')) return true;
+                if ((cand === 'ha' || cand === 'hectare' || cand === 'hectares') &&
+                    (uCode === 'hectare' || uName === 'hectare' || uSym === 'ha' || uSym.toLowerCase() === 'hectare')) return true;
+                if ((cand === 'sq mt' || cand === 'square meter' || cand === 'sqm') &&
+                    (uCode.includes('square_meter') || uName.includes('square meter'))) return true;
+                if ((cand === 'bigha') && (uCode === 'bigha' || uName === 'bigha')) return true;
+                if ((cand === 'gunta') && (uCode === 'gunta' || uName === 'gunta')) return true;
+            }
+
+            return false;
+        });
+        if (match) return match.id;
+    }
+
+    return null;
+}
+
+function getFallbackFactor(src, tgt, unitType) {
+    const type = (unitType || '').toLowerCase();
+    if (type === 'area') {
+        const isSrcAcre = src.includes('acre') || src === 'ac';
+        const isSrcHa = src.includes('ha') || src.includes('hectare');
+        const isTgtAcre = tgt.includes('acre') || tgt === 'ac';
+        const isTgtHa = tgt.includes('ha') || tgt.includes('hectare');
+
+        if (isSrcHa && isTgtAcre) return 2.47105;
+        if (isSrcAcre && isTgtHa) return 0.404686;
+        return 1.0;
+    }
+    if (type === 'mass') {
+        const toTon = (u) => {
+            if (u.includes('metric') || u === 'tonne' || u === 'tonnes' || u === 'mt') return 1.0;
+            if (u === 'kgs' || u === 'kg' || u.includes('kilogram')) return 0.001;
+            if (u === 'ton' || u === 'tons') return 0.9071847;
+            if (u === 'quintal') return 0.1;
+            if (u === 'gram' || u === 'g') return 0.000001;
+            return 1.0;
+        };
+        const srcToTon = toTon(src);
+        const tgtToTon = toTon(tgt);
+        return tgtToTon > 0 ? (srcToTon / tgtToTon) : 1.0;
+    }
+    return 1.0;
+}
+
+function getDynamicFactor(srcCandidate, tgtCandidate, unitType, masterData = null) {
+    const data = masterData || (typeof window !== 'undefined' ? window.tenantUnitMasterCache : null);
+
+    const sStr = String(Array.isArray(srcCandidate) ? srcCandidate[0] : srcCandidate || '').trim().toLowerCase();
+    const tStr = String(Array.isArray(tgtCandidate) ? tgtCandidate[0] : tgtCandidate || '').trim().toLowerCase();
+
+    if (sStr === tStr) return 1.0;
+
+    const srcId = resolveUnitId(unitType, srcCandidate, data);
+    const tgtId = resolveUnitId(unitType, tgtCandidate, data);
+
+    if (srcId !== null && tgtId !== null) {
+        if (srcId === tgtId) return 1.0;
+
+        if (data && Array.isArray(data['unit-conversion'])) {
+            const direct = data['unit-conversion'].find(r => 
+                Number(r.fromUnitId) === Number(srcId) && Number(r.toUnitId) === Number(tgtId)
+            );
+            if (direct && !isNaN(parseFloat(direct.conversionFactor))) {
+                return parseFloat(direct.conversionFactor);
+            }
+
+            const reciprocal = data['unit-conversion'].find(r => 
+                Number(r.fromUnitId) === Number(tgtId) && Number(r.toUnitId) === Number(srcId)
+            );
+            if (reciprocal && !isNaN(parseFloat(reciprocal.conversionFactor)) && parseFloat(reciprocal.conversionFactor) !== 0) {
+                return 1.0 / parseFloat(reciprocal.conversionFactor);
+            }
+        }
+    }
+
+    return getFallbackFactor(sStr, tStr, unitType);
+}
+
+function convertYield(valueInTonnePerHa, targetUnit, masterData = null) {
+    const [massUnit, areaUnit] = targetUnit.split('_');
+    const massFactor = getDynamicFactor(['METRIC_TON', 'Ton (Metric)', 'MT', 'Tonnes'], massUnit, 'Mass', masterData);
+    const areaFactor = getDynamicFactor(['HECTARE', 'Hectare', 'ha'], areaUnit, 'Area', masterData);
+    return areaFactor > 0 ? (valueInTonnePerHa * massFactor / areaFactor) : valueInTonnePerHa;
+}
+
+function convertHarvest(valueInTonnes, targetUnit, masterData = null) {
+    const massFactor = getDynamicFactor(['METRIC_TON', 'Ton (Metric)', 'MT', 'Tonnes'], targetUnit, 'Mass', masterData);
+    return valueInTonnes * massFactor;
+}
+
 if (typeof module !== 'undefined') {
     module.exports = {
         isWithinAnalysisWindow,
@@ -1342,6 +1503,12 @@ if (typeof module !== 'undefined') {
         formatHealthStatus,
         getHealthStatusColor,
         formatGerminationStatus,
-        getGerminationColor
+        getGerminationColor,
+        getPrEnabledPlots,
+        resolveUnitId,
+        getDynamicFactor,
+        getFallbackFactor,
+        convertYield,
+        convertHarvest
     };
 }

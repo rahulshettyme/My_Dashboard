@@ -33,12 +33,23 @@ async function exportToExcel(globalData, MASS_CONVERSIONS, AREA_CONVERSIONS, sho
 
         const qUnit = (d.harvestUnit || 'kgs').toLowerCase();
         const aUnit = (d.areaUnit || 'ha').toLowerCase();
-        const massFactor = MASS_CONVERSIONS[qUnit] || MASS_CONVERSIONS.kgs;
-        const areaFactor = AREA_CONVERSIONS[aUnit] || AREA_CONVERSIONS.ha;
 
-        const h1Ton = d.h1 / massFactor;
-        const h2Ton = d.h2 / massFactor;
-        const areaHa = d.auditedArea / areaFactor;
+        let h1Ton, h2Ton, areaHa;
+        const dynamicFactorFn = (typeof getDynamicFactor === 'function') ? getDynamicFactor : (typeof window !== 'undefined' && typeof window.getDynamicFactor === 'function' ? window.getDynamicFactor : null);
+
+        if (dynamicFactorFn) {
+            const massToTon = dynamicFactorFn(qUnit, ['METRIC_TON', 'Ton (Metric)', 'MT', 'Tonnes'], 'Mass');
+            const areaToHa = dynamicFactorFn(aUnit, ['HECTARE', 'Hectare', 'ha'], 'Area');
+            h1Ton = d.h1 * massToTon;
+            h2Ton = d.h2 * massToTon;
+            areaHa = d.auditedArea * areaToHa;
+        } else {
+            const massFactor = MASS_CONVERSIONS[qUnit] || MASS_CONVERSIONS.kgs;
+            const areaFactor = AREA_CONVERSIONS[aUnit] || AREA_CONVERSIONS.ha;
+            h1Ton = d.h1 / massFactor;
+            h2Ton = d.h2 / massFactor;
+            areaHa = d.auditedArea / areaFactor;
+        }
 
         let predHarvestMin = d.h3_min;
         let predHarvestMax = d.h3_max;

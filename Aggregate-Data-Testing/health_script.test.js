@@ -1,7 +1,8 @@
 const assert = require('assert');
 const healthScript = require('./health_script.js');
+const { selectYieldPredictionParameters } = require('../server.js');
 
-const baselineCount = 10;
+const baselineCount = 11;
 
 const tests = [
     {
@@ -121,6 +122,238 @@ const tests = [
             assert.strictEqual(healthScript.getGerminationColor('Good'), '#10b981', 'Good status should color green');
             assert.strictEqual(healthScript.getGerminationColor('Moderate'), '#f59e0b', 'Moderate status should color yellow');
             assert.strictEqual(healthScript.getGerminationColor('Need Attention'), '#ef4444', 'Need Attention status should color red');
+        }
+    },
+    {
+        name: 'getPrEnabledPlots',
+        fn: () => {
+            global.window.verifiedHealthPlots = undefined;
+            assert.deepStrictEqual(healthScript.getPrEnabledPlots(), [], 'Should return empty array when verifiedHealthPlots is undefined');
+
+            global.window.verifiedHealthPlots = [];
+            assert.deepStrictEqual(healthScript.getPrEnabledPlots(), [], 'Should return empty array when verifiedHealthPlots is empty');
+
+            const mockPlots = [
+                { caId: '101', name: 'Plot 101' },
+                { caId: '102', name: 'Plot 102' }
+            ];
+            global.window.verifiedHealthPlots = mockPlots;
+            const result = healthScript.getPrEnabledPlots();
+            assert.strictEqual(result.length, 2, 'Should return only PR-enabled plots');
+            assert.strictEqual(result[0].caId, '101');
+            assert.strictEqual(result[1].caId, '102');
+        }
+    },
+    {
+        name: 'selectYieldPredictionParameters_TASUMI_priority',
+        fn: () => {
+            const samplePayload = {
+                totalItems: 3,
+                records: [
+                    {
+                        modelType: 'TASUMI',
+                        modifiedDateTime: '2026-09-03T12:17:06.726Z',
+                        parameters: {
+                            yieldMin: '7.535',
+                            yieldMax: '8.328',
+                            yieldAvg: '7.932',
+                            productionMin: '9.209',
+                            productionMax: '10.179',
+                            productionAvg: '9.694'
+                        }
+                    },
+                    {
+                        modelType: 'BIOMASS_GDD',
+                        modifiedDateTime: '2026-09-07T01:55:50.090Z',
+                        parameters: {
+                            yieldMin: '12.643',
+                            yieldMax: '13.973'
+                        }
+                    },
+                    {
+                        modelType: 'BIOMASS_DAYS',
+                        modifiedDateTime: '2026-09-07T01:55:50.357Z',
+                        parameters: {
+                            yieldMin: '32.625',
+                            yieldMax: '36.059',
+                            productionMin: '39.872',
+                            productionMax: '44.07'
+                        }
+                    }
+                ]
+            };
+
+            const result = selectYieldPredictionParameters(samplePayload);
+            assert.ok(result, 'Result should not be null');
+            assert.strictEqual(result.modelType, 'TASUMI', 'TASUMI should be prioritized');
+            assert.strictEqual(result.yieldMin, '7.535');
+            assert.strictEqual(result.productionMin, '9.209');
+        }
+    },
+    {
+        name: 'selectYieldPredictionParameters_BIOMASS_DAYS_fallback',
+        fn: () => {
+            const samplePayloadNoTasumi = {
+                totalItems: 2,
+                records: [
+                    {
+                        modelType: 'BIOMASS_GDD',
+                        modifiedDateTime: '2026-09-07T01:55:50.090Z',
+                        parameters: { yieldMin: '12.643' }
+                    },
+                    {
+                        modelType: 'BIOMASS_DAYS',
+                        modifiedDateTime: '2026-09-07T01:55:50.357Z',
+                        parameters: {
+                            yieldMin: '32.625',
+                            yieldMax: '36.059',
+                            productionMin: '39.872',
+                            productionMax: '44.07'
+                        }
+                    }
+                ]
+            };
+
+            const result = selectYieldPredictionParameters(samplePayloadNoTasumi);
+            assert.ok(result, 'Result should not be null');
+            assert.strictEqual(result.modelType, 'BIOMASS_DAYS', 'BIOMASS_DAYS should be selected as fallback');
+            assert.strictEqual(result.yieldMin, '32.625');
+            assert.strictEqual(result.productionMin, '39.872');
+        }
+    },
+    {
+        name: 'selectYieldPredictionParameters_latest_date_selection',
+        fn: () => {
+            const multipleTasumi = {
+                records: [
+                    {
+                        modelType: 'TASUMI',
+                        modifiedDateTime: '2026-08-01T00:00:00.000Z',
+                        parameters: { yieldMin: '5.000', productionMin: '6.000' }
+                    },
+                    {
+                        modelType: 'TASUMI',
+                        modifiedDateTime: '2026-09-01T00:00:00.000Z',
+                        parameters: { yieldMin: '8.500', productionMin: '10.000' }
+                    }
+                ]
+            };
+
+            const result = selectYieldPredictionParameters(multipleTasumi);
+            assert.ok(result, 'Result should not be null');
+            assert.strictEqual(result.yieldMin, '8.500', 'Should select the latest TASUMI record by date');
+            assert.strictEqual(result.productionMin, '10.000');
+        }
+    },
+    {
+        name: 'resolveUnitId_dynamic_lookup_without_hardcoded_ids',
+        fn: () => {
+            const mockCustomTenant = {
+                'unit-master': [
+                    { id: 999, name: 'Metric Ton', unitSymbol: 'MT', unitType: 'Mass', unitCode: 'METRIC_TON' },
+                    { id: 888, name: 'Kilogram', unitSymbol: 'kg', unitType: 'Mass', unitCode: 'KILOGRAM' },
+                    { id: 777, name: 'Acre', unitSymbol: 'ac', unitType: 'Area', unitCode: 'ACRE' },
+                    { id: 666, name: 'Hectare', unitSymbol: 'ha', unitType: 'Area', unitCode: 'HECTARE' },
+                    { id: 555, name: 'Ton', unitSymbol: 'ton', unitType: 'Mass', unitCode: 'TON' }
+                ],
+                'unit-conversion': []
+            };
+
+            // Resolving Mass units with non-standard tenant IDs
+            assert.strictEqual(healthScript.resolveUnitId('Mass', 'kgs', mockCustomTenant), 888, 'Kgs should resolve to 888');
+            assert.strictEqual(healthScript.resolveUnitId('Mass', 'Kilogram', mockCustomTenant), 888, 'Kilogram should resolve to 888');
+            assert.strictEqual(healthScript.resolveUnitId('Mass', ['METRIC_TON', 'Ton (Metric)'], mockCustomTenant), 999, 'Metric Ton should resolve to 999');
+            assert.strictEqual(healthScript.resolveUnitId('Mass', 'ton', mockCustomTenant), 555, 'US Ton should resolve to 555');
+
+            // Resolving Area units
+            assert.strictEqual(healthScript.resolveUnitId('Area', 'ha', mockCustomTenant), 666, 'Hectare should resolve to 666');
+            assert.strictEqual(healthScript.resolveUnitId('Area', 'acre', mockCustomTenant), 777, 'Acre should resolve to 777');
+            assert.strictEqual(healthScript.resolveUnitId('Area', 'unknown_unit', mockCustomTenant), null, 'Unknown unit should return null');
+        }
+    },
+    {
+        name: 'getDynamicFactor_direct_and_reciprocal_rules',
+        fn: () => {
+            const mockMaster = {
+                'unit-master': [
+                    { id: 10, name: 'Kilogram', unitSymbol: 'kg', unitType: 'Mass', unitCode: 'KILOGRAM' },
+                    { id: 20, name: 'Metric Ton', unitSymbol: 'MT', unitType: 'Mass', unitCode: 'METRIC_TON' },
+                    { id: 30, name: 'Hectare', unitSymbol: 'ha', unitType: 'Area', unitCode: 'HECTARE' },
+                    { id: 40, name: 'Acre', unitSymbol: 'ac', unitType: 'Area', unitCode: 'ACRE' }
+                ],
+                'unit-conversion': [
+                    // Direct rule: Kilogram (10) -> Metric Ton (20) = 0.001
+                    { id: 1, fromUnitId: 10, toUnitId: 20, conversionFactor: 0.001, unitType: 'Mass' },
+                    // Direct rule: Hectare (30) -> Acre (40) = 2.47105
+                    { id: 2, fromUnitId: 30, toUnitId: 40, conversionFactor: 2.47105, unitType: 'Area' }
+                ]
+            };
+
+            // Identity
+            assert.strictEqual(healthScript.getDynamicFactor('kg', 'kg', 'Mass', mockMaster), 1.0, 'Same unit should yield factor 1.0');
+
+            // Direct rule: Kg to MT
+            const kgToMt = healthScript.getDynamicFactor('kg', 'MT', 'Mass', mockMaster);
+            assert.strictEqual(kgToMt, 0.001, 'Kg -> MT should be 0.001');
+
+            // Reciprocal rule: MT to Kg (1 / 0.001 = 1000)
+            const mtToKg = healthScript.getDynamicFactor('MT', 'kg', 'Mass', mockMaster);
+            assert.strictEqual(mtToKg, 1000, 'MT -> Kg should be 1000 via reciprocal rule');
+
+            // Direct rule: Ha to Acre
+            const haToAcre = healthScript.getDynamicFactor('ha', 'acre', 'Area', mockMaster);
+            assert.strictEqual(haToAcre, 2.47105, 'Ha -> Acre should be 2.47105');
+
+            // Reciprocal rule: Acre to Ha (1 / 2.47105 ~= 0.404686)
+            const acreToHa = healthScript.getDynamicFactor('acre', 'ha', 'Area', mockMaster);
+            assert.ok(Math.abs(acreToHa - 0.404686) < 0.0001, 'Acre -> Ha should be approximately 0.404686');
+        }
+    },
+    {
+        name: 'convertYield_and_convertHarvest_calculation',
+        fn: () => {
+            const mockMaster = {
+                'unit-master': [
+                    { id: 1, name: 'Kilogram', unitSymbol: 'kg', unitType: 'Mass', unitCode: 'KILOGRAM' },
+                    { id: 2, name: 'Metric Ton', unitSymbol: 'MT', unitType: 'Mass', unitCode: 'METRIC_TON' },
+                    { id: 3, name: 'Hectare', unitSymbol: 'ha', unitType: 'Area', unitCode: 'HECTARE' },
+                    { id: 4, name: 'Acre', unitSymbol: 'ac', unitType: 'Area', unitCode: 'ACRE' }
+                ],
+                'unit-conversion': [
+                    { id: 1, fromUnitId: 2, toUnitId: 1, conversionFactor: 1000.0, unitType: 'Mass' },
+                    { id: 2, fromUnitId: 3, toUnitId: 4, conversionFactor: 2.47105, unitType: 'Area' }
+                ]
+            };
+
+            // AI predicted harvest: 15.0 Metric Tonnes -> User unit: kgs
+            const harvestInKg = healthScript.convertHarvest(15.0, 'kgs', mockMaster);
+            assert.strictEqual(harvestInKg, 15000.0, '15 MT must convert to 15,000 Kgs');
+
+            // AI predicted yield: 10.0 Tonnes/Ha -> User unit: kgs_acre
+            // Mass factor: MT -> Kg = 1000
+            // Area factor: Ha -> Acre = 2.47105
+            // Yield factor = 1000 / 2.47105 = 404.686267
+            // 10.0 * 404.686267 = 4046.86267
+            const yieldInKgAcre = healthScript.convertYield(10.0, 'kgs_acre', mockMaster);
+            assert.ok(Math.abs(yieldInKgAcre - 4046.86267) < 0.01, '10 Tonnes/Ha must convert to ~4046.86 Kg/Acre');
+
+            // 1:1 Metric Tonnes/Ha -> tonne_ha
+            const yieldInTonneHa = healthScript.convertYield(5.5, 'tonne_ha', mockMaster);
+            assert.strictEqual(yieldInTonneHa, 5.5, '5.5 Tonne/Ha must remain 5.5');
+        }
+    },
+    {
+        name: 'dynamic_conversion_fallback_behavior',
+        fn: () => {
+            // Test with null masterData - should gracefully fallback to standard constants
+            const haToAcreFallback = healthScript.getDynamicFactor('ha', 'acre', 'Area', null);
+            assert.strictEqual(haToAcreFallback, 2.47105, 'Fallback for Ha -> Acre should be 2.47105');
+
+            const acreToHaFallback = healthScript.getDynamicFactor('acre', 'ha', 'Area', null);
+            assert.strictEqual(acreToHaFallback, 0.404686, 'Fallback for Acre -> Ha should be 0.404686');
+
+            const mtToKgFallback = healthScript.getDynamicFactor('tonne', 'kgs', 'Mass', null);
+            assert.strictEqual(mtToKgFallback, 1000, 'Fallback for Tonne -> Kgs should be 1000');
         }
     }
 ];

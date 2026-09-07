@@ -245,11 +245,95 @@ app.post('/api/sisense/status', async (req, res) => {
     }
 });
 
-// GET unit conversions
+// GET unit conversions (legacy simple factors)
 app.get('/api/unit-conversions', (req, res) => {
     const db = readDb();
     res.json(db.unit_conversion || []);
 });
+
+// GET Unit Master & Conversion Rules (Dynamic tenant unit rules)
+app.get('/api/user-aggregate/unit-master', (req, res) => {
+    const { environment, unitType } = req.query;
+    const authHeader = req.headers.authorization;
+
+    const fallbackData = {
+        "unit-master": [],
+        "unit-conversion": []
+    };
+
+    if (!environment || !authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.json(fallbackData);
+    }
+
+    const db = readDb();
+    const apiBaseUrl = resolveEnvUrl(db, environment, 'api');
+    const frontendUrl = resolveEnvUrl(db, environment, 'ui');
+
+    if (!apiBaseUrl) {
+        return res.json(fallbackData);
+    }
+
+    let unitPath = '/services/farm/api/unit-conversions/unit-master';
+    if (unitType) {
+        unitPath += `?unitType=${encodeURIComponent(unitType)}`;
+    }
+    const fullUrl = apiBaseUrl + unitPath;
+
+    try {
+        const urlObj = new URL(fullUrl);
+        const options = {
+            hostname: urlObj.hostname,
+            port: 443,
+            path: urlObj.pathname + urlObj.search,
+            method: 'GET',
+            headers: {
+                'Authorization': authHeader,
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'origin': frontendUrl || apiBaseUrl,
+                'referer': (frontendUrl || apiBaseUrl) + '/'
+            }
+        };
+
+        const unitReq = https.request(options, (unitRes) => {
+            let data = '';
+            unitRes.on('data', chunk => data += chunk);
+            unitRes.on('end', () => {
+                if (data.trim().startsWith('<!DOCTYPE') || data.trim().startsWith('<html')) {
+                    console.warn('[Unit Master] API returned HTML, serving fallback data');
+                    return res.json(fallbackData);
+                }
+                try {
+                    const jsonData = JSON.parse(data);
+                    if (unitRes.statusCode >= 200 && unitRes.statusCode < 300 && (jsonData['unit-master'] || jsonData.unitMaster)) {
+                        return res.json({
+                            'unit-master': jsonData['unit-master'] || jsonData.unitMaster || [],
+                            'unit-conversion': jsonData['unit-conversion'] || jsonData.unitConversion || []
+                        });
+                    } else {
+                        console.warn(`[Unit Master] Upstream returned status ${unitRes.statusCode}, serving fallback`);
+                        return res.json(fallbackData);
+                    }
+                } catch (e) {
+                    console.warn('[Unit Master] JSON parse error, serving fallback');
+                    return res.json(fallbackData);
+                }
+            });
+        });
+
+        unitReq.on('error', (e) => {
+            console.warn('[Unit Master] Request error:', e.message, 'serving fallback');
+            return res.json(fallbackData);
+        });
+
+        unitReq.end();
+    } catch (err) {
+        console.warn('[Unit Master] Exception:', err.message, 'serving fallback');
+        return res.json(fallbackData);
+    }
+});
+
 
 // POST create user
 app.post('/api/users', (req, res) => {
@@ -1345,6 +1429,73 @@ app.get('/api/user-aggregate/ca-details', (req, res) => {
     caReq.end();
 });
 
+/**
+ * Selects the yield prediction parameters based on prioritized model types:
+ * 1. If modelType : "TASUMI" is present we have to use this as the latest data
+ * 2. If step 1 not present, we have to use the values of the latest 'modelType : "BIOMASS_DAYS"'
+ * 3. Fallback to records[0] or parameters object if neither is found
+ */
+function selectYieldPredictionParameters(jsonData) {
+    if (!jsonData) return null;
+
+    if (Array.isArray(jsonData.records) && jsonData.records.length > 0) {
+        const getRecordTime = (r) => {
+            const dateStr = r.modifiedDateTime || r.predictionDate || r.createdDateTime;
+            if (!dateStr) return 0;
+            const t = new Date(dateStr).getTime();
+            return isNaN(t) ? 0 : t;
+        };
+
+        const getParamsFromRecord = (r) => {
+            if (!r) return null;
+            if (r.parameters && Object.keys(r.parameters).length > 0) {
+                return { ...r.parameters, modelType: r.modelType };
+            }
+            if (Array.isArray(r.gddPredictions) && r.gddPredictions.length > 0) {
+                const lastGdd = r.gddPredictions[r.gddPredictions.length - 1];
+                return {
+                    yieldMin: lastGdd.yieldMin,
+                    yieldMax: lastGdd.yieldMax,
+                    yieldAvg: lastGdd.yieldAvg || lastGdd.yield_days || lastGdd.yield_gdd,
+                    productionMin: lastGdd.productionMin,
+                    productionMax: lastGdd.productionMax,
+                    productionAvg: lastGdd.productionAvg,
+                    yieldUnit: lastGdd.yieldUnit,
+                    productionUnit: 'Tonnes',
+                    modelType: r.modelType
+                };
+            }
+            return null;
+        };
+
+        // 1. If modelType : "TASUMI" is present we have to use this as the latest data
+        const tasumiRecords = jsonData.records.filter(r => (r.modelType || '').trim().toUpperCase() === 'TASUMI');
+        if (tasumiRecords.length > 0) {
+            tasumiRecords.sort((a, b) => getRecordTime(b) - getRecordTime(a));
+            const params = getParamsFromRecord(tasumiRecords[0]);
+            if (params) return params;
+        }
+
+        // 2. If step 1 not present, we have to use the values of the latest 'modelType : "BIOMASS_DAYS"'
+        const biomassDaysRecords = jsonData.records.filter(r => (r.modelType || '').trim().toUpperCase() === 'BIOMASS_DAYS');
+        if (biomassDaysRecords.length > 0) {
+            biomassDaysRecords.sort((a, b) => getRecordTime(b) - getRecordTime(a));
+            const params = getParamsFromRecord(biomassDaysRecords[0]);
+            if (params) return params;
+        }
+
+        // Fallback: First record's parameters
+        const fallbackParams = getParamsFromRecord(jsonData.records[0]);
+        if (fallbackParams) return fallbackParams;
+    }
+
+    if (jsonData.parameters) {
+        return { ...jsonData.parameters, modelType: jsonData.modelType || 'UNKNOWN' };
+    }
+
+    return null;
+}
+
 // GET Yield Prediction
 app.get('/api/user-aggregate/yield-prediction', (req, res) => {
     const { environment, caIds } = req.query;
@@ -1395,22 +1546,13 @@ app.get('/api/user-aggregate/yield-prediction', (req, res) => {
             try {
                 const jsonData = JSON.parse(data);
                 if (yieldRes.statusCode >= 200 && yieldRes.statusCode < 300) {
-                    // Extract parameters from records array
-                    let hasData = false;
-                    let params = {};
+                    // Extract parameters according to prioritized model types
+                    const params = selectYieldPredictionParameters(jsonData);
 
-                    if (jsonData.records && jsonData.records.length > 0) {
-                        // Use first record's parameters
-                        params = jsonData.records[0].parameters || {};
-                        hasData = true;
-                    } else if (jsonData.parameters) {
-                        params = jsonData.parameters;
-                        hasData = true;
-                    }
-
-                    if (hasData) {
+                    if (params) {
                         res.json({
                             caId: caIds,
+                            modelType: params.modelType || 'UNKNOWN',
                             productionMin: parseFloat(params.productionMin) || 'NA',
                             productionMax: parseFloat(params.productionMax) || 'NA',
                             productionAvg: parseFloat(params.productionAvg) || 'NA',
@@ -1860,6 +2002,14 @@ app.get('/api/user-aggregate/harvest-tasks', (req, res) => {
     hReq.end();
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on http://0.0.0.0:${PORT}`);
-});
+if (require.main === module) {
+    app.listen(PORT, '0.0.0.0', () => {
+        console.log(`Server running on http://0.0.0.0:${PORT}`);
+    });
+}
+
+module.exports = {
+    app,
+    selectYieldPredictionParameters
+};
+
