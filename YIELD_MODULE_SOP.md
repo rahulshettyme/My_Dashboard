@@ -15,24 +15,29 @@ It operates at two granularities:
 
 ## 2. Yield Prediction Model Selection Hierarchy
 
-The Yield Prediction API (`/services/farm/api/plot-risk/yield?caIds={caIds}`) may return multiple model records for a single plot in its `records` array (e.g., `TASUMI`, `BIOMASS_GDD`, `BIOMASS_DAYS`). The system implements a strict priority selection rule to determine the authoritative prediction record:
+The Yield Prediction API (`/services/farm/api/plot-risk/yield?caIds={caIds}`) may return multiple model records for a single plot in its `records` array (e.g., `TASUMI`, `BIOMASS_GDD`, `BIOMASS_DAYS`). The system implements a strict 3-rule model selection hierarchy to determine the authoritative prediction record for both plot-level data cards and project aggregate calculations:
 
-### Priority Rules
-1. **Priority 1 (`TASUMI`)**:
+### Strict 3-Rule Hierarchy
+1. **Rule 1: Use `TASUMI` data as yield and harvest data if present**:
    - If one or more records with `modelType: "TASUMI"` (case-insensitive) are present, the system MUST select this record.
-   - If multiple `TASUMI` records exist, the most recent record (determined by `modifiedDateTime` $\to$ `predictionDate` $\to$ `createdDateTime` DESC) is selected as the latest data.
-2. **Priority 2 (`BIOMASS_DAYS`)**:
-   - If no `TASUMI` record exists, the system MUST check for records with `modelType: "BIOMASS_DAYS"`.
+   - If multiple `TASUMI` records exist, the most recent record (determined by `modifiedDateTime` $\to$ `predictionDate` $\to$ `createdDateTime` DESC) is selected as the authoritative data.
+2. **Rule 2: If `TASUMI` is not present, use the latest `BIOMASS_DAYS` values (do not aggregate all biomass dates)**:
+   - If no `TASUMI` record exists, the system checks for records with `modelType: "BIOMASS_DAYS"`.
    - If multiple `BIOMASS_DAYS` records exist, the most recent record (by timestamp DESC) is selected.
-3. **Fallback**:
-   - If neither `TASUMI` nor `BIOMASS_DAYS` is present, the system defaults to the first available record in `records[0]`, or the top-level `parameters` object.
-   - If no data or parameters exist, values are marked as `'NA'`.
+   - When extracting values from `BIOMASS_DAYS`:
+     - If `gddPredictions` array is present (e.g., progression across multiple cutoff dates), the system extracts values exclusively from the **chronologically latest cutoff date** (sorted by `cutoff_date` ASC, taking the last entry).
+     - **Explicit Constraint**: The system MUST NOT average or aggregate across all available biomass dates; it strictly takes the single latest cutoff date point.
+3. **Rule 3: If none present, mark plot as NA and do not use for aggregation**:
+   - If neither `TASUMI` nor `BIOMASS_DAYS` is present (e.g., only other models like `BIOMASS_GDD` exist, empty records array `[]`, or API error/disabled):
+     - The plot's AI prediction model is marked as `'NA'`.
+     - Plot-level predicted harvest and yield are marked as `'NA'`.
+     - The plot is **strictly excluded from aggregate calculations** (`Agg AI Harvest Min/Max` and `Agg AI Yield Min/Max` weighted sums), and is excluded from total aggregate area and expected/re-estimated harvest totals (unless the user explicitly checks "Include plots without prediction in aggregate").
 
 ### Extracted Parameters
-From the selected record, the following metrics are extracted:
-- `yieldMin`, `yieldMax`, `yieldAvg` (in `Tonnes/Ha`)
-- `productionMin`, `productionMax`, `productionAvg` (in `Tonnes`)
-- `modelType` (e.g. `TASUMI`, `BIOMASS_DAYS`)
+From the selected record (or latest cutoff date), the following metrics are extracted:
+- `yieldMin`, `yieldMax`, `yieldAvg` (standardized in `Tonnes/Ha`)
+- `productionMin`, `productionMax`, `productionAvg` (standardized in `Tonnes`)
+- `modelType` (`TASUMI` or `BIOMASS_DAYS`, or `'NA'`)
 
 ---
 
@@ -126,6 +131,11 @@ When a plot has `modelType: "BIOMASS_DAYS"` present in its prediction records (`
 ---
 
 ## 4. Change Log (Feature & Logic Audit Trail)
+* **2026-09-07**: Refined Yield & Harvest Prediction Model Selection & Aggregation Rules:
+  1. **Rule 1 (TASUMI)**: If `TASUMI` is present, it is selected as authoritative data for the plot.
+  2. **Rule 2 (Latest BIOMASS_DAYS)**: If `TASUMI` is not present, the latest `BIOMASS_DAYS` cutoff values from `gddPredictions` are used directly (strictly avoiding any averaging or aggregating across cutoff dates).
+  3. **Rule 3 (NA & Aggregation Exclusion)**: If neither `TASUMI` nor `BIOMASS_DAYS` is present, plot predictions are marked as `'NA'` and strictly excluded from all aggregate yield and harvest calculations (`Agg AI Harvest Min/Max` and `Agg AI Yield Min/Max`).
+  4. Updated `server.js` (`selectYieldPredictionParameters`), `aggregate_script_backup.js` (`resolveYieldPredictionRules`), and regression test suite (23 tests passing).
 * **2026-09-07**: Updated mouseover graph tooltip attributes for multi-model trend charts:
   1. Replaced reference line entries in hover tooltip with specific prediction attributes: `Max Predicted`, `Min Predicted`, and `Average` values.
   2. Extracted and dynamically converted `yieldMin`, `yieldMax`, `productionMin`, and `productionMax` for all `BIOMASS_DAYS` cutoff dates and `TASUMI` points in `extractPlotMultiModelData()`.

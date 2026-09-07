@@ -671,6 +671,69 @@ function handleFileUpload(event) {
     reader.readAsArrayBuffer(file);
 }
 
+function resolveYieldPredictionRules(records) {
+    if (!Array.isArray(records) || records.length === 0) return null;
+
+    const getRecordTime = (r) => {
+        const dateStr = r.modifiedDateTime || r.predictionDate || r.createdDateTime;
+        if (!dateStr) return 0;
+        const t = new Date(dateStr).getTime();
+        return isNaN(t) ? 0 : t;
+    };
+
+    // 1. Use TASUMI data as yield and harvest data plot if it is present
+    const tasumiRecords = records.filter(r => (r.modelType || '').trim().toUpperCase() === 'TASUMI');
+    if (tasumiRecords.length > 0) {
+        tasumiRecords.sort((a, b) => getRecordTime(b) - getRecordTime(a));
+        const r = tasumiRecords[0];
+        const p = r.parameters || {};
+        return {
+            yieldMin: p.yieldMin !== undefined ? p.yieldMin : (r.yieldMin !== undefined ? r.yieldMin : 'NA'),
+            yieldMax: p.yieldMax !== undefined ? p.yieldMax : (r.yieldMax !== undefined ? r.yieldMax : 'NA'),
+            yieldAvg: p.yieldAvg || p.yieldMin || r.yieldAvg || r.yieldMin || 'NA',
+            productionMin: p.productionMin !== undefined ? p.productionMin : (r.productionMin !== undefined ? r.productionMin : 'NA'),
+            productionMax: p.productionMax !== undefined ? p.productionMax : (r.productionMax !== undefined ? r.productionMax : 'NA'),
+            productionAvg: p.productionAvg || p.productionMin || r.productionAvg || r.productionMin || 'NA',
+            modelType: 'TASUMI'
+        };
+    }
+
+    // 2. If TASUMI not present, use the latest BIOMASS_DAYS values (do not use aggregate of all available biomass data)
+    const biomassDaysRecords = records.filter(r => (r.modelType || '').trim().toUpperCase() === 'BIOMASS_DAYS');
+    if (biomassDaysRecords.length > 0) {
+        biomassDaysRecords.sort((a, b) => getRecordTime(b) - getRecordTime(a));
+        const r = biomassDaysRecords[0];
+        if (Array.isArray(r.gddPredictions) && r.gddPredictions.length > 0) {
+            const sortedGdd = [...r.gddPredictions].sort((a, b) => (a.cutoff_date || '').localeCompare(b.cutoff_date || ''));
+            const latestGdd = sortedGdd[sortedGdd.length - 1];
+            return {
+                yieldMin: latestGdd.yieldMin !== undefined ? latestGdd.yieldMin : (r.parameters && r.parameters.yieldMin !== undefined ? r.parameters.yieldMin : (r.yieldMin !== undefined ? r.yieldMin : 'NA')),
+                yieldMax: latestGdd.yieldMax !== undefined ? latestGdd.yieldMax : (r.parameters && r.parameters.yieldMax !== undefined ? r.parameters.yieldMax : (r.yieldMax !== undefined ? r.yieldMax : 'NA')),
+                yieldAvg: latestGdd.yieldAvg || latestGdd.yield_days || (r.parameters && (r.parameters.yieldAvg || r.parameters.yieldMin)) || r.yieldAvg || 'NA',
+                productionMin: latestGdd.productionMin !== undefined ? latestGdd.productionMin : (r.parameters && r.parameters.productionMin !== undefined ? r.parameters.productionMin : (r.productionMin !== undefined ? r.productionMin : 'NA')),
+                productionMax: latestGdd.productionMax !== undefined ? latestGdd.productionMax : (r.parameters && r.parameters.productionMax !== undefined ? r.parameters.productionMax : (r.productionMax !== undefined ? r.productionMax : 'NA')),
+                productionAvg: latestGdd.productionAvg || (r.parameters && (r.parameters.productionAvg || r.parameters.productionMin)) || r.productionAvg || 'NA',
+                modelType: 'BIOMASS_DAYS'
+            };
+        }
+        const p = r.parameters || r;
+        if (p && (p.yieldMin !== undefined || p.productionMin !== undefined || p.yieldAvg !== undefined || p.productionAvg !== undefined)) {
+            return {
+                yieldMin: p.yieldMin !== undefined ? p.yieldMin : 'NA',
+                yieldMax: p.yieldMax !== undefined ? p.yieldMax : 'NA',
+                yieldAvg: p.yieldAvg || p.yieldMin || 'NA',
+                productionMin: p.productionMin !== undefined ? p.productionMin : 'NA',
+                productionMax: p.productionMax !== undefined ? p.productionMax : 'NA',
+                productionAvg: p.productionAvg || p.productionMin || 'NA',
+                modelType: 'BIOMASS_DAYS'
+            };
+        }
+    }
+
+    // 3. If none present, mark plot as NA and dont use for aggregation
+    return null;
+}
+
 function processData(rows) {
     if (!Array.isArray(rows)) {
         console.error("processData: rows is not an array", rows);
@@ -722,10 +785,32 @@ function processData(rows) {
         const y2 = row['Re-estimated Yield'] !== undefined ? row['Re-estimated Yield'] : getVal(row, ['re-estimated yield', 're_yield']);
         const area = row['Audited Area'] !== undefined ? row['Audited Area'] : (parseFloat(getTextVal(row, ['audited area', 'area'])) || 0);
         
-        const h3_min = row['Harvest Min predicted'] !== undefined ? row['Harvest Min predicted'] : getVal(row, ['harvest min predicted', 'min predicted harvest', 'predicted harvest min']);
-        const h3_max = row['Harvest Max predicted'] !== undefined ? row['Harvest Max predicted'] : getVal(row, ['harvest max predicted', 'max predicted harvest', 'predicted harvest max']);
-        const y3_min = row['Yield Min predicted'] !== undefined ? row['Yield Min predicted'] : getVal(row, ['yield min predicted', 'min predicted yield', 'predicted yield min']);
-        const y3_max = row['Yield Max predicted'] !== undefined ? row['Yield Max predicted'] : getVal(row, ['yield max predicted', 'max predicted yield', 'predicted yield max']);
+        let h3_min = row['Harvest Min predicted'] !== undefined ? row['Harvest Min predicted'] : getVal(row, ['harvest min predicted', 'min predicted harvest', 'predicted harvest min']);
+        let h3_max = row['Harvest Max predicted'] !== undefined ? row['Harvest Max predicted'] : getVal(row, ['harvest max predicted', 'max predicted harvest', 'predicted harvest max']);
+        let y3_min = row['Yield Min predicted'] !== undefined ? row['Yield Min predicted'] : getVal(row, ['yield min predicted', 'min predicted yield', 'predicted yield min']);
+        let y3_max = row['Yield Max predicted'] !== undefined ? row['Yield Max predicted'] : getVal(row, ['yield max predicted', 'max predicted yield', 'predicted yield max']);
+        let effectiveModel = row['Prediction Model'] || 'NA';
+
+        // Apply strict 3-rule model selection if yieldRawRecords is available:
+        // 1. TASUMI if present
+        // 2. Latest BIOMASS_DAYS if TASUMI not present (do not aggregate all biomass dates)
+        // 3. NA if neither present -> excluded from aggregation
+        if (row.hasOwnProperty('yieldRawRecords')) {
+            const evaluated = resolveYieldPredictionRules(row['yieldRawRecords']);
+            if (evaluated) {
+                h3_min = evaluated.productionMin;
+                h3_max = evaluated.productionMax;
+                y3_min = evaluated.yieldMin;
+                y3_max = evaluated.yieldMax;
+                effectiveModel = evaluated.modelType;
+            } else {
+                h3_min = 'NA';
+                h3_max = 'NA';
+                y3_min = 'NA';
+                y3_max = 'NA';
+                effectiveModel = 'NA';
+            }
+        }
 
         // Unit info
         const qUnit = (row['plotHarvestUnit'] || getDataHarvestUnit()).toLowerCase();
@@ -739,9 +824,9 @@ function processData(rows) {
         const h1Ton = h1 * massToTon;
         const h2Ton = h2 * massToTon;
 
-        const isNA = h3_min === 'NA' || y3_min === 'NA' || row['Harvest Min predicted'] === 'NA';
+        const isNA = h3_min === 'NA' || y3_min === 'NA' || h3_min === undefined || y3_min === undefined || effectiveModel === 'NA' || row['Harvest Min predicted'] === 'NA';
         const isZero = (h3_min === 0 || h3_min === null) && (h3_max === 0 || h3_max === null) && (y3_min === 0 || y3_min === null) && (y3_max === 0 || y3_max === null);
-        const isPredictionAvailable = !isNA && !isZero && row['Harvest Min predicted'] !== undefined;
+        const isPredictionAvailable = !isNA && !isZero;
 
         if (isPredictionAvailable || includeNoPred) {
             totalAreaHaSum += areaHa;
@@ -760,19 +845,16 @@ function processData(rows) {
             }
         }
 
-        // Predictions are usually in Tonnes/Ha from AI API
-        // If data is not present, use 0
-        const h3MinTon = (h3_min === 'NA' || h3_min === undefined || h3_min === null) ? 0 : h3_min; 
-        const h3MaxTon = (h3_max === 'NA' || h3_max === undefined || h3_max === null) ? 0 : h3_max;
-        
-        aiHarvestMinTonSum += h3MinTon;
-        aiHarvestMaxTonSum += h3MaxTon;
-        
-        // For weighted yield on aggregate
-        const y3MinVal = (y3_min === 'NA' || y3_min === undefined || y3_min === null) ? 0 : y3_min;
-        const y3MaxVal = (y3_max === 'NA' || y3_max === undefined || y3_max === null) ? 0 : y3_max;
+        // Predictions are in Tonnes/Ha and Tonnes from AI API
+        const h3MinTon = isPredictionAvailable ? (parseFloat(h3_min) || 0) : 0; 
+        const h3MaxTon = isPredictionAvailable ? (parseFloat(h3_max) || 0) : 0;
+        const y3MinVal = isPredictionAvailable ? (parseFloat(y3_min) || 0) : 0;
+        const y3MaxVal = isPredictionAvailable ? (parseFloat(y3_max) || 0) : 0;
 
-        if (isPredictionAvailable || includeNoPred) {
+        // Rule 3: Only valid predicted plots are used for aggregation
+        if (isPredictionAvailable) {
+            aiHarvestMinTonSum += h3MinTon;
+            aiHarvestMaxTonSum += h3MaxTon;
             aiYieldMinWeightedSum += y3MinVal * areaHa;
             aiYieldMaxWeightedSum += y3MaxVal * areaHa;
         }
@@ -788,7 +870,7 @@ function processData(rows) {
             h1, h2,
             h3_min: h3MinTon, 
             h3_max: h3MaxTon,
-            modelType: row['Prediction Model'] || 'NA',
+            modelType: effectiveModel,
             noPrediction: !isPredictionAvailable,
             notEnabled: row['Yield Not Enabled'] || false,
             harvestUnit: qUnit,
@@ -810,10 +892,17 @@ function processData(rows) {
         updateElement('agg-re-harvest', fmtSmart(reHarvestTonSum));
         calculateDiff('agg-re-harvest-diff', reHarvestTonSum, expHarvestTonSum);
 
-        updateElement('agg-ai-harvest-min', fmtSmart(aiHarvestMinTonSum));
-        updateElement('agg-ai-harvest-max', fmtSmart(aiHarvestMaxTonSum));
-        calculateDataTestRangeDiff('agg-ai-harvest-diff-exp', aiHarvestMinTonSum, aiHarvestMaxTonSum, expHarvestTonSum);
-        calculateDataTestRangeDiff('agg-ai-harvest-diff-re', aiHarvestMinTonSum, aiHarvestMaxTonSum, reHarvestTonSum);
+        if (plotsWithPrediction.length > 0 && (aiHarvestMinTonSum > 0 || aiHarvestMaxTonSum > 0)) {
+            updateElement('agg-ai-harvest-min', fmtSmart(aiHarvestMinTonSum));
+            updateElement('agg-ai-harvest-max', fmtSmart(aiHarvestMaxTonSum));
+            calculateDataTestRangeDiff('agg-ai-harvest-diff-exp', aiHarvestMinTonSum, aiHarvestMaxTonSum, expHarvestTonSum);
+            calculateDataTestRangeDiff('agg-ai-harvest-diff-re', aiHarvestMinTonSum, aiHarvestMaxTonSum, reHarvestTonSum);
+        } else {
+            updateElement('agg-ai-harvest-min', '-');
+            updateElement('agg-ai-harvest-max', '-');
+            updateElement('agg-ai-harvest-diff-exp', '-');
+            updateElement('agg-ai-harvest-diff-re', '-');
+        }
 
         // Aggregate Yield (Tonnes/Ha)
         const expYieldAgg = expHarvestTonSum / totalAreaHaSum;
@@ -825,12 +914,17 @@ function processData(rows) {
         updateElement('agg-re-yield', fmtSmart(reYieldAgg));
         calculateDiff('agg-re-diff', reYieldAgg, expYieldAgg);
 
-        updateElement('agg-ai-yield-min', fmtSmart(aiMinYieldAgg));
-        updateElement('agg-ai-yield-max', fmtSmart(aiMaxYieldAgg));
-        calculateDataTestRangeDiff('agg-ai-diff-exp', aiMinYieldAgg, aiMaxYieldAgg, expYieldAgg);
-        calculateDataTestRangeDiff('agg-ai-diff-re', aiMinYieldAgg, aiMaxYieldAgg, reYieldAgg);
-
-        // Plot Level removed per user request
+        if (plotsWithPrediction.length > 0 && (aiMinYieldAgg > 0 || aiMaxYieldAgg > 0)) {
+            updateElement('agg-ai-yield-min', fmtSmart(aiMinYieldAgg));
+            updateElement('agg-ai-yield-max', fmtSmart(aiMaxYieldAgg));
+            calculateDataTestRangeDiff('agg-ai-diff-exp', aiMinYieldAgg, aiMaxYieldAgg, expYieldAgg);
+            calculateDataTestRangeDiff('agg-ai-diff-re', aiMinYieldAgg, aiMaxYieldAgg, reYieldAgg);
+        } else {
+            updateElement('agg-ai-yield-min', '-');
+            updateElement('agg-ai-yield-max', '-');
+            updateElement('agg-ai-diff-exp', '-');
+            updateElement('agg-ai-diff-re', '-');
+        }
 
         aggregateRaw = {
             aiMinYield: aiMinYieldAgg,
@@ -4813,6 +4907,7 @@ window.closeYieldGrowthModal = closeYieldGrowthModal;
 window.switchYieldGrowthTab = switchYieldGrowthTab;
 window.extractPlotMultiModelData = extractPlotMultiModelData;
 window.formatTrendDate = formatTrendDate;
+window.resolveYieldPredictionRules = resolveYieldPredictionRules;
 
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
@@ -4824,6 +4919,7 @@ if (typeof module !== 'undefined' && module.exports) {
         convertValueToMetricTon,
         formatTrendDate,
         extractPlotMultiModelData,
+        resolveYieldPredictionRules,
         MASS_CONVERSIONS,
         AREA_CONVERSIONS
     };

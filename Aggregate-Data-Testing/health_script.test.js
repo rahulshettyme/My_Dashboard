@@ -477,6 +477,90 @@ const tests = [
             assert.strictEqual(data.harvestMaxTrend[1], 10179, 'TASUMI harvestMax should be 10179 Kgs');
             assert.strictEqual(data.harvestTrend[1], 9694, 'TASUMI harvestAvg should be 9694 Kgs');
         }
+    },
+    {
+        name: 'selectYieldPredictionParameters_neither_present_returns_null',
+        fn: () => {
+            // Rule 3: If neither TASUMI nor BIOMASS_DAYS is present, return null (mark as NA, do not aggregate)
+            const payloadOtherModelsOnly = {
+                records: [
+                    {
+                        modelType: 'BIOMASS_GDD',
+                        parameters: { yieldMin: '10.0', productionMin: '12.0' }
+                    },
+                    {
+                        modelType: 'NDVI_HISTORICAL',
+                        parameters: { yieldMin: '11.0', productionMin: '13.0' }
+                    }
+                ]
+            };
+
+            const result = selectYieldPredictionParameters(payloadOtherModelsOnly);
+            assert.strictEqual(result, null, 'Should return null when neither TASUMI nor BIOMASS_DAYS is present');
+
+            const emptyPayload = { records: [] };
+            assert.strictEqual(selectYieldPredictionParameters(emptyPayload), null, 'Empty records should return null');
+        }
+    },
+    {
+        name: 'resolveYieldPredictionRules_three_rule_verification',
+        fn: () => {
+            // Rule 1: TASUMI present -> Use TASUMI
+            const recordsWithBoth = [
+                {
+                    modelType: 'BIOMASS_DAYS',
+                    modifiedDateTime: '2026-09-07T01:55:50.357Z',
+                    gddPredictions: [
+                        { cutoff_date: '2026-05-31', yieldMin: 4.695, yieldAvg: 4.89, productionMin: 5.68, productionAvg: 5.98 },
+                        { cutoff_date: '2026-08-29', yieldMin: 32.62, yieldAvg: 34.34, productionMin: 39.87, productionAvg: 41.97 }
+                    ]
+                },
+                {
+                    modelType: 'TASUMI',
+                    modifiedDateTime: '2026-09-03T12:17:06.726Z',
+                    parameters: {
+                        yieldMin: '7.535',
+                        yieldMax: '8.328',
+                        yieldAvg: '7.932',
+                        productionMin: '9.209',
+                        productionMax: '10.179',
+                        productionAvg: '9.694'
+                    }
+                }
+            ];
+
+            const tasumiResult = healthScript.resolveYieldPredictionRules(recordsWithBoth);
+            assert.strictEqual(tasumiResult.modelType, 'TASUMI');
+            assert.strictEqual(tasumiResult.yieldMin, '7.535');
+            assert.strictEqual(tasumiResult.productionMin, '9.209');
+
+            // Rule 2: TASUMI not present -> Use latest BIOMASS_DAYS cutoff date values (not an average across dates)
+            const recordsBiomassOnly = [
+                {
+                    modelType: 'BIOMASS_DAYS',
+                    modifiedDateTime: '2026-09-07T01:55:50.357Z',
+                    gddPredictions: [
+                        { cutoff_date: '2026-05-31', yieldMin: 4.695, yieldAvg: 4.89, productionMin: 5.68, productionAvg: 5.98 },
+                        { cutoff_date: '2026-08-29', yieldMin: 32.62, yieldAvg: 34.34, productionMin: 39.87, productionAvg: 41.97 }
+                    ]
+                }
+            ];
+
+            const biomassResult = healthScript.resolveYieldPredictionRules(recordsBiomassOnly);
+            assert.strictEqual(biomassResult.modelType, 'BIOMASS_DAYS');
+            assert.strictEqual(biomassResult.yieldMin, 32.62, 'Should pick latest cutoff date (2026-08-29), not earlier cutoff date');
+            assert.strictEqual(biomassResult.productionMin, 39.87, 'Should pick latest cutoff date (2026-08-29)');
+
+            // Rule 3: Neither present -> Return null (mark as NA, do not aggregate)
+            const recordsNeither = [
+                {
+                    modelType: 'BIOMASS_GDD',
+                    parameters: { yieldMin: '15.0' }
+                }
+            ];
+            assert.strictEqual(healthScript.resolveYieldPredictionRules(recordsNeither), null, 'Should return null when neither model is present');
+            assert.strictEqual(healthScript.resolveYieldPredictionRules([]), null, 'Empty array should return null');
+        }
     }
 ];
 

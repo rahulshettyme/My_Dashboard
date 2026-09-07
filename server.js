@@ -1430,10 +1430,10 @@ app.get('/api/user-aggregate/ca-details', (req, res) => {
 });
 
 /**
- * Selects the yield prediction parameters based on prioritized model types:
- * 1. If modelType : "TASUMI" is present we have to use this as the latest data
- * 2. If step 1 not present, we have to use the values of the latest 'modelType : "BIOMASS_DAYS"'
- * 3. Fallback to records[0] or parameters object if neither is found
+ * Selects the yield prediction parameters based on strict 3-step prioritized model rules:
+ * 1. Use TASUMI data as yield and harvest data plot if it is present (latest by timestamp)
+ * 2. If TASUMI not present, use the latest BIOMASS_DAYS values as yield and harvest (latest cutoff date, do not aggregate)
+ * 3. If none present, mark plot as NA and dont use for aggregation
  */
 function selectYieldPredictionParameters(jsonData) {
     if (!jsonData) return null;
@@ -1448,22 +1448,24 @@ function selectYieldPredictionParameters(jsonData) {
 
         const getParamsFromRecord = (r) => {
             if (!r) return null;
-            if (r.parameters && Object.keys(r.parameters).length > 0) {
-                return { ...r.parameters, modelType: r.modelType };
-            }
+            // If gddPredictions is present, always extract the latest cutoff date values (do not aggregate all biomass dates)
             if (Array.isArray(r.gddPredictions) && r.gddPredictions.length > 0) {
-                const lastGdd = r.gddPredictions[r.gddPredictions.length - 1];
+                const sortedGdd = [...r.gddPredictions].sort((a, b) => (a.cutoff_date || '').localeCompare(b.cutoff_date || ''));
+                const latestGdd = sortedGdd[sortedGdd.length - 1];
                 return {
-                    yieldMin: lastGdd.yieldMin,
-                    yieldMax: lastGdd.yieldMax,
-                    yieldAvg: lastGdd.yieldAvg || lastGdd.yield_days || lastGdd.yield_gdd,
-                    productionMin: lastGdd.productionMin,
-                    productionMax: lastGdd.productionMax,
-                    productionAvg: lastGdd.productionAvg,
-                    yieldUnit: lastGdd.yieldUnit,
-                    productionUnit: 'Tonnes',
+                    yieldMin: latestGdd.yieldMin !== undefined ? latestGdd.yieldMin : (r.parameters && r.parameters.yieldMin),
+                    yieldMax: latestGdd.yieldMax !== undefined ? latestGdd.yieldMax : (r.parameters && r.parameters.yieldMax),
+                    yieldAvg: latestGdd.yieldAvg || latestGdd.yield_days || latestGdd.yield_gdd || (r.parameters && r.parameters.yieldAvg),
+                    productionMin: latestGdd.productionMin !== undefined ? latestGdd.productionMin : (r.parameters && r.parameters.productionMin),
+                    productionMax: latestGdd.productionMax !== undefined ? latestGdd.productionMax : (r.parameters && r.parameters.productionMax),
+                    productionAvg: latestGdd.productionAvg || (r.parameters && r.parameters.productionAvg),
+                    yieldUnit: latestGdd.yieldUnit || (r.parameters && r.parameters.yieldUnit) || 'Tonnes/Ha',
+                    productionUnit: (r.parameters && r.parameters.productionUnit) || 'Tonnes',
                     modelType: r.modelType
                 };
+            }
+            if (r.parameters && Object.keys(r.parameters).length > 0) {
+                return { ...r.parameters, modelType: r.modelType };
             }
             return null;
         };
@@ -1476,7 +1478,7 @@ function selectYieldPredictionParameters(jsonData) {
             if (params) return params;
         }
 
-        // 2. If step 1 not present, we have to use the values of the latest 'modelType : "BIOMASS_DAYS"'
+        // 2. If step 1 not present, we have to use the values of the latest 'modelType : "BIOMASS_DAYS"' (do not aggregate biomass dates)
         const biomassDaysRecords = jsonData.records.filter(r => (r.modelType || '').trim().toUpperCase() === 'BIOMASS_DAYS');
         if (biomassDaysRecords.length > 0) {
             biomassDaysRecords.sort((a, b) => getRecordTime(b) - getRecordTime(a));
@@ -1484,13 +1486,15 @@ function selectYieldPredictionParameters(jsonData) {
             if (params) return params;
         }
 
-        // Fallback: First record's parameters
-        const fallbackParams = getParamsFromRecord(jsonData.records[0]);
-        if (fallbackParams) return fallbackParams;
+        // 3. If none present, mark plot as NA and dont use for aggregation (no fallback to other models)
+        return null;
     }
 
     if (jsonData.parameters) {
-        return { ...jsonData.parameters, modelType: jsonData.modelType || 'UNKNOWN' };
+        const modelType = (jsonData.modelType || '').trim().toUpperCase();
+        if (modelType === 'TASUMI' || modelType === 'BIOMASS_DAYS') {
+            return { ...jsonData.parameters, modelType: modelType };
+        }
     }
 
     return null;
@@ -1538,7 +1542,9 @@ app.get('/api/user-aggregate/yield-prediction', (req, res) => {
 
     const yieldReq = https.request(options, (yieldRes) => {
         let data = '';
+
         yieldRes.on('data', chunk => data += chunk);
+
         yieldRes.on('end', () => {
             if (data.trim().startsWith('<!DOCTYPE') || data.trim().startsWith('<html')) {
                 return res.status(502).json({ error: 'API returned HTML' });
@@ -1546,39 +1552,49 @@ app.get('/api/user-aggregate/yield-prediction', (req, res) => {
             try {
                 const jsonData = JSON.parse(data);
                 if (yieldRes.statusCode >= 200 && yieldRes.statusCode < 300) {
-                    // Extract parameters according to prioritized model types
+                    // Extract parameters according to prioritized model types:
+                    // 1. TASUMI
+                    // 2. Latest BIOMASS_DAYS
+                    // 3. If none present, mark as NA
                     const params = selectYieldPredictionParameters(jsonData);
+
+                    const parseOrNA = (val) => {
+                        if (val === undefined || val === null || val === 'NA' || val === '') return 'NA';
+                        const num = parseFloat(val);
+                        return isNaN(num) ? 'NA' : num;
+                    };
 
                     if (params) {
                         res.json({
                             caId: caIds,
                             modelType: params.modelType || 'UNKNOWN',
-                            productionMin: parseFloat(params.productionMin) || 'NA',
-                            productionMax: parseFloat(params.productionMax) || 'NA',
-                            productionAvg: parseFloat(params.productionAvg) || 'NA',
-                            yieldMin: parseFloat(params.yieldMin) || 'NA',
-                            yieldMax: parseFloat(params.yieldMax) || 'NA',
-                            yieldAvg: parseFloat(params.yieldAvg) || 'NA',
+                            productionMin: parseOrNA(params.productionMin),
+                            productionMax: parseOrNA(params.productionMax),
+                            productionAvg: parseOrNA(params.productionAvg),
+                            yieldMin: parseOrNA(params.yieldMin),
+                            yieldMax: parseOrNA(params.yieldMax),
+                            yieldAvg: parseOrNA(params.yieldAvg),
                             records: jsonData.records || []
                         });
                     } else {
-                        // No data available - mark as NA
+                        // Neither TASUMI nor BIOMASS_DAYS present - mark plot as NA
                         res.json({
                             caId: caIds,
+                            modelType: 'NA',
                             productionMin: 'NA',
                             productionMax: 'NA',
                             productionAvg: 'NA',
                             yieldMin: 'NA',
                             yieldMax: 'NA',
                             yieldAvg: 'NA',
-                            records: []
+                            records: jsonData.records || []
                         });
                     }
                 } else {
-                    res.status(yieldRes.statusCode).json({ error: jsonData.message || 'Failed to fetch yield prediction' });
+                    res.status(yieldRes.statusCode).json(jsonData);
                 }
             } catch (e) {
-                res.status(500).json({ error: 'Failed to parse yield prediction response' });
+                res.status(yieldRes.statusCode).send(data);
             }
         });
     });

@@ -1637,6 +1637,69 @@ function extractPlotMultiModelData(d, yieldUnitOverride = null, harvestUnitOverr
     };
 }
 
+function resolveYieldPredictionRules(records) {
+    if (!Array.isArray(records) || records.length === 0) return null;
+
+    const getRecordTime = (r) => {
+        const dateStr = r.modifiedDateTime || r.predictionDate || r.createdDateTime;
+        if (!dateStr) return 0;
+        const t = new Date(dateStr).getTime();
+        return isNaN(t) ? 0 : t;
+    };
+
+    // 1. Use TASUMI data as yield and harvest data plot if it is present
+    const tasumiRecords = records.filter(r => (r.modelType || '').trim().toUpperCase() === 'TASUMI');
+    if (tasumiRecords.length > 0) {
+        tasumiRecords.sort((a, b) => getRecordTime(b) - getRecordTime(a));
+        const r = tasumiRecords[0];
+        const p = r.parameters || {};
+        return {
+            yieldMin: p.yieldMin !== undefined ? p.yieldMin : (r.yieldMin !== undefined ? r.yieldMin : 'NA'),
+            yieldMax: p.yieldMax !== undefined ? p.yieldMax : (r.yieldMax !== undefined ? r.yieldMax : 'NA'),
+            yieldAvg: p.yieldAvg || p.yieldMin || r.yieldAvg || r.yieldMin || 'NA',
+            productionMin: p.productionMin !== undefined ? p.productionMin : (r.productionMin !== undefined ? r.productionMin : 'NA'),
+            productionMax: p.productionMax !== undefined ? p.productionMax : (r.productionMax !== undefined ? r.productionMax : 'NA'),
+            productionAvg: p.productionAvg || p.productionMin || r.productionAvg || r.productionMin || 'NA',
+            modelType: 'TASUMI'
+        };
+    }
+
+    // 2. If TASUMI not present, use the latest BIOMASS_DAYS values (do not use aggregate of all available biomass data)
+    const biomassDaysRecords = records.filter(r => (r.modelType || '').trim().toUpperCase() === 'BIOMASS_DAYS');
+    if (biomassDaysRecords.length > 0) {
+        biomassDaysRecords.sort((a, b) => getRecordTime(b) - getRecordTime(a));
+        const r = biomassDaysRecords[0];
+        if (Array.isArray(r.gddPredictions) && r.gddPredictions.length > 0) {
+            const sortedGdd = [...r.gddPredictions].sort((a, b) => (a.cutoff_date || '').localeCompare(b.cutoff_date || ''));
+            const latestGdd = sortedGdd[sortedGdd.length - 1];
+            return {
+                yieldMin: latestGdd.yieldMin !== undefined ? latestGdd.yieldMin : (r.parameters && r.parameters.yieldMin !== undefined ? r.parameters.yieldMin : (r.yieldMin !== undefined ? r.yieldMin : 'NA')),
+                yieldMax: latestGdd.yieldMax !== undefined ? latestGdd.yieldMax : (r.parameters && r.parameters.yieldMax !== undefined ? r.parameters.yieldMax : (r.yieldMax !== undefined ? r.yieldMax : 'NA')),
+                yieldAvg: latestGdd.yieldAvg || latestGdd.yield_days || (r.parameters && (r.parameters.yieldAvg || r.parameters.yieldMin)) || r.yieldAvg || 'NA',
+                productionMin: latestGdd.productionMin !== undefined ? latestGdd.productionMin : (r.parameters && r.parameters.productionMin !== undefined ? r.parameters.productionMin : (r.productionMin !== undefined ? r.productionMin : 'NA')),
+                productionMax: latestGdd.productionMax !== undefined ? latestGdd.productionMax : (r.parameters && r.parameters.productionMax !== undefined ? r.parameters.productionMax : (r.productionMax !== undefined ? r.productionMax : 'NA')),
+                productionAvg: latestGdd.productionAvg || (r.parameters && (r.parameters.productionAvg || r.parameters.productionMin)) || r.productionAvg || 'NA',
+                modelType: 'BIOMASS_DAYS'
+            };
+        }
+        const p = r.parameters || r;
+        if (p && (p.yieldMin !== undefined || p.productionMin !== undefined || p.yieldAvg !== undefined || p.productionAvg !== undefined)) {
+            return {
+                yieldMin: p.yieldMin !== undefined ? p.yieldMin : 'NA',
+                yieldMax: p.yieldMax !== undefined ? p.yieldMax : 'NA',
+                yieldAvg: p.yieldAvg || p.yieldMin || 'NA',
+                productionMin: p.productionMin !== undefined ? p.productionMin : 'NA',
+                productionMax: p.productionMax !== undefined ? p.productionMax : 'NA',
+                productionAvg: p.productionAvg || p.productionMin || 'NA',
+                modelType: 'BIOMASS_DAYS'
+            };
+        }
+    }
+
+    // 3. If none present, mark plot as NA and dont use for aggregation
+    return null;
+}
+
 if (typeof module !== 'undefined') {
     module.exports = {
         isWithinAnalysisWindow,
@@ -1653,6 +1716,7 @@ if (typeof module !== 'undefined') {
         convertYield,
         convertHarvest,
         formatTrendDate,
-        extractPlotMultiModelData
+        extractPlotMultiModelData,
+        resolveYieldPredictionRules
     };
 }
