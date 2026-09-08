@@ -826,38 +826,60 @@ const tests = [
     {
         name: 'calculateClosestDiff_card_level_logic_and_baseline_precedence',
         fn: () => {
-            // Case 1: Exact scenario from user's image:
+            // Case 1: Exact scenario from user's image (outside range):
             // Expected = 1250, Re-estimated = 1250
             // Predicted = 1019.00 - 1126.24
+            // 1250 is outside [1019.00, 1126.24]
             // distMin = |1019.00 - 1250| = 231.00
             // distMax = |1126.24 - 1250| = 123.76
             // Closest is 1126.24 -> ((1126.24 - 1250) / 1250) * 100 = -9.9008% (↓ 9.90%)
-            // Previously average was 1072.62 -> -14.19%
             const predMin = 1019.00;
             const predMax = 1126.24;
             const baseline1250 = 1250;
 
+            assert.strictEqual(healthScript.isWithinPredictedRange(predMin, predMax, baseline1250), false, '1250 should be outside [1019.00, 1126.24]');
             const closestDiff = healthScript.calculateClosestDiff(predMin, predMax, baseline1250);
-            assert.ok(closestDiff !== null, 'Should compute valid difference');
             assert.strictEqual(closestDiff.toFixed(2), '-9.90', 'Should match -9.90% from user image closest value');
 
-            // Case 2: Min is closer to baseline
-            // baseline = 1000, predMin = 950, predMax = 1200
-            // distMin = 50, distMax = 200 -> selects 950 -> -5.00%
-            const diffMinCloser = healthScript.calculateClosestDiff(950, 1200, 1000);
-            assert.strictEqual(diffMinCloser.toFixed(2), '-5.00', 'Should select min when closer');
+            const formattedOutOfRange = healthScript.formatCardLevelDiff(predMin, predMax, baseline1250);
+            assert.strictEqual(formattedOutOfRange.isWithinRange, false);
+            assert.strictEqual(formattedOutOfRange.text, '↓ 9.90%');
+            assert.ok(formattedOutOfRange.html.includes('value-red'), 'Should have value-red styling');
 
-            // Case 3: Value above baseline (positive diff)
-            // baseline = 1000, predMin = 800, predMax = 1050
-            // distMin = 200, distMax = 50 -> selects 1050 -> +5.00%
-            const diffMaxAbove = healthScript.calculateClosestDiff(800, 1050, 1000);
-            assert.strictEqual(diffMaxAbove.toFixed(2), '5.00', 'Should calculate positive diff when closest is above baseline');
+            // Case 2: Within range scenario (user's new requirement):
+            // If baseline falls within [min, max], show 'Within range' with green thumbs up icon
+            // baseline = 1100, predMin = 950, predMax = 1200
+            assert.strictEqual(healthScript.isWithinPredictedRange(950, 1200, 1100), true, '1100 is within [950, 1200]');
+            assert.strictEqual(healthScript.calculateClosestDiff(950, 1200, 1100), 0, 'Deviation should be 0 when within range');
 
-            // Case 4: Equal distance tie-breaker
-            // baseline = 1000, predMin = 900, predMax = 1100
-            // distMin = 100, distMax = 100 -> selects predMin (900) -> -10.00%
-            const diffTie = healthScript.calculateClosestDiff(900, 1100, 1000);
-            assert.strictEqual(diffTie.toFixed(2), '-10.00', 'Tie breaker should deterministically select min');
+            const formattedWithinRange = healthScript.formatCardLevelDiff(950, 1200, 1100);
+            assert.strictEqual(formattedWithinRange.isWithinRange, true);
+            assert.strictEqual(formattedWithinRange.text, 'Within range');
+            assert.ok(formattedWithinRange.html.includes('Within range'), 'HTML must contain Within range');
+            assert.ok(formattedWithinRange.html.includes('<svg'), 'HTML must contain thumbs-up SVG icon');
+            assert.ok(formattedWithinRange.html.includes('value-green'), 'HTML must have value-green class');
+
+            // Boundary values (inclusive)
+            assert.strictEqual(healthScript.isWithinPredictedRange(950, 1200, 950), true, 'Min boundary is within range');
+            assert.strictEqual(healthScript.isWithinPredictedRange(950, 1200, 1200), true, 'Max boundary is within range');
+
+            // Case 3: Outside range below min
+            // baseline = 800, predMin = 950, predMax = 1200 -> closest is 950 -> +18.75%
+            assert.strictEqual(healthScript.isWithinPredictedRange(950, 1200, 800), false);
+            const diffBelowMin = healthScript.calculateClosestDiff(950, 1200, 800);
+            assert.strictEqual(diffBelowMin.toFixed(2), '18.75');
+            const formattedBelowMin = healthScript.formatCardLevelDiff(950, 1200, 800);
+            assert.strictEqual(formattedBelowMin.text, '↑ 18.75%');
+            assert.ok(formattedBelowMin.html.includes('value-green'));
+
+            // Case 4: Outside range above max
+            // baseline = 1300, predMin = 950, predMax = 1200 -> closest is 1200 -> -7.69%
+            assert.strictEqual(healthScript.isWithinPredictedRange(950, 1200, 1300), false);
+            const diffAboveMax = healthScript.calculateClosestDiff(950, 1200, 1300);
+            assert.strictEqual(diffAboveMax.toFixed(2), '-7.69');
+            const formattedAboveMax = healthScript.formatCardLevelDiff(950, 1200, 1300);
+            assert.strictEqual(formattedAboveMax.text, '↓ 7.69%');
+            assert.ok(formattedAboveMax.html.includes('value-red'));
 
             // Case 5: Baseline precedence: If re-estimated is present (> 0), use re-estimated, else expected
             const plotWithRe = { y1: 1000, y2: 1200, h1: 5000, h2: 6000 };
@@ -873,10 +895,12 @@ const tests = [
             assert.strictEqual(harvestBaselineWithoutRe, 5000, 'Harvest primary baseline must fall back to expected when re-estimated is 0');
 
             // Case 6: Edge cases - invalid baseline or predictions
+            assert.strictEqual(healthScript.isWithinPredictedRange(100, 200, 0), false);
             assert.strictEqual(healthScript.calculateClosestDiff(100, 200, 0), null, 'Zero baseline returns null');
             assert.strictEqual(healthScript.calculateClosestDiff(100, 200, null), null, 'Null baseline returns null');
             assert.strictEqual(healthScript.calculateClosestDiff(NaN, NaN, 1000), null, 'NaN predictions return null');
-            assert.strictEqual(healthScript.calculateClosestDiff(950, NaN, 1000).toFixed(2), '-5.00', 'Single valid min prediction evaluates correctly');
+            assert.strictEqual(healthScript.formatCardLevelDiff(100, 200, null).text, '-');
+            assert.strictEqual(healthScript.formatCardLevelDiff(NaN, NaN, 1000).text, '-');
         }
     }
 ];

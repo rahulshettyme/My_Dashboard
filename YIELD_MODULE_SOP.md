@@ -91,19 +91,22 @@ For a plot with audited area $A$, expected harvest $H_1$, and re-estimated harve
   $$\text{yieldConversionFactor} = \frac{\text{massFactor}}{\text{areaFactor}}$$
   $$Y_{3\text{min}} = \text{yieldMin} \times \text{yieldConversionFactor}$$
   $$Y_{3\text{max}} = \text{yieldMax} \times \text{yieldConversionFactor}$$
-- **Card Level Percentage Difference (Yield & Harvest Cards)**:
-  - Instead of taking an average predicted value, the card level metric selects the predicted value ($\text{min}$ or $\text{max}$) that is closest to the baseline value:
-    $$\text{distMin} = |\text{predMin} - \text{baseline}|, \quad \text{distMax} = |\text{predMax} - \text{baseline}|$$
-    $$\text{closestVal} = \text{distMin} \le \text{distMax} \ ? \ \text{predMin} : \text{predMax}$$
-    $$\text{diff} = \frac{\text{closestVal} - \text{baseline}}{\text{baseline}} \times 100$$
+- **Card Level Percentage Difference & Within Range Logic (Yield & Harvest Cards)**:
+  - **Within Range Evaluation**:
+    - If the baseline value falls within the predicted interval ($\min(\text{predMin}, \text{predMax}) \le \text{baseline} \le \max(\text{predMin}, \text{predMax})$), the card level metric displays **Within range** accompanied by an inline green thumbs-up icon (`<span class="value-green">...Within range</span>`).
+  - **Outside Range Evaluation (Closest Boundary)**:
+    - If the baseline falls outside the predicted interval, the metric calculates the percentage difference from the closer predicted boundary ($\text{min}$ or $\text{max}$):
+      $$\text{distMin} = |\text{predMin} - \text{baseline}|, \quad \text{distMax} = |\text{predMax} - \text{baseline}|$$
+      $$\text{closestVal} = \text{distMin} \le \text{distMax} \ ? \ \text{predMin} : \text{predMax}$$
+      $$\text{diff} = \frac{\text{closestVal} - \text{baseline}}{\text{baseline}} \times 100$$
   - **Baseline Selection Precedence**:
     - If Re-estimated is present ($> 0$), the primary baseline is **Re-estimated** ($Y_2$ or $H_2$).
     - If Re-estimated is absent ($0$ or missing), the primary baseline falls back to **Expected** ($Y_1$ or $H_1$).
   - **Testing & Multi-Baseline Visibility**:
-    - The card displays the primary difference at the top of the Card Level row.
+    - The card displays the primary status/difference at the top of the Card Level row.
     - Two dedicated sub-lines provide explicit comparison for testing:
-      1. `Closest vs Expected`: $\text{closestVal}$ compared against Expected baseline.
-      2. `Closest vs Re-estimated`: $\text{closestVal}$ compared against Re-estimated baseline (or `-` if re-estimated is absent).
+      1. `Closest vs Expected`: evaluated against Expected baseline (`Within range` or closest $\%$ diff).
+      2. `Closest vs Re-estimated`: evaluated against Re-estimated baseline (`Within range` or closest $\%$ diff, or `-` if re-estimated is absent).
   - Applied identically to both **Yield Analysis** (`#plot-card-level`, `#plot-card-level-exp`, `#plot-card-level-re`) and **Harvest Analysis** (`#plot-harvest-card-level`, `#plot-harvest-card-level-exp`, `#plot-harvest-card-level-re`).
 
 ### C. Aggregate-Level Calculations
@@ -199,6 +202,12 @@ display values for both AI prediction models simultaneously:
 ---
 
 ## 4. Change Log (Feature & Logic Audit Trail)
+* **2026-09-08**: Added 'Within range' & Green Thumbs-Up Status to Plot Card Level Logic:
+  1. Implemented interval check: If the baseline value (Re-estimated if present, else Expected) falls within the predicted interval ($\min(\text{predMin}, \text{predMax}) \le \text{baseline} \le \max(\text{predMin}, \text{predMax})$), card level displays **Within range** with an inline green thumbs-up icon (`👍 Within range`).
+  2. Maintained closest boundary percentage difference calculation ($\text{min}$ or $\text{max}$) exclusively when the baseline falls outside the predicted interval.
+  3. Integrated `isWithinPredictedRange()` and `formatCardLevelDiff()` in `aggregate_script_backup.js` and `health_script.js`.
+  4. Updated sub-lines `Closest vs Expected` and `Closest vs Re-estimated` to reflect Within Range status when respective baselines fall inside the predicted range.
+  5. Updated Test 27 in regression test suite verifying within range detection, boundaries, and out-of-range closest diff (27/27 tests passing: 11 existing, 16 new).
 * **2026-09-08**: Updated Plot Card Level Logic to Closest Min/Max Prediction vs Baseline & Added to Harvest Card:
   1. Replaced card level average calculation with closest predicted value selection: computes distance between `min` vs baseline and `max` vs baseline, selecting whichever is closer ($|\text{pred} - \text{baseline}|$).
   2. Implemented baseline selection precedence: if Re-estimated is present ($> 0$), computes difference against Re-estimated; if absent, falls back to Expected.

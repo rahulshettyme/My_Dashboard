@@ -1684,9 +1684,26 @@ document.getElementById('data-area-unit')?.addEventListener('change', () => {
 });
 
 /**
+ * Checks whether a baseline falls within the predicted min and max range (inclusive).
+ */
+function isWithinPredictedRange(predMin, predMax, baseline) {
+    if (baseline === undefined || baseline === null || isNaN(baseline) || baseline <= 0) {
+        return false;
+    }
+    const hasMin = predMin !== undefined && predMin !== null && !isNaN(predMin);
+    const hasMax = predMax !== undefined && predMax !== null && !isNaN(predMax);
+    if (!hasMin || !hasMax) return false;
+
+    const low = Math.min(predMin, predMax);
+    const high = Math.max(predMin, predMax);
+    return baseline >= low && baseline <= high;
+}
+
+/**
  * Calculates Card Level percentage difference:
- * Takes the predicted value (min or max) that is closest to the baseline,
- * and computes: ((closestVal - baseline) / baseline) * 100
+ * - If baseline falls within [min, max], deviation is 0% (within range).
+ * - Otherwise, takes the predicted boundary (min or max) that is closest to baseline,
+ *   and computes: ((closestVal - baseline) / baseline) * 100
  */
 function calculateClosestDiff(predMin, predMax, baseline) {
     if (baseline === undefined || baseline === null || isNaN(baseline) || baseline <= 0) {
@@ -1695,6 +1712,11 @@ function calculateClosestDiff(predMin, predMax, baseline) {
     const hasMin = predMin !== undefined && predMin !== null && !isNaN(predMin);
     const hasMax = predMax !== undefined && predMax !== null && !isNaN(predMax);
     if (!hasMin && !hasMax) return null;
+
+    if (isWithinPredictedRange(predMin, predMax, baseline)) {
+        return 0;
+    }
+
     let closestVal;
     if (hasMin && hasMax) {
         const distMin = Math.abs(predMin - baseline);
@@ -1708,18 +1730,51 @@ function calculateClosestDiff(predMin, predMax, baseline) {
     return ((closestVal - baseline) / baseline) * 100;
 }
 
-function renderClosestDiffElement(elementId, predMin, predMax, baseline) {
-    const el = document.getElementById(elementId);
-    if (!el) return;
+/**
+ * Formats Card Level display:
+ * - If baseline falls within [min, max], returns Within Range status with thumbs-up icon.
+ * - Otherwise, returns formatted percentage difference (e.g. "↓ 9.90%").
+ */
+function formatCardLevelDiff(predMin, predMax, baseline) {
+    if (baseline === undefined || baseline === null || isNaN(baseline) || baseline <= 0) {
+        return { text: '-', html: '<span style="color: var(--text-secondary);">-</span>', isWithinRange: false };
+    }
+    const hasMin = predMin !== undefined && predMin !== null && !isNaN(predMin);
+    const hasMax = predMax !== undefined && predMax !== null && !isNaN(predMax);
+    if (!hasMin && !hasMax) {
+        return { text: '-', html: '<span style="color: var(--text-secondary);">-</span>', isWithinRange: false };
+    }
+
+    if (isWithinPredictedRange(predMin, predMax, baseline)) {
+        const thumbsUpSvg = '<svg style="width: 14px; height: 14px; vertical-align: -2px; fill: currentColor; display: inline-block; margin-right: 3px;" viewBox="0 0 24 24"><path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg>';
+        return {
+            text: 'Within range',
+            html: `<span class="value-green" style="font-weight: 600; white-space: nowrap;">${thumbsUpSvg}Within range</span>`,
+            isWithinRange: true,
+            diff: 0
+        };
+    }
+
     const diff = calculateClosestDiff(predMin, predMax, baseline);
     if (diff === null) {
-        el.innerHTML = '<span style="color: var(--text-secondary);">-</span>';
-        return;
+        return { text: '-', html: '<span style="color: var(--text-secondary);">-</span>', isWithinRange: false };
     }
     const absDiff = Math.abs(diff).toFixed(2);
     const arrow = diff >= 0 ? '↑' : '↓';
     const cls = diff >= 0 ? 'value-green' : 'value-red';
-    el.innerHTML = `<span class="${cls}">${arrow} ${absDiff}%</span>`;
+    return {
+        text: `${arrow} ${absDiff}%`,
+        html: `<span class="${cls}">${arrow} ${absDiff}%</span>`,
+        isWithinRange: false,
+        diff: diff
+    };
+}
+
+function renderClosestDiffElement(elementId, predMin, predMax, baseline) {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    const res = formatCardLevelDiff(predMin, predMax, baseline);
+    el.innerHTML = res.html;
 }
 
 function updatePlotPredictedDisplay(d) {
