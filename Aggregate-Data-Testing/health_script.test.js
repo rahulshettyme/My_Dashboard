@@ -822,6 +822,62 @@ const tests = [
             assert.strictEqual(chartData.maxAttainableYield, 69.19, 'Chart reference line should use API maxAttainableYield');
             assert.strictEqual(chartData.maxAttainableHarvest, parseFloat((69.189 * 2).toFixed(2)), 'Max harvest should scale by plot area');
         }
+    },
+    {
+        name: 'calculateClosestDiff_card_level_logic_and_baseline_precedence',
+        fn: () => {
+            // Case 1: Exact scenario from user's image:
+            // Expected = 1250, Re-estimated = 1250
+            // Predicted = 1019.00 - 1126.24
+            // distMin = |1019.00 - 1250| = 231.00
+            // distMax = |1126.24 - 1250| = 123.76
+            // Closest is 1126.24 -> ((1126.24 - 1250) / 1250) * 100 = -9.9008% (↓ 9.90%)
+            // Previously average was 1072.62 -> -14.19%
+            const predMin = 1019.00;
+            const predMax = 1126.24;
+            const baseline1250 = 1250;
+
+            const closestDiff = healthScript.calculateClosestDiff(predMin, predMax, baseline1250);
+            assert.ok(closestDiff !== null, 'Should compute valid difference');
+            assert.strictEqual(closestDiff.toFixed(2), '-9.90', 'Should match -9.90% from user image closest value');
+
+            // Case 2: Min is closer to baseline
+            // baseline = 1000, predMin = 950, predMax = 1200
+            // distMin = 50, distMax = 200 -> selects 950 -> -5.00%
+            const diffMinCloser = healthScript.calculateClosestDiff(950, 1200, 1000);
+            assert.strictEqual(diffMinCloser.toFixed(2), '-5.00', 'Should select min when closer');
+
+            // Case 3: Value above baseline (positive diff)
+            // baseline = 1000, predMin = 800, predMax = 1050
+            // distMin = 200, distMax = 50 -> selects 1050 -> +5.00%
+            const diffMaxAbove = healthScript.calculateClosestDiff(800, 1050, 1000);
+            assert.strictEqual(diffMaxAbove.toFixed(2), '5.00', 'Should calculate positive diff when closest is above baseline');
+
+            // Case 4: Equal distance tie-breaker
+            // baseline = 1000, predMin = 900, predMax = 1100
+            // distMin = 100, distMax = 100 -> selects predMin (900) -> -10.00%
+            const diffTie = healthScript.calculateClosestDiff(900, 1100, 1000);
+            assert.strictEqual(diffTie.toFixed(2), '-10.00', 'Tie breaker should deterministically select min');
+
+            // Case 5: Baseline precedence: If re-estimated is present (> 0), use re-estimated, else expected
+            const plotWithRe = { y1: 1000, y2: 1200, h1: 5000, h2: 6000 };
+            const yieldBaselineWithRe = (plotWithRe.y2 > 0) ? plotWithRe.y2 : plotWithRe.y1;
+            const harvestBaselineWithRe = (plotWithRe.h2 > 0) ? plotWithRe.h2 : plotWithRe.h1;
+            assert.strictEqual(yieldBaselineWithRe, 1200, 'Yield primary baseline must be re-estimated when present');
+            assert.strictEqual(harvestBaselineWithRe, 6000, 'Harvest primary baseline must be re-estimated when present');
+
+            const plotWithoutRe = { y1: 1000, y2: 0, h1: 5000, h2: 0 };
+            const yieldBaselineWithoutRe = (plotWithoutRe.y2 > 0) ? plotWithoutRe.y2 : plotWithoutRe.y1;
+            const harvestBaselineWithoutRe = (plotWithoutRe.h2 > 0) ? plotWithoutRe.h2 : plotWithoutRe.h1;
+            assert.strictEqual(yieldBaselineWithoutRe, 1000, 'Yield primary baseline must fall back to expected when re-estimated is 0');
+            assert.strictEqual(harvestBaselineWithoutRe, 5000, 'Harvest primary baseline must fall back to expected when re-estimated is 0');
+
+            // Case 6: Edge cases - invalid baseline or predictions
+            assert.strictEqual(healthScript.calculateClosestDiff(100, 200, 0), null, 'Zero baseline returns null');
+            assert.strictEqual(healthScript.calculateClosestDiff(100, 200, null), null, 'Null baseline returns null');
+            assert.strictEqual(healthScript.calculateClosestDiff(NaN, NaN, 1000), null, 'NaN predictions return null');
+            assert.strictEqual(healthScript.calculateClosestDiff(950, NaN, 1000).toFixed(2), '-5.00', 'Single valid min prediction evaluates correctly');
+        }
     }
 ];
 

@@ -1996,6 +1996,31 @@ function extractVarietyYieldDetails(varietyJson) {
     };
 }
 
+/**
+ * Calculates Card Level percentage difference:
+ * Takes the predicted value (min or max) that is closest to the baseline,
+ * and computes: ((closestVal - baseline) / baseline) * 100
+ */
+function calculateClosestDiff(predMin, predMax, baseline) {
+    if (baseline === undefined || baseline === null || isNaN(baseline) || baseline <= 0) {
+        return null;
+    }
+    const hasMin = predMin !== undefined && predMin !== null && !isNaN(predMin);
+    const hasMax = predMax !== undefined && predMax !== null && !isNaN(predMax);
+    if (!hasMin && !hasMax) return null;
+    let closestVal;
+    if (hasMin && hasMax) {
+        const distMin = Math.abs(predMin - baseline);
+        const distMax = Math.abs(predMax - baseline);
+        closestVal = distMin <= distMax ? predMin : predMax;
+    } else if (hasMin) {
+        closestVal = predMin;
+    } else {
+        closestVal = predMax;
+    }
+    return ((closestVal - baseline) / baseline) * 100;
+}
+
 if (typeof module !== 'undefined') {
     module.exports = {
         isWithinAnalysisWindow,
@@ -2017,6 +2042,7 @@ if (typeof module !== 'undefined') {
         sortYieldBaseData,
         getPlotPredictionModelComparison,
         renderModelCell,
-        extractVarietyYieldDetails
+        extractVarietyYieldDetails,
+        calculateClosestDiff
     };
 }

@@ -91,6 +91,20 @@ For a plot with audited area $A$, expected harvest $H_1$, and re-estimated harve
   $$\text{yieldConversionFactor} = \frac{\text{massFactor}}{\text{areaFactor}}$$
   $$Y_{3\text{min}} = \text{yieldMin} \times \text{yieldConversionFactor}$$
   $$Y_{3\text{max}} = \text{yieldMax} \times \text{yieldConversionFactor}$$
+- **Card Level Percentage Difference (Yield & Harvest Cards)**:
+  - Instead of taking an average predicted value, the card level metric selects the predicted value ($\text{min}$ or $\text{max}$) that is closest to the baseline value:
+    $$\text{distMin} = |\text{predMin} - \text{baseline}|, \quad \text{distMax} = |\text{predMax} - \text{baseline}|$$
+    $$\text{closestVal} = \text{distMin} \le \text{distMax} \ ? \ \text{predMin} : \text{predMax}$$
+    $$\text{diff} = \frac{\text{closestVal} - \text{baseline}}{\text{baseline}} \times 100$$
+  - **Baseline Selection Precedence**:
+    - If Re-estimated is present ($> 0$), the primary baseline is **Re-estimated** ($Y_2$ or $H_2$).
+    - If Re-estimated is absent ($0$ or missing), the primary baseline falls back to **Expected** ($Y_1$ or $H_1$).
+  - **Testing & Multi-Baseline Visibility**:
+    - The card displays the primary difference at the top of the Card Level row.
+    - Two dedicated sub-lines provide explicit comparison for testing:
+      1. `Closest vs Expected`: $\text{closestVal}$ compared against Expected baseline.
+      2. `Closest vs Re-estimated`: $\text{closestVal}$ compared against Re-estimated baseline (or `-` if re-estimated is absent).
+  - Applied identically to both **Yield Analysis** (`#plot-card-level`, `#plot-card-level-exp`, `#plot-card-level-re`) and **Harvest Analysis** (`#plot-harvest-card-level`, `#plot-harvest-card-level-exp`, `#plot-harvest-card-level-re`).
 
 ### C. Aggregate-Level Calculations
 Aggregate values are computed by converting all plot values into base standard units (Hectares and Metric Tonnes):
@@ -185,6 +199,13 @@ display values for both AI prediction models simultaneously:
 ---
 
 ## 4. Change Log (Feature & Logic Audit Trail)
+* **2026-09-08**: Updated Plot Card Level Logic to Closest Min/Max Prediction vs Baseline & Added to Harvest Card:
+  1. Replaced card level average calculation with closest predicted value selection: computes distance between `min` vs baseline and `max` vs baseline, selecting whichever is closer ($|\text{pred} - \text{baseline}|$).
+  2. Implemented baseline selection precedence: if Re-estimated is present ($> 0$), computes difference against Re-estimated; if absent, falls back to Expected.
+  3. Added multi-baseline transparency to Card Level row: displays primary difference on top line, followed by explicit `Closest vs Expected` and `Closest vs Re-estimated` sub-lines for validation.
+  4. Added Card Level metric row to Harvest Analysis card (`#plot-harvest-card-level`, `#plot-harvest-card-level-exp`, `#plot-harvest-card-level-re`).
+  5. Updated `clearPlotDisplay()` and `noPrediction` fallbacks to reset all 6 card-level elements cleanly.
+  6. Added Test 27 to regression test suite (27/27 tests passing: 11 existing, 16 new).
 * **2026-09-08**: Visualized Min and Max Confidence Interval Band Around Predicted Average Value:
   1. Rendered upper (`Forecast Max`) and lower (`Forecast Min`) boundary lines with translucent green fill (`fill: '-1'`) around the central predicted average curve in `createTrendChart()`.
   2. Updated modal summary header to display the min-max forecast range (e.g. `1,740.15 - 1,923.07`) matching Cropin UI.

@@ -1121,11 +1121,17 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="metric-row">
+                        <div class="metric-row" style="align-items: flex-start;">
                             <div>
                                 <div class="metric-label">Card level</div>
+                                <span class="sub-text">Closest vs Expected</span>
+                                <span class="sub-text">Closest vs Re-estimated</span>
                             </div>
-                            <div class="metric-value"><span class="sub-text" id="plot-card-level">-</span></div>
+                            <div style="text-align: right;">
+                                <div class="metric-value"><span id="plot-card-level">-</span></div>
+                                <div class="sub-text" id="plot-card-level-exp">-</div>
+                                <div class="sub-text" id="plot-card-level-re">-</div>
+                            </div>
                         </div>
 
                         <!-- Embedded Trend Graph for Biomass Days -->
@@ -1179,6 +1185,18 @@
                                 <div class="sub-text" id="plot-app-harvest-diff-re">
                                     <span class="value-green">↑ 0%</span> - <span class="value-green">↑ 0%</span>
                                 </div>
+                            </div>
+                        </div>
+                        <div class="metric-row" style="align-items: flex-start;">
+                            <div>
+                                <div class="metric-label">Card level</div>
+                                <span class="sub-text">Closest vs Expected</span>
+                                <span class="sub-text">Closest vs Re-estimated</span>
+                            </div>
+                            <div style="text-align: right;">
+                                <div class="metric-value"><span id="plot-harvest-card-level">-</span></div>
+                                <div class="sub-text" id="plot-harvest-card-level-exp">-</div>
+                                <div class="sub-text" id="plot-harvest-card-level-re">-</div>
                             </div>
                         </div>
 

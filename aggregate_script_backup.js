@@ -1236,7 +1236,12 @@ function updatePlotData(selectedPlot) {
             updateElement('plot-app-harvest-max', 'NA');
 
             const naHtml = '<span style="color: var(--text-secondary);">NA</span>';
-            const diffEls = ['plot-app-yield-diff-exp', 'plot-app-yield-diff-re', 'plot-app-harvest-diff-exp', 'plot-app-harvest-diff-re'];
+            const diffEls = [
+                'plot-app-yield-diff-exp', 'plot-app-yield-diff-re',
+                'plot-app-harvest-diff-exp', 'plot-app-harvest-diff-re',
+                'plot-card-level', 'plot-card-level-exp', 'plot-card-level-re',
+                'plot-harvest-card-level', 'plot-harvest-card-level-exp', 'plot-harvest-card-level-re'
+            ];
             diffEls.forEach(id => {
                const el = document.getElementById(id);
                if(el) el.innerHTML = naHtml;
@@ -1678,6 +1683,45 @@ document.getElementById('data-area-unit')?.addEventListener('change', () => {
     if (globalData.length > 0) processData(globalData);
 });
 
+/**
+ * Calculates Card Level percentage difference:
+ * Takes the predicted value (min or max) that is closest to the baseline,
+ * and computes: ((closestVal - baseline) / baseline) * 100
+ */
+function calculateClosestDiff(predMin, predMax, baseline) {
+    if (baseline === undefined || baseline === null || isNaN(baseline) || baseline <= 0) {
+        return null;
+    }
+    const hasMin = predMin !== undefined && predMin !== null && !isNaN(predMin);
+    const hasMax = predMax !== undefined && predMax !== null && !isNaN(predMax);
+    if (!hasMin && !hasMax) return null;
+    let closestVal;
+    if (hasMin && hasMax) {
+        const distMin = Math.abs(predMin - baseline);
+        const distMax = Math.abs(predMax - baseline);
+        closestVal = distMin <= distMax ? predMin : predMax;
+    } else if (hasMin) {
+        closestVal = predMin;
+    } else {
+        closestVal = predMax;
+    }
+    return ((closestVal - baseline) / baseline) * 100;
+}
+
+function renderClosestDiffElement(elementId, predMin, predMax, baseline) {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    const diff = calculateClosestDiff(predMin, predMax, baseline);
+    if (diff === null) {
+        el.innerHTML = '<span style="color: var(--text-secondary);">-</span>';
+        return;
+    }
+    const absDiff = Math.abs(diff).toFixed(2);
+    const arrow = diff >= 0 ? '↑' : '↓';
+    const cls = diff >= 0 ? 'value-green' : 'value-red';
+    el.innerHTML = `<span class="${cls}">${arrow} ${absDiff}%</span>`;
+}
+
 function updatePlotPredictedDisplay(d) {
     if (!d) {
        const selectedPlot = document.getElementById('plot-select-value')?.value;
@@ -1707,8 +1751,12 @@ function updatePlotPredictedDisplay(d) {
     calculateDataTestRangeDiff('plot-app-diff-exp', predictedYieldMin, predictedYieldMax, d.y1);
     calculateDataTestRangeDiff('plot-app-diff-re', predictedYieldMin, predictedYieldMax, d.y2);
 
-    const avgPredictedYield = (predictedYieldMin + predictedYieldMax) / 2;
-    calculateDiff('plot-card-level', avgPredictedYield, d.y2);
+    // Yield Card Level: closest predicted value (min or max) vs baseline
+    // If re-estimated is present (d.y2 > 0), primary is re-estimated, else expected
+    const yieldPrimaryBaseline = (d.y2 > 0) ? d.y2 : d.y1;
+    renderClosestDiffElement('plot-card-level', predictedYieldMin, predictedYieldMax, yieldPrimaryBaseline);
+    renderClosestDiffElement('plot-card-level-exp', predictedYieldMin, predictedYieldMax, d.y1);
+    renderClosestDiffElement('plot-card-level-re', predictedYieldMin, predictedYieldMax, d.y2);
 
     // Convert AI Harvest (Tonnes) to Plot Harvest (qUnit)
     const predictedHarvestMin = d.h3_min * massFactor;
@@ -1719,6 +1767,13 @@ function updatePlotPredictedDisplay(d) {
 
     calculateDataTestRangeDiff('plot-app-harvest-diff-exp', predictedHarvestMin, predictedHarvestMax, d.h1);
     calculateDataTestRangeDiff('plot-app-harvest-diff-re', predictedHarvestMin, predictedHarvestMax, d.h2);
+
+    // Harvest Card Level: closest predicted value (min or max) vs baseline
+    // If re-estimated is present (d.h2 > 0), primary is re-estimated, else expected
+    const harvestPrimaryBaseline = (d.h2 > 0) ? d.h2 : d.h1;
+    renderClosestDiffElement('plot-harvest-card-level', predictedHarvestMin, predictedHarvestMax, harvestPrimaryBaseline);
+    renderClosestDiffElement('plot-harvest-card-level-exp', predictedHarvestMin, predictedHarvestMax, d.h1);
+    renderClosestDiffElement('plot-harvest-card-level-re', predictedHarvestMin, predictedHarvestMax, d.h2);
 
     renderPlotTrendCharts(d);
 }
@@ -4616,14 +4671,16 @@ function clearPlotDisplay() {
         'plot-audited-area', 'plot-exp-yield', 'plot-re-yield',
         'plot-app-yield-min', 'plot-app-yield-max',
         'plot-exp-harvest', 'plot-re-harvest',
-        'plot-app-harvest-min', 'plot-app-harvest-max'
+        'plot-app-harvest-min', 'plot-app-harvest-max',
+        'plot-card-level', 'plot-card-level-exp', 'plot-card-level-re',
+        'plot-harvest-card-level', 'plot-harvest-card-level-exp', 'plot-harvest-card-level-re'
     ];
     plotElements.forEach(id => {
         const el = document.getElementById(id);
         if (el) el.textContent = '-';
     });
 
-    ['plot-re-yield-diff', 'plot-app-yield-diff-exp', 'plot-app-yield-diff-re',
+    ['plot-re-diff', 'plot-re-yield-diff', 'plot-app-yield-diff-exp', 'plot-app-yield-diff-re',
         'plot-re-harvest-diff', 'plot-app-harvest-diff-exp', 'plot-app-harvest-diff-re'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.innerHTML = '';
