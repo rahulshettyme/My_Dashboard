@@ -561,6 +561,36 @@ const tests = [
             assert.strictEqual(healthScript.resolveYieldPredictionRules(recordsNeither), null, 'Should return null when neither model is present');
             assert.strictEqual(healthScript.resolveYieldPredictionRules([]), null, 'Empty array should return null');
         }
+    },
+    {
+        name: 'sortYieldBaseData_name_ascending_natural_sort',
+        fn: () => {
+            const unsortedRows = [
+                { 'Plot Name': 'Plot 10', 'Audited Area': 2.5 },
+                { 'Plot Name': 'Plot 2', 'Audited Area': 1.8 },
+                { 'Plot Name': 'Plot 1', 'Audited Area': 3.0 },
+                { 'Plot Name': 'Alpha Plot', 'Audited Area': 1.2 },
+                { 'Plot Name': 'Plot 20', 'Audited Area': 4.1 }
+            ];
+
+            const sorted = healthScript.sortYieldBaseData(unsortedRows);
+            const sortedNames = sorted.map(r => r['Plot Name']);
+            assert.deepStrictEqual(sortedNames, ['Alpha Plot', 'Plot 1', 'Plot 2', 'Plot 10', 'Plot 20'], 'Rows should be sorted naturally by plot name ascending');
+
+            // Test with unstructured keys (e.g. CA Name or _processed)
+            const unstructuredRows = [
+                { 'CA Name': 'Zone B' },
+                { 'CA Name': 'Zone A' },
+                { _processed: { name: 'Zone C' } }
+            ];
+            const sortedUnstructured = healthScript.sortYieldBaseData(unstructuredRows);
+            assert.strictEqual(sortedUnstructured[0]['CA Name'], 'Zone A');
+            assert.strictEqual(sortedUnstructured[1]['CA Name'], 'Zone B');
+            assert.strictEqual(sortedUnstructured[2]._processed.name, 'Zone C');
+
+            // Empty array
+            assert.deepStrictEqual(healthScript.sortYieldBaseData([]), []);
+        }
     }
 ];
 

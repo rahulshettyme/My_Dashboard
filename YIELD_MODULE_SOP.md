@@ -128,9 +128,22 @@ When a plot has `modelType: "BIOMASS_DAYS"` present in its prediction records (`
      - **Average**: Central average prediction value (`yieldAvg` or `productionAvg`).
    - Standard reference lines (Standard, Re-Estimated, Maximum Attainable) are filtered from the point tooltip so the hover dialog remains dedicated to the predicted confidence range and mean for the hovered date.
 
+### E. Base Yield Data Ordering & Natural Sorting
+To guarantee consistent presentation across the dashboard, all base yield records (`globalData`), API-generated plot arrays, and the base plot data table (`#base-yield-table-wrapper`) are sorted ascending by plot name (`Plot Name` / `CA Name`):
+1. **Natural Alphanumeric Ordering**: Sorting utilizes `localeCompare(..., undefined, { numeric: true, sensitivity: 'base' })`, ensuring natural progression (e.g. `Plot 1, Plot 2, Plot 10` rather than ASCII `Plot 1, Plot 10, Plot 2`).
+2. **Universal Application**:
+   - `generateDataFromAPI()` sorts target plots prior to batch request dispatch and sorts the assembled results.
+   - `processData(rows)` enforces natural ascending sort across all inputs (API and Excel uploads), establishing sorted order for `globalData`.
+   - The Base Plot Data table defaults to Plot Name Ascending (`sort-by` dropdown default), with toggleable Asc/Desc support.
+
 ---
 
 ## 4. Change Log (Feature & Logic Audit Trail)
+* **2026-09-07**: Implemented natural alphanumeric ascending sorting for Base Yield Data:
+  1. Added `sortYieldBaseData(rows)` ensuring `globalData` is sorted by plot name ascending (`localeCompare` with `numeric: true`).
+  2. Updated `generateDataFromAPI()` and `processData(rows)` to sort base plot yield arrays upon load.
+  3. Updated `#sort-by` table selector to default to Plot Name Ascending and supported explicit Name sorting in `renderPaginatedTable()`.
+  4. Added Test 24 to regression suite (24/24 tests passing).
 * **2026-09-07**: Refined Yield & Harvest Prediction Model Selection & Aggregation Rules:
   1. **Rule 1 (TASUMI)**: If `TASUMI` is present, it is selected as authoritative data for the plot.
   2. **Rule 2 (Latest BIOMASS_DAYS)**: If `TASUMI` is not present, the latest `BIOMASS_DAYS` cutoff values from `gddPredictions` are used directly (strictly avoiding any averaging or aggregating across cutoff dates).

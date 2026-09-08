@@ -1700,6 +1700,34 @@ function resolveYieldPredictionRules(records) {
     return null;
 }
 
+function sortYieldBaseData(rows) {
+    if (!Array.isArray(rows) || rows.length === 0) return rows || [];
+
+    const getTextVal = (row, keys) => {
+        for (let k of keys) {
+            const foundKey = Object.keys(row).find(rk => rk.toLowerCase().includes(k.toLowerCase()));
+            if (foundKey) return row[foundKey];
+        }
+        return '';
+    };
+
+    const getRowPlotName = (r) => {
+        if (!r) return '';
+        if (r._processed && r._processed.name) return r._processed.name;
+        if (r['Plot Name']) return r['Plot Name'];
+        if (r['CA Name']) return r['CA Name'];
+        if (r.name) return r.name;
+        if (r.plotName) return r.plotName;
+        return getTextVal(r, ['plot name', 'ca name']) || '';
+    };
+
+    return [...rows].sort((a, b) => {
+        const nameA = String(getRowPlotName(a) || '').trim();
+        const nameB = String(getRowPlotName(b) || '').trim();
+        return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' });
+    });
+}
+
 if (typeof module !== 'undefined') {
     module.exports = {
         isWithinAnalysisWindow,
@@ -1717,6 +1745,7 @@ if (typeof module !== 'undefined') {
         convertHarvest,
         formatTrendDate,
         extractPlotMultiModelData,
-        resolveYieldPredictionRules
+        resolveYieldPredictionRules,
+        sortYieldBaseData
     };
 }

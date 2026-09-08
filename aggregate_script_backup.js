@@ -734,11 +734,41 @@ function resolveYieldPredictionRules(records) {
     return null;
 }
 
+function sortYieldBaseData(rows) {
+    if (!Array.isArray(rows) || rows.length === 0) return rows || [];
+
+    const getTextVal = (row, keys) => {
+        for (let k of keys) {
+            const foundKey = Object.keys(row).find(rk => rk.toLowerCase().includes(k.toLowerCase()));
+            if (foundKey) return row[foundKey];
+        }
+        return '';
+    };
+
+    const getRowPlotName = (r) => {
+        if (!r) return '';
+        if (r._processed && r._processed.name) return r._processed.name;
+        if (r['Plot Name']) return r['Plot Name'];
+        if (r['CA Name']) return r['CA Name'];
+        if (r.name) return r.name;
+        if (r.plotName) return r.plotName;
+        return getTextVal(r, ['plot name', 'ca name']) || '';
+    };
+
+    return [...rows].sort((a, b) => {
+        const nameA = String(getRowPlotName(a) || '').trim();
+        const nameB = String(getRowPlotName(b) || '').trim();
+        return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' });
+    });
+}
+
 function processData(rows) {
     if (!Array.isArray(rows)) {
         console.error("processData: rows is not an array", rows);
         return;
     }
+    // Sort base data of yield by plot name ascending
+    rows = sortYieldBaseData(rows);
     globalData = rows;
     const plotsWithPred = [];
     const skippedPlots = [];
@@ -1141,20 +1171,28 @@ function renderPaginatedTable() {
     // Sorting logic
     if (sortBy) {
         filteredData.sort((a, b) => {
-            const dA = a._processed;
-            const dB = b._processed;
+            const dA = a._processed || {};
+            const dB = b._processed || {};
             let valA, valB;
 
             switch (sortBy) {
-                // ... (Implement sort logic if needed, keeping simple for copy) ...
+                case 'name':
+                    valA = String(dA.name || '');
+                    valB = String(dB.name || '');
+                    const cmpName = valA.localeCompare(valB, undefined, { numeric: true, sensitivity: 'base' });
+                    return sortOrder === 'asc' ? cmpName : -cmpName;
                 default:
-                    valA = dA.name;
-                    valB = dB.name;
+                    valA = dA.name || '';
+                    valB = dB.name || '';
+                    const cmpDefault = String(valA).localeCompare(String(valB), undefined, { numeric: true, sensitivity: 'base' });
+                    return sortOrder === 'asc' ? cmpDefault : -cmpDefault;
             }
-
-            if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
-            if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
-            return 0;
+        });
+    } else if (sortOrder === 'desc') {
+        filteredData.sort((a, b) => {
+            const nameA = String((a._processed && a._processed.name) || a['Plot Name'] || '');
+            const nameB = String((b._processed && b._processed.name) || b['Plot Name'] || '');
+            return nameB.localeCompare(nameA, undefined, { numeric: true, sensitivity: 'base' });
         });
     }
 
@@ -2525,7 +2563,11 @@ try {
 
 async function generateDataFromAPI() {
     const targetPlots = (window.verifiedHealthPlots && window.verifiedHealthPlots.length > 0)
-        ? window.verifiedHealthPlots
+        ? [...window.verifiedHealthPlots].sort((a, b) => {
+            const nameA = String(a.name || a.plotName || a['Plot Name'] || '').trim();
+            const nameB = String(b.name || b.plotName || b['Plot Name'] || '').trim();
+            return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' });
+        })
         : [];
 
     if (targetPlots.length === 0) {
@@ -2688,7 +2730,7 @@ async function generateDataFromAPI() {
 
     document.getElementById('dashboard-content').classList.remove('hidden');
 
-    processData(generatedData);
+    processData(sortYieldBaseData(generatedData));
     initSearchableDropdown();
     updateUnitLabels();
 
@@ -4908,6 +4950,7 @@ window.switchYieldGrowthTab = switchYieldGrowthTab;
 window.extractPlotMultiModelData = extractPlotMultiModelData;
 window.formatTrendDate = formatTrendDate;
 window.resolveYieldPredictionRules = resolveYieldPredictionRules;
+window.sortYieldBaseData = sortYieldBaseData;
 
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
@@ -4920,6 +4963,7 @@ if (typeof module !== 'undefined' && module.exports) {
         formatTrendDate,
         extractPlotMultiModelData,
         resolveYieldPredictionRules,
+        sortYieldBaseData,
         MASS_CONVERSIONS,
         AREA_CONVERSIONS
     };
