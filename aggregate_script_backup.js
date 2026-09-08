@@ -1097,6 +1097,22 @@ function processData(rows) {
             aiYieldMaxWeightedSum += y3MaxVal * areaHa;
         }
 
+        // Variety Max Attainable Yield conversion to standard (Tonnes/Ha)
+        let maxAttainableTonHa = null;
+        const rawMaxAttainable = row['maxAttainableYield'];
+        if (rawMaxAttainable !== undefined && rawMaxAttainable !== null && rawMaxAttainable !== 'NA' && rawMaxAttainable !== '') {
+            const numMax = parseFloat(rawMaxAttainable);
+            if (!isNaN(numMax)) {
+                const varMassUnit = (row['varietyExpectedYieldUnits'] || 'KILOGRAM').toLowerCase();
+                const varAreaUnit = (row['varietyReferenceAreaUnits'] || 'ACRE').toLowerCase();
+
+                const varMassToTon = getDynamicFactor(varMassUnit, ['METRIC_TON', 'Ton (Metric)', 'MT', 'Tonnes'], 'Mass');
+                const varAreaToHa = getDynamicFactor(varAreaUnit, ['HECTARE', 'Hectare', 'ha'], 'Area');
+
+                maxAttainableTonHa = varAreaToHa > 0 ? (numMax * varMassToTon) / varAreaToHa : (numMax * varMassToTon);
+            }
+        }
+
         // Build processed object for PLOT LEVEL (Raw values)
         row._processed = {
             name: caName,
@@ -1112,6 +1128,12 @@ function processData(rows) {
             noPrediction: !isPredictionAvailable,
             notEnabled: row['Yield Not Enabled'] || false,
             harvestUnit: qUnit,
+            varietyId: row['varietyId'] || null,
+            maxAttainableYield: (rawMaxAttainable !== undefined && rawMaxAttainable !== null) ? rawMaxAttainable : 'NA',
+            maxAttainableYieldTonHa: maxAttainableTonHa,
+            varietyExpectedYieldUnits: row['varietyExpectedYieldUnits'] || null,
+            varietyReferenceAreaUnits: row['varietyReferenceAreaUnits'] || null,
+            varietyName: row['varietyName'] || null,
             yieldRawRecords: row['yieldRawRecords'] || []
         };
     });
@@ -1431,6 +1453,11 @@ function renderPaginatedTable() {
                     valA = dA.noPrediction ? -Infinity : Number(dA.y3_max || 0);
                     valB = dB.noPrediction ? -Infinity : Number(dB.y3_max || 0);
                     return sortOrder === 'asc' ? valA - valB : valB - valA;
+                case 'maxAttainableYield':
+                case 'maxAttainable':
+                    valA = (dA.maxAttainableYieldTonHa !== null && dA.maxAttainableYieldTonHa !== undefined && !isNaN(dA.maxAttainableYieldTonHa)) ? Number(dA.maxAttainableYieldTonHa) : -Infinity;
+                    valB = (dB.maxAttainableYieldTonHa !== null && dB.maxAttainableYieldTonHa !== undefined && !isNaN(dB.maxAttainableYieldTonHa)) ? Number(dB.maxAttainableYieldTonHa) : -Infinity;
+                    return sortOrder === 'asc' ? valA - valB : valB - valA;
                 default:
                     valA = dA.name || '';
                     valB = dB.name || '';
@@ -1447,7 +1474,7 @@ function renderPaginatedTable() {
     }
 
     // Update header sort indicator arrows if present
-    ['name', 'auditedArea', 'h1', 'h2', 'h3_min', 'h3_max', 'y1', 'y2', 'y3_min', 'y3_max'].forEach(col => {
+    ['name', 'auditedArea', 'h1', 'h2', 'h3_min', 'h3_max', 'y1', 'y2', 'y3_min', 'y3_max', 'maxAttainableYield'].forEach(col => {
         const iconEl = document.getElementById(`sort-icon-${col}`);
         if (iconEl) {
             iconEl.textContent = (sortBy === col) ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : '';
@@ -1489,6 +1516,10 @@ function renderPaginatedTable() {
         const y1Display = convertYield(y1TonHa, yieldUnit);
         const y2Display = convertYield(y2TonHa, yieldUnit);
 
+        const maxAttainableDisplay = (d.maxAttainableYieldTonHa !== null && d.maxAttainableYieldTonHa !== undefined && !isNaN(d.maxAttainableYieldTonHa))
+            ? convertYield(d.maxAttainableYieldTonHa, yieldUnit)
+            : null;
+
         const yieldReDiff = y1Display !== 0 ? ((y2Display - y1Display) / y1Display * 100).toFixed(2) : '0.00';
         const yieldReClass = y2Display >= y1Display ? 'value-green' : 'value-red';
         const yieldReArrow = y2Display >= y1Display ? '↑' : '↓';
@@ -1520,6 +1551,9 @@ function renderPaginatedTable() {
             </td>
             <td>${renderModelCell(modelComp.tasumi.yieldMin, modelComp.biomass.yieldMin, modelComp.isTasumiLatest, modelComp.isBiomassLatest, modelComp.tasumi.date, modelComp.biomass.date)}</td>
             <td>${renderModelCell(modelComp.tasumi.yieldMax, modelComp.biomass.yieldMax, modelComp.isTasumiLatest, modelComp.isBiomassLatest, modelComp.tasumi.date, modelComp.biomass.date)}</td>
+            <td style="font-weight: 500; color: ${maxAttainableDisplay !== null ? 'var(--text-primary)' : 'var(--text-secondary)'};">
+                ${maxAttainableDisplay !== null ? fmtSmart(maxAttainableDisplay) : '-'}
+            </td>
         `;
         tbody.appendChild(tr);
     } // end for loop
@@ -1809,12 +1843,31 @@ function extractPlotMultiModelData(d) {
     const stdYield = parseFloat(Number(d.y1 || 0).toFixed(2));
     const reYield = parseFloat(Number(d.y2 || 0).toFixed(2));
     const maxYieldVal = Math.max(...unifiedYieldTrend, stdYield, reYield);
-    const maxAttainableYield = parseFloat((stdYield > 0 ? (stdYield * 1.85) : (maxYieldVal * 1.2)).toFixed(2));
+    
+    // Use API Max Attainable Yield if present, otherwise calculate heuristic fallback
+    let maxAttainableYield;
+    const procMaxTonHa = (d.maxAttainableYieldTonHa !== undefined && d.maxAttainableYieldTonHa !== null)
+        ? d.maxAttainableYieldTonHa
+        : (d._processed && d._processed.maxAttainableYieldTonHa !== undefined ? d._processed.maxAttainableYieldTonHa : null);
+    if (procMaxTonHa !== null && !isNaN(procMaxTonHa)) {
+        maxAttainableYield = parseFloat(convertYield(procMaxTonHa, yieldUnit).toFixed(2));
+    } else {
+        maxAttainableYield = parseFloat((stdYield > 0 ? (stdYield * 1.85) : (maxYieldVal * 1.2)).toFixed(2));
+    }
 
     const stdHarvest = parseFloat(Number(d.h1 || 0).toFixed(2));
     const reHarvest = parseFloat(Number(d.h2 || 0).toFixed(2));
     const maxHarvestVal = Math.max(...unifiedHarvestTrend, stdHarvest, reHarvest);
-    const maxAttainableHarvest = parseFloat((stdHarvest > 0 ? (stdHarvest * 1.85) : (maxHarvestVal * 1.2)).toFixed(2));
+    
+    // For harvest: if area is available and API max attainable yield is known, calculate max harvest as maxAttainableYield * area
+    let maxAttainableHarvest;
+    const plotAreaHa = Number(d.auditedArea || (d._processed && d._processed.auditedArea) || 0) * getDynamicFactor(d.areaUnit || (d._processed && d._processed.areaUnit) || 'ha', 'ha', 'Area');
+    if (procMaxTonHa !== null && !isNaN(procMaxTonHa) && plotAreaHa > 0) {
+        const maxAttainableHarvestTon = procMaxTonHa * plotAreaHa;
+        maxAttainableHarvest = parseFloat(convertHarvest(maxAttainableHarvestTon, harvestUnit).toFixed(2));
+    } else {
+        maxAttainableHarvest = parseFloat((stdHarvest > 0 ? (stdHarvest * 1.85) : (maxHarvestVal * 1.2)).toFixed(2));
+    }
 
     return {
         labels: unifiedLabels,
@@ -2817,6 +2870,40 @@ try {
 */
 // });
 
+// Variety Details Promise Cache for deduplication across plots
+const varietyDetailsCache = new Map();
+
+async function fetchVarietyDetails(varietyId, env, token) {
+    if (!varietyId) {
+        return { maxAttainableYield: 'NA', expectedYieldUnits: null, referenceAreaUnits: null };
+    }
+    const key = `${env}_${varietyId}`;
+    if (varietyDetailsCache.has(key)) {
+        return varietyDetailsCache.get(key);
+    }
+
+    const baseUrl = getServerUrl();
+    const promise = (async () => {
+        try {
+            const res = await fetch(`${baseUrl}/api/user-aggregate/variety-details?environment=${encodeURIComponent(env)}&varietyId=${encodeURIComponent(varietyId)}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!res.ok) {
+                console.warn(`[WARN] Variety API failed for varietyId ${varietyId} | Status: ${res.status}`);
+                return { maxAttainableYield: 'NA', expectedYieldUnits: null, referenceAreaUnits: null };
+            }
+            const data = await res.json();
+            return data;
+        } catch (err) {
+            console.warn(`[WARN] Variety API network error for varietyId ${varietyId}:`, err);
+            return { maxAttainableYield: 'NA', expectedYieldUnits: null, referenceAreaUnits: null };
+        }
+    })();
+
+    varietyDetailsCache.set(key, promise);
+    return promise;
+}
+
 async function generateDataFromAPI() {
     const targetPlots = (window.verifiedHealthPlots && window.verifiedHealthPlots.length > 0)
         ? [...window.verifiedHealthPlots].sort((a, b) => {
@@ -2865,6 +2952,12 @@ async function generateDataFromAPI() {
             const [caResponse, yieldResponse] = await Promise.all([caReq, yieldReq]);
             const caData = await caResponse.json();
 
+            // Fetch Variety Details using deduplicating cache
+            let varietyData = { maxAttainableYield: 'NA', expectedYieldUnits: null, referenceAreaUnits: null };
+            if (caData.varietyId) {
+                varietyData = await fetchVarietyDetails(caData.varietyId, currentEnvironment, authToken);
+            }
+
             let yieldData = {};
             if (!yieldResponse.ok) {
                 // Handle specific "Not Enabled" cases gracefully
@@ -2911,6 +3004,11 @@ async function generateDataFromAPI() {
                 'Yield Not Enabled': yieldData.notEnabled || false,
                 'plotHarvestUnit': rawUnit,
                 'plotAreaUnit': userAreaUnit,
+                'varietyId': caData.varietyId || null,
+                'maxAttainableYield': varietyData?.maxAttainableYield ?? 'NA',
+                'varietyExpectedYieldUnits': varietyData?.expectedYieldUnits || null,
+                'varietyReferenceAreaUnits': varietyData?.referenceAreaUnits || null,
+                'varietyName': varietyData?.varietyName || null,
                 'yieldRawRecords': yieldData.records || []
             };
         } catch (error) {

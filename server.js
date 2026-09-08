@@ -1404,6 +1404,7 @@ app.get('/api/user-aggregate/ca-details', (req, res) => {
                 if (caRes.statusCode >= 200 && caRes.statusCode < 300) {
                     // auditedArea is an object with count property
                     const auditedAreaValue = jsonData.auditedArea?.count || jsonData.auditedArea || 0;
+                    const varietyIdValue = jsonData.varietyId !== undefined ? jsonData.varietyId : (jsonData.data?.varietyId !== undefined ? jsonData.data.varietyId : (jsonData.variety?.id || null));
                     res.json({
                         caId: caId,
                         auditedArea: auditedAreaValue,
@@ -1411,7 +1412,8 @@ app.get('/api/user-aggregate/ca-details', (req, res) => {
                         reEstimatedHarvest: jsonData.reEstimatedHarvest,
                         expectedYield: jsonData.data?.expectedYield,
                         reestimatedValue: jsonData.reEstimatedHarvest, // used for yield formula: reestimatedValue / auditedArea
-                        quantityUnit: jsonData.quantityUnit
+                        quantityUnit: jsonData.quantityUnit,
+                        varietyId: varietyIdValue
                     });
                 } else {
                     res.status(caRes.statusCode).json({ error: jsonData.message || 'Failed to fetch CA details' });
@@ -1428,6 +1430,140 @@ app.get('/api/user-aggregate/ca-details', (req, res) => {
 
     caReq.end();
 });
+
+/**
+ * Extracts variety yield parameters (especially maxAttainableYield and reference units)
+ * from /services/farm/api/varieties/<varietyId> response.
+ */
+function extractVarietyYieldDetails(varietyJson) {
+    if (!varietyJson) return { maxAttainableYield: 'NA', expectedYieldUnits: null, referenceAreaUnits: null, expectedYield: null };
+
+    const dataObj = varietyJson.data || varietyJson;
+    let locEntry = null;
+
+    if (Array.isArray(dataObj.yieldPerLocation) && dataObj.yieldPerLocation.length > 0) {
+        locEntry = dataObj.yieldPerLocation[0];
+    } else if (dataObj.yieldPerLocation && typeof dataObj.yieldPerLocation === 'object') {
+        locEntry = dataObj.yieldPerLocation;
+    }
+
+    if (!locEntry) {
+        if (Array.isArray(dataObj.companyYieldPerLocation) && dataObj.companyYieldPerLocation.length > 0) {
+            locEntry = dataObj.companyYieldPerLocation[0];
+        }
+    }
+
+    if (!locEntry) {
+        return { maxAttainableYield: 'NA', expectedYieldUnits: null, referenceAreaUnits: null, expectedYield: null };
+    }
+
+    const rawMax = locEntry.maxAttainableYield;
+    const maxVal = (rawMax !== undefined && rawMax !== null && rawMax !== '' && !isNaN(parseFloat(rawMax)))
+        ? parseFloat(rawMax)
+        : 'NA';
+
+    const refArea = locEntry.refrenceAreaUnits || locEntry.referenceAreaUnits || null;
+    const expUnit = locEntry.expectedYieldUnits || null;
+    const expYield = (locEntry.expectedYield !== undefined && locEntry.expectedYield !== null && !isNaN(parseFloat(locEntry.expectedYield)))
+        ? parseFloat(locEntry.expectedYield)
+        : null;
+
+    return {
+        maxAttainableYield: maxVal,
+        expectedYieldUnits: expUnit,
+        referenceAreaUnits: refArea,
+        expectedYield: expYield
+    };
+}
+
+// GET Variety Details
+app.get('/api/user-aggregate/variety-details', (req, res) => {
+    const { environment, varietyId } = req.query;
+    const authHeader = req.headers.authorization;
+
+    if (!environment || !varietyId) {
+        return res.status(400).json({ error: 'Missing environment or varietyId parameter' });
+    }
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Missing or invalid authorization header' });
+    }
+
+    const db = readDb();
+    const apiBaseUrl = resolveEnvUrl(db, environment, 'api');
+    const frontendUrl = resolveEnvUrl(db, environment, 'ui');
+
+    if (!apiBaseUrl) {
+        return res.status(400).json({ error: `Unknown environment: ${environment}` });
+    }
+
+    const varietyPath = `/services/farm/api/varieties/${encodeURIComponent(varietyId)}`;
+    const fullUrl = apiBaseUrl + varietyPath;
+
+    const urlObj = new URL(fullUrl);
+    const options = {
+        hostname: urlObj.hostname,
+        port: 443,
+        path: urlObj.pathname,
+        method: 'GET',
+        headers: {
+            'Authorization': authHeader,
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'origin': frontendUrl || apiBaseUrl,
+            'referer': (frontendUrl || apiBaseUrl) + '/'
+        }
+    };
+
+    const varietyReq = https.request(options, (varietyRes) => {
+        let data = '';
+        varietyRes.on('data', chunk => data += chunk);
+        varietyRes.on('end', () => {
+            if (data.trim().startsWith('<!DOCTYPE') || data.trim().startsWith('<html')) {
+                return res.status(502).json({ error: 'API returned HTML' });
+            }
+            try {
+                const jsonData = JSON.parse(data);
+                if (varietyRes.statusCode >= 200 && varietyRes.statusCode < 300) {
+                    const extracted = extractVarietyYieldDetails(jsonData);
+                    res.json({
+                        varietyId: varietyId,
+                        varietyName: jsonData.name || null,
+                        cropName: jsonData.cropName || null,
+                        maxAttainableYield: extracted.maxAttainableYield,
+                        expectedYieldUnits: extracted.expectedYieldUnits,
+                        referenceAreaUnits: extracted.referenceAreaUnits,
+                        expectedYield: extracted.expectedYield
+                    });
+                } else {
+                    res.status(varietyRes.statusCode).json({
+                        varietyId: varietyId,
+                        maxAttainableYield: 'NA',
+                        error: jsonData.message || 'Failed to fetch variety details'
+                    });
+                }
+            } catch (e) {
+                res.status(500).json({
+                    varietyId: varietyId,
+                    maxAttainableYield: 'NA',
+                    error: 'Failed to parse variety details response'
+                });
+            }
+        });
+    });
+
+    varietyReq.on('error', (e) => {
+        res.status(500).json({
+            varietyId: varietyId,
+            maxAttainableYield: 'NA',
+            error: 'Variety details request failed: ' + e.message
+        });
+    });
+
+    varietyReq.end();
+});
+
 
 /**
  * Selects the yield prediction parameters based on strict 3-step prioritized model rules:

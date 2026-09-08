@@ -744,6 +744,84 @@ const tests = [
             assert.ok(cellHtml4.includes('T:</span> <span style="color: var(--text-secondary);">-</span>'));
             assert.ok(cellHtml4.includes('B:</span> <span style="color: var(--text-secondary);">-</span>'));
         }
+    },
+    {
+        name: 'extractVarietyYieldDetails_and_maxAttainableYield_conversion',
+        fn: () => {
+            // 1. Standard variety payload (user sample)
+            const sampleVarietyPayload = {
+                id: 23454,
+                name: 'RS EY after 35% Potato',
+                data: {
+                    yieldPerLocation: [
+                        {
+                            _uid: 1,
+                            expectedYield: 15000,
+                            refrenceAreaUnits: 'ACRE',
+                            expectedYieldUnits: 'KILOGRAM',
+                            maxAttainableYield: 28000
+                        }
+                    ]
+                }
+            };
+
+            const extracted = healthScript.extractVarietyYieldDetails(sampleVarietyPayload);
+            assert.strictEqual(extracted.maxAttainableYield, 28000, 'Should extract maxAttainableYield 28000');
+            assert.strictEqual(extracted.expectedYieldUnits, 'KILOGRAM');
+            assert.strictEqual(extracted.referenceAreaUnits, 'ACRE');
+            assert.strictEqual(extracted.expectedYield, 15000);
+
+            // 2. Unit conversion to standard Tonnes/Ha
+            const massToTon = healthScript.getDynamicFactor('KILOGRAM', ['METRIC_TON', 'Ton (Metric)', 'MT', 'Tonnes'], 'Mass');
+            const areaToHa = healthScript.getDynamicFactor('ACRE', ['HECTARE', 'Hectare', 'ha'], 'Area');
+            const maxAttainableTonHa = areaToHa > 0 ? (extracted.maxAttainableYield * massToTon) / areaToHa : 0;
+            assert.ok(Math.abs(maxAttainableTonHa - 69.19) < 0.1, `Expected ~69.19 Tonnes/Ha, got ${maxAttainableTonHa}`);
+
+            // 3. Conversion to target units
+            const displayInTonHa = healthScript.convertYield(maxAttainableTonHa, 'tonne_ha');
+            assert.strictEqual(displayInTonHa.toFixed(2), '69.19');
+            const displayInKgsAcre = healthScript.convertYield(maxAttainableTonHa, 'kgs_acre');
+            assert.strictEqual(Math.round(displayInKgsAcre), 28000);
+
+            // 4. Missing maxAttainableYield in variety - must not fail, defaults to 'NA'
+            const varietyWithoutMax = {
+                id: 9999,
+                data: {
+                    yieldPerLocation: [
+                        { expectedYield: 10000, expectedYieldUnits: 'KILOGRAM', refrenceAreaUnits: 'ACRE' }
+                    ]
+                }
+            };
+            const extractedNoMax = healthScript.extractVarietyYieldDetails(varietyWithoutMax);
+            assert.strictEqual(extractedNoMax.maxAttainableYield, 'NA', 'Should return NA when maxAttainableYield is not present');
+
+            // 5. Empty / null variety payload - must not fail, defaults to 'NA'
+            assert.strictEqual(healthScript.extractVarietyYieldDetails(null).maxAttainableYield, 'NA');
+            assert.strictEqual(healthScript.extractVarietyYieldDetails({}).maxAttainableYield, 'NA');
+
+            // 6. Verification with extractPlotMultiModelData
+            const plotWithVariety = {
+                name: 'Test Plot',
+                y1: 10,
+                y2: 12,
+                h1: 20,
+                h2: 24,
+                auditedArea: 2,
+                areaUnit: 'ha',
+                maxAttainableYieldTonHa: maxAttainableTonHa,
+                yieldRawRecords: [
+                    {
+                        modelType: 'BIOMASS_DAYS',
+                        gddPredictions: [
+                            { cutoff_date: '2026-08-20', yieldAvg: 14.0, yieldMin: 12.0, yieldMax: 16.0, productionAvg: 28.0, productionMin: 24.0, productionMax: 32.0 }
+                        ]
+                    }
+                ]
+            };
+            const chartData = healthScript.extractPlotMultiModelData(plotWithVariety, 'tonne_ha', 'tonnes');
+            assert.strictEqual(chartData.maxAttainableYield, 69.19, 'Chart reference line should use API maxAttainableYield');
+            assert.strictEqual(chartData.maxAttainableHarvest, parseFloat((69.189 * 2).toFixed(2)), 'Max harvest should scale by plot area');
+        }
     }
 ];
 

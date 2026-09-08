@@ -162,9 +162,32 @@ display values for both AI prediction models simultaneously:
 4. **Column Sorting Support**:
    - All columns in `#all-plots-table`, including `Plot Name`, `Audited Area`, `Exp/Re-est Harvest`, and `Pred Harv/Yield Min/Max`, support interactive ascending/descending sorting via `sortTable(column)` with header indicator arrows (`▲` / `▼`).
 
+### G. Crop Variety Details & Maximum Attainable Yield
+1. **Upstream API Endpoint**:
+   - `GET /services/farm/api/varieties/{varietyId}` (proxied via `GET /api/user-aggregate/variety-details`).
+2. **Request Deduplication & Caching**:
+   - In agricultural setups, many croppable areas (CAs) share the same crop variety.
+   - The system utilizes an in-memory promise cache (`varietyDetailsCache`) keyed by `${environment}_${varietyId}` to guarantee that only **a single network request** is made per unique `varietyId`. All plots sharing that variety resolve instantly without redundant HTTP calls.
+3. **Graceful Fallback**:
+   - While PR-enabled plots have a variety assigned, `maxAttainableYield` within the variety configuration is optional.
+   - If `varietyId` is null/empty or `maxAttainableYield` is missing/empty, the system sets `maxAttainableYield` to `'NA'` without failing or halting execution.
+4. **Unit Normalization & Display**:
+   - From `data.yieldPerLocation[0]`, `maxAttainableYield`, `expectedYieldUnits` (e.g. `KILOGRAM`), and `referenceAreaUnits` / `refrenceAreaUnits` (e.g. `ACRE`) are extracted.
+   - The value is dynamically converted to base standard `Tonnes/Ha`:
+     $$\text{Max Attainable (Tonnes/Ha)} = \frac{\text{rawMax} \times \text{massToTon}}{\text{areaToHa}}$$
+   - When rendered in `#all-plots-table` under `Max Attainable` and plotted on the multi-model trend chart as the upper boundary reference line, it converts dynamically to the user's active yield unit (`getDataYieldUnit()`).
+
 ---
 
 ## 4. Change Log (Feature & Logic Audit Trail)
+* **2026-09-08**: Integrated Variety API (`/services/farm/api/varieties/<varietyId>`) and Max Attainable Yield in Base Table:
+  1. Implemented backend proxy endpoint `GET /api/user-aggregate/variety-details` and `extractVarietyYieldDetails()` in `server.js`.
+  2. Implemented in-memory promise caching (`varietyDetailsCache` in `aggregate_script_backup.js`) to ensure only 1 API call per unique `varietyId` regardless of the number of plots.
+  3. Added graceful fallback: missing `varietyId` or missing `maxAttainableYield` defaults to `'NA'` without failing execution.
+  4. Dynamically normalized `maxAttainableYield` from variety units (`expectedYieldUnits`, `referenceAreaUnits`) to base `Tonnes/Ha` and active display yield unit.
+  5. Added sortable column `Max Attainable` to `#all-plots-table` with header sort arrows and interactive sorting.
+  6. Updated multi-model trend chart reference lines to utilize the real API `maxAttainableYield` (and scaled harvest) instead of heuristic multiplier.
+  7. Added Test 26 to regression test suite (26/26 tests passing: 11 existing, 15 new).
 * **2026-09-08**: Updated Base Data Table of Yield for Multi-Model Display (TASUMI & BIOMASS):
   1. Enforced `predictionDate` key for TASUMI model instead of `modifiedDateTime` (e.g. `predictionDate: 2026-08-14` vs `modifiedDateTime: 2026-09-04`), guaranteeing accurate chronological comparison with Biomass cutoff dates (e.g. `2026-08-29`).
   2. Implemented `getPlotPredictionModelComparison(d, yieldUnit, harvestUnit)` and `renderModelCell()` to extract and render both Tasumi (`T:`) and Biomass (`B:`) predictions.

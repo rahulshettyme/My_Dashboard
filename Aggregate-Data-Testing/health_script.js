@@ -1606,12 +1606,31 @@ function extractPlotMultiModelData(d, yieldUnitOverride = null, harvestUnitOverr
     const stdYield = parseFloat(Number(d.y1 || 0).toFixed(2));
     const reYield = parseFloat(Number(d.y2 || 0).toFixed(2));
     const maxYieldVal = Math.max(...unifiedYieldTrend, stdYield, reYield);
-    const maxAttainableYield = parseFloat((stdYield > 0 ? (stdYield * 1.85) : (maxYieldVal * 1.2)).toFixed(2));
+    
+    // Use API Max Attainable Yield if present, otherwise calculate heuristic fallback
+    let maxAttainableYield;
+    const procMaxTonHa = (d.maxAttainableYieldTonHa !== undefined && d.maxAttainableYieldTonHa !== null)
+        ? d.maxAttainableYieldTonHa
+        : (d._processed && d._processed.maxAttainableYieldTonHa !== undefined ? d._processed.maxAttainableYieldTonHa : null);
+    if (procMaxTonHa !== null && !isNaN(procMaxTonHa)) {
+        maxAttainableYield = parseFloat(convertYield(procMaxTonHa, yieldUnit).toFixed(2));
+    } else {
+        maxAttainableYield = parseFloat((stdYield > 0 ? (stdYield * 1.85) : (maxYieldVal * 1.2)).toFixed(2));
+    }
 
     const stdHarvest = parseFloat(Number(d.h1 || 0).toFixed(2));
     const reHarvest = parseFloat(Number(d.h2 || 0).toFixed(2));
     const maxHarvestVal = Math.max(...unifiedHarvestTrend, stdHarvest, reHarvest);
-    const maxAttainableHarvest = parseFloat((stdHarvest > 0 ? (stdHarvest * 1.85) : (maxHarvestVal * 1.2)).toFixed(2));
+    
+    // For harvest: if area is available and API max attainable yield is known, calculate max harvest as maxAttainableYield * area
+    let maxAttainableHarvest;
+    const plotAreaHa = Number(d.auditedArea || (d._processed && d._processed.auditedArea) || 0) * getDynamicFactor(d.areaUnit || (d._processed && d._processed.areaUnit) || 'ha', 'ha', 'Area');
+    if (procMaxTonHa !== null && !isNaN(procMaxTonHa) && plotAreaHa > 0) {
+        const maxAttainableHarvestTon = procMaxTonHa * plotAreaHa;
+        maxAttainableHarvest = parseFloat(convertHarvest(maxAttainableHarvestTon, harvestUnit).toFixed(2));
+    } else {
+        maxAttainableHarvest = parseFloat((stdHarvest > 0 ? (stdHarvest * 1.85) : (maxHarvestVal * 1.2)).toFixed(2));
+    }
 
     return {
         labels: unifiedLabels,
@@ -1936,6 +1955,47 @@ function renderModelCell(tVal, bVal, isTasumiLatest, isBiomassLatest, tDate, bDa
     `;
 }
 
+function extractVarietyYieldDetails(varietyJson) {
+    if (!varietyJson) return { maxAttainableYield: 'NA', expectedYieldUnits: null, referenceAreaUnits: null, expectedYield: null };
+
+    const dataObj = varietyJson.data || varietyJson;
+    let locEntry = null;
+
+    if (Array.isArray(dataObj.yieldPerLocation) && dataObj.yieldPerLocation.length > 0) {
+        locEntry = dataObj.yieldPerLocation[0];
+    } else if (dataObj.yieldPerLocation && typeof dataObj.yieldPerLocation === 'object') {
+        locEntry = dataObj.yieldPerLocation;
+    }
+
+    if (!locEntry) {
+        if (Array.isArray(dataObj.companyYieldPerLocation) && dataObj.companyYieldPerLocation.length > 0) {
+            locEntry = dataObj.companyYieldPerLocation[0];
+        }
+    }
+
+    if (!locEntry) {
+        return { maxAttainableYield: 'NA', expectedYieldUnits: null, referenceAreaUnits: null, expectedYield: null };
+    }
+
+    const rawMax = locEntry.maxAttainableYield;
+    const maxVal = (rawMax !== undefined && rawMax !== null && rawMax !== '' && !isNaN(parseFloat(rawMax)))
+        ? parseFloat(rawMax)
+        : 'NA';
+
+    const refArea = locEntry.refrenceAreaUnits || locEntry.referenceAreaUnits || null;
+    const expUnit = locEntry.expectedYieldUnits || null;
+    const expYield = (locEntry.expectedYield !== undefined && locEntry.expectedYield !== null && !isNaN(parseFloat(locEntry.expectedYield)))
+        ? parseFloat(locEntry.expectedYield)
+        : null;
+
+    return {
+        maxAttainableYield: maxVal,
+        expectedYieldUnits: expUnit,
+        referenceAreaUnits: refArea,
+        expectedYield: expYield
+    };
+}
+
 if (typeof module !== 'undefined') {
     module.exports = {
         isWithinAnalysisWindow,
@@ -1956,6 +2016,7 @@ if (typeof module !== 'undefined') {
         resolveYieldPredictionRules,
         sortYieldBaseData,
         getPlotPredictionModelComparison,
-        renderModelCell
+        renderModelCell,
+        extractVarietyYieldDetails
     };
 }
