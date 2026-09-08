@@ -591,6 +591,159 @@ const tests = [
             // Empty array
             assert.deepStrictEqual(healthScript.sortYieldBaseData([]), []);
         }
+    },
+    {
+        name: 'getPlotPredictionModelComparison_and_renderModelCell_multi_model_display',
+        fn: () => {
+            // Case 1: Both models present, TASUMI is newer by predictionDate
+            const plotTasumiNewer = {
+                yieldRawRecords: [
+                    {
+                        modelType: 'TASUMI',
+                        predictionDate: '2026-09-03T12:00:00.000Z',
+                        createdDateTime: '2026-08-01T00:00:00.000Z',
+                        parameters: {
+                            yieldMin: '7.5',
+                            yieldMax: '8.5',
+                            productionMin: '9.2',
+                            productionMax: '10.2'
+                        }
+                    },
+                    {
+                        modelType: 'BIOMASS_DAYS',
+                        createdDateTime: '2026-08-01T00:00:00.000Z',
+                        gddPredictions: [
+                            { cutoff_date: '2026-08-29', yieldMin: 6.0, yieldMax: 7.0, productionMin: 8.0, productionMax: 9.0 }
+                        ]
+                    }
+                ]
+            };
+
+            const comp1 = healthScript.getPlotPredictionModelComparison(plotTasumiNewer, 'tonne_ha', 'tonnes');
+            assert.strictEqual(comp1.isTasumiLatest, true, 'Tasumi should be marked as latest');
+            assert.strictEqual(comp1.isBiomassLatest, false, 'Biomass should not be latest');
+            assert.strictEqual(comp1.tasumi.harvestMin, 9.2);
+            assert.strictEqual(comp1.biomass.harvestMin, 8.0);
+
+            const cellHtml1 = healthScript.renderModelCell(
+                comp1.tasumi.harvestMin,
+                comp1.biomass.harvestMin,
+                comp1.isTasumiLatest,
+                comp1.isBiomassLatest,
+                comp1.tasumi.date,
+                comp1.biomass.date
+            );
+
+            // Verify TASUMI is on top line and has L badge
+            const tIndex1 = cellHtml1.indexOf('T:');
+            const bIndex1 = cellHtml1.indexOf('B:');
+            assert.ok(tIndex1 < bIndex1, 'Tasumi (T:) must always be on top of Biomass (B:)');
+            const lines1 = cellHtml1.split('</div>');
+            const tLine1 = lines1.find(l => l.includes('T:'));
+            const bLine1 = lines1.find(l => l.includes('B:'));
+            assert.ok(tLine1.includes('>L<'), 'T: must have L badge when Tasumi is latest');
+            assert.ok(tLine1.includes('9.20'), 'T: must display formatted value 9.20');
+            assert.ok(!bLine1.includes('>L<'), 'B: must not have L badge when Biomass is older');
+            assert.ok(bLine1.includes('8'), 'B: must display formatted value 8');
+
+            // Case 2: Exact user scenario: TASUMI modifiedDateTime is 2026-09-04, but predictionDate is 2026-08-14.
+            // BIOMASS cutoff_date is 2026-08-29.
+            // When using predictionDate for TASUMI, BIOMASS (08-29) is newer than TASUMI (08-14), so BIOMASS must be latest!
+            const plotBiomassNewer = {
+                yieldRawRecords: [
+                    {
+                        id: '6a98c2da07951eb9a0711c53',
+                        createdDateTime: '2026-09-03T00:44:10.287Z',
+                        modifiedDateTime: '2026-09-04T00:13:25.370Z',
+                        modelType: 'TASUMI',
+                        predictionDate: '2026-08-14T00:00:00.000+00:00',
+                        parameters: {
+                            yieldMin: '7.541',
+                            yieldMax: '8.335',
+                            productionMin: '9.216',
+                            productionMax: '10.186'
+                        }
+                    },
+                    {
+                        modelType: 'BIOMASS_DAYS',
+                        createdDateTime: '2026-08-01T00:00:00.000Z',
+                        gddPredictions: [
+                            { cutoff_date: '2026-08-29', yieldMin: 6.0, yieldMax: 7.0, productionMin: 8.0, productionMax: 9.0 }
+                        ]
+                    }
+                ]
+            };
+
+            const comp2 = healthScript.getPlotPredictionModelComparison(plotBiomassNewer, 'tonne_ha', 'tonnes');
+            assert.strictEqual(comp2.isBiomassLatest, true, 'Biomass (2026-08-29) should be latest because Tasumi predictionDate is 2026-08-14 (not modifiedDateTime 2026-09-04)');
+            assert.strictEqual(comp2.isTasumiLatest, false, 'Tasumi should not be latest when its predictionDate is older than Biomass cutoff_date');
+            assert.strictEqual(comp2.tasumi.date, '2026-08-14T00:00:00.000+00:00', 'Tasumi date should be its predictionDate');
+
+            const cellHtml2 = healthScript.renderModelCell(
+                comp2.tasumi.harvestMin,
+                comp2.biomass.harvestMin,
+                comp2.isTasumiLatest,
+                comp2.isBiomassLatest,
+                comp2.tasumi.date,
+                comp2.biomass.date
+            );
+            // Verify TASUMI is still on top line, but B has the L badge
+            const tIndex2 = cellHtml2.indexOf('T:');
+            const bIndex2 = cellHtml2.indexOf('B:');
+            assert.ok(tIndex2 < bIndex2, 'Tasumi (T:) must always be on top even when Biomass is latest');
+            const lines2 = cellHtml2.split('</div>');
+            const tLine2 = lines2.find(l => l.includes('T:'));
+            const bLine2 = lines2.find(l => l.includes('B:'));
+            assert.ok(!tLine2.includes('>L<'), 'T: must not have L badge when Biomass is newer');
+            assert.ok(bLine2.includes('>L<'), 'B: must have L badge when Biomass is latest');
+
+            // Case 3: Only TASUMI present
+            const plotTasumiOnly = {
+                yieldRawRecords: [
+                    {
+                        modelType: 'TASUMI',
+                        createdDateTime: '2026-09-01T00:00:00.000Z',
+                        parameters: { yieldMin: '5.5', yieldMax: '6.5', productionMin: '7.5', productionMax: '8.5' }
+                    }
+                ]
+            };
+            const comp3 = healthScript.getPlotPredictionModelComparison(plotTasumiOnly, 'tonne_ha', 'tonnes');
+            assert.strictEqual(comp3.isTasumiLatest, true);
+            assert.strictEqual(comp3.isBiomassLatest, false);
+            assert.strictEqual(comp3.biomass.harvestMin, null);
+            const cellHtml3 = healthScript.renderModelCell(
+                comp3.tasumi.harvestMin,
+                comp3.biomass.harvestMin,
+                comp3.isTasumiLatest,
+                comp3.isBiomassLatest,
+                comp3.tasumi.date,
+                comp3.biomass.date
+            );
+            const lines3 = cellHtml3.split('</div>');
+            const tLine3 = lines3.find(l => l.includes('T:'));
+            const bLine3 = lines3.find(l => l.includes('B:'));
+            assert.ok(tLine3.includes('>L<'), 'T: must have L badge when it is only model');
+            assert.ok(tLine3.includes('7.50'), 'T: must display 7.50');
+            assert.ok(!bLine3.includes('>L<'), 'B: must not have L badge');
+            assert.ok(bLine3.includes('-'), 'B: must show dash when absent');
+
+            // Case 4: Neither present (NA)
+            const plotNeither = { yieldRawRecords: [] };
+            const comp4 = healthScript.getPlotPredictionModelComparison(plotNeither, 'tonne_ha', 'tonnes');
+            assert.strictEqual(comp4.isTasumiLatest, false);
+            assert.strictEqual(comp4.isBiomassLatest, false);
+            const cellHtml4 = healthScript.renderModelCell(
+                comp4.tasumi.harvestMin,
+                comp4.biomass.harvestMin,
+                comp4.isTasumiLatest,
+                comp4.isBiomassLatest,
+                comp4.tasumi.date,
+                comp4.biomass.date
+            );
+            assert.ok(!cellHtml4.includes('>L<'), 'Neither model should receive L badge when empty');
+            assert.ok(cellHtml4.includes('T:</span> <span style="color: var(--text-secondary);">-</span>'));
+            assert.ok(cellHtml4.includes('B:</span> <span style="color: var(--text-secondary);">-</span>'));
+        }
     }
 ];
 

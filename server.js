@@ -1440,7 +1440,11 @@ function selectYieldPredictionParameters(jsonData) {
 
     if (Array.isArray(jsonData.records) && jsonData.records.length > 0) {
         const getRecordTime = (r) => {
-            const dateStr = r.modifiedDateTime || r.predictionDate || r.createdDateTime;
+            if (!r) return 0;
+            const isTasumi = (r.modelType || '').trim().toUpperCase() === 'TASUMI';
+            const dateStr = isTasumi
+                ? (r.predictionDate || r.createdDateTime || r.modifiedDateTime)
+                : (r.modifiedDateTime || r.predictionDate || r.createdDateTime);
             if (!dateStr) return 0;
             const t = new Date(dateStr).getTime();
             return isNaN(t) ? 0 : t;

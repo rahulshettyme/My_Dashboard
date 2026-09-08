@@ -1577,9 +1577,9 @@ function extractPlotMultiModelData(d, yieldUnitOverride = null, harvestUnitOverr
         tasumiHarvestMin = parseFloat(convertHarvest(Math.min(rawHMin, rawHMax), harvestUnit).toFixed(2));
         tasumiHarvestMax = parseFloat(convertHarvest(Math.max(rawHMin, rawHMax), harvestUnit).toFixed(2));
 
-        tasumiDateStr = tasumiRecord.createdDateTime 
-            ? formatTrendDate(tasumiRecord.createdDateTime.substring(0, 10)) 
-            : (tasumiRecord.predictionDate ? formatTrendDate(tasumiRecord.predictionDate.substring(0, 10)) : 'Latest');
+        tasumiDateStr = tasumiRecord.predictionDate 
+            ? formatTrendDate(tasumiRecord.predictionDate.substring(0, 10)) 
+            : (tasumiRecord.createdDateTime ? formatTrendDate(tasumiRecord.createdDateTime.substring(0, 10)) : 'Latest');
     }
 
     const unifiedYieldTrend = [...yieldBiomassData];
@@ -1641,7 +1641,11 @@ function resolveYieldPredictionRules(records) {
     if (!Array.isArray(records) || records.length === 0) return null;
 
     const getRecordTime = (r) => {
-        const dateStr = r.modifiedDateTime || r.predictionDate || r.createdDateTime;
+        if (!r) return 0;
+        const isTasumi = (r.modelType || '').trim().toUpperCase() === 'TASUMI';
+        const dateStr = isTasumi 
+            ? (r.predictionDate || r.createdDateTime || r.modifiedDateTime)
+            : (r.modifiedDateTime || r.predictionDate || r.createdDateTime);
         if (!dateStr) return 0;
         const t = new Date(dateStr).getTime();
         return isNaN(t) ? 0 : t;
@@ -1728,6 +1732,210 @@ function sortYieldBaseData(rows) {
     });
 }
 
+function getPlotPredictionModelComparison(d, targetYieldUnit, targetHarvestUnit) {
+    const yUnit = targetYieldUnit || (typeof getDataYieldUnit === 'function' ? getDataYieldUnit() : 'tonne_ha');
+    const hUnit = targetHarvestUnit || (typeof getDataHarvestUnit === 'function' ? getDataHarvestUnit() : 'tonnes');
+
+    const records = (d && Array.isArray(d.yieldRawRecords) && d.yieldRawRecords) ||
+                    (d && d._processed && Array.isArray(d._processed.yieldRawRecords) && d._processed.yieldRawRecords) ||
+                    (d && d.row && Array.isArray(d.row.yieldRawRecords) && d.row.yieldRawRecords) ||
+                    (Array.isArray(d) ? d : []);
+
+    const getRecordTime = (r) => {
+        if (!r) return 0;
+        const isTasumi = (r.modelType || '').trim().toUpperCase() === 'TASUMI';
+        const dateStr = isTasumi
+            ? (r.predictionDate || r.createdDateTime || r.modifiedDateTime)
+            : (r.modifiedDateTime || r.predictionDate || r.createdDateTime);
+        if (!dateStr) return 0;
+        const t = new Date(dateStr).getTime();
+        return isNaN(t) ? 0 : t;
+    };
+
+    const safeConvertH = (val) => {
+        if (val === undefined || val === null || val === 'NA' || isNaN(val)) return null;
+        if (typeof convertHarvest === 'function') {
+            return convertHarvest(parseFloat(val), hUnit);
+        }
+        return parseFloat(val);
+    };
+
+    const safeConvertY = (val) => {
+        if (val === undefined || val === null || val === 'NA' || isNaN(val)) return null;
+        if (typeof convertYield === 'function') {
+            return convertYield(parseFloat(val), yUnit);
+        }
+        return parseFloat(val);
+    };
+
+    let tasumi = {
+        harvestMin: null,
+        harvestMax: null,
+        yieldMin: null,
+        yieldMax: null,
+        date: null,
+        timestamp: 0,
+        available: false
+    };
+
+    let biomass = {
+        harvestMin: null,
+        harvestMax: null,
+        yieldMin: null,
+        yieldMax: null,
+        date: null,
+        timestamp: 0,
+        available: false
+    };
+
+    // 1. Check TASUMI records
+    const tasumiRecords = records.filter(r => (r.modelType || '').trim().toUpperCase() === 'TASUMI');
+    if (tasumiRecords.length > 0) {
+        tasumiRecords.sort((a, b) => getRecordTime(b) - getRecordTime(a));
+        const r = tasumiRecords[0];
+        const p = r.parameters || {};
+        const rawYMin = p.yieldMin !== undefined ? p.yieldMin : r.yieldMin;
+        const rawYMax = p.yieldMax !== undefined ? p.yieldMax : r.yieldMax;
+        const rawHMin = p.productionMin !== undefined ? p.productionMin : r.productionMin;
+        const rawHMax = p.productionMax !== undefined ? p.productionMax : r.productionMax;
+
+        tasumi.harvestMin = safeConvertH(rawHMin);
+        tasumi.harvestMax = safeConvertH(rawHMax);
+        tasumi.yieldMin = safeConvertY(rawYMin);
+        tasumi.yieldMax = safeConvertY(rawYMax);
+        tasumi.date = r.predictionDate || r.createdDateTime || r.modifiedDateTime || null;
+        tasumi.timestamp = getRecordTime(r);
+        tasumi.available = tasumi.harvestMin !== null || tasumi.yieldMin !== null;
+    }
+
+    // 2. Check BIOMASS records (BIOMASS_DAYS or BIOMASS)
+    const biomassRecords = records.filter(r => {
+        const m = (r.modelType || '').trim().toUpperCase();
+        return m === 'BIOMASS_DAYS' || m.includes('BIOMASS');
+    });
+    if (biomassRecords.length > 0) {
+        biomassRecords.sort((a, b) => getRecordTime(b) - getRecordTime(a));
+        const r = biomassRecords[0];
+        if (Array.isArray(r.gddPredictions) && r.gddPredictions.length > 0) {
+            const sortedGdd = [...r.gddPredictions].sort((a, b) => (a.cutoff_date || '').localeCompare(b.cutoff_date || ''));
+            const latestGdd = sortedGdd[sortedGdd.length - 1];
+            const p = r.parameters || {};
+
+            const rawYMin = latestGdd.yieldMin !== undefined ? latestGdd.yieldMin : (p.yieldMin !== undefined ? p.yieldMin : r.yieldMin);
+            const rawYMax = latestGdd.yieldMax !== undefined ? latestGdd.yieldMax : (p.yieldMax !== undefined ? p.yieldMax : r.yieldMax);
+            const rawHMin = latestGdd.productionMin !== undefined ? latestGdd.productionMin : (p.productionMin !== undefined ? p.productionMin : r.productionMin);
+            const rawHMax = latestGdd.productionMax !== undefined ? latestGdd.productionMax : (p.productionMax !== undefined ? p.productionMax : r.productionMax);
+
+            biomass.harvestMin = safeConvertH(rawHMin);
+            biomass.harvestMax = safeConvertH(rawHMax);
+            biomass.yieldMin = safeConvertY(rawYMin);
+            biomass.yieldMax = safeConvertY(rawYMax);
+            biomass.date = latestGdd.cutoff_date || r.modifiedDateTime || r.predictionDate || r.createdDateTime || null;
+            if (latestGdd.cutoff_date) {
+                const ct = new Date(latestGdd.cutoff_date).getTime();
+                biomass.timestamp = isNaN(ct) ? 0 : ct;
+            }
+            if (!biomass.timestamp) {
+                biomass.timestamp = getRecordTime(r);
+            }
+            biomass.available = biomass.harvestMin !== null || biomass.yieldMin !== null;
+        } else {
+            const p = r.parameters || r;
+            const rawYMin = p.yieldMin !== undefined ? p.yieldMin : 'NA';
+            const rawYMax = p.yieldMax !== undefined ? p.yieldMax : 'NA';
+            const rawHMin = p.productionMin !== undefined ? p.productionMin : 'NA';
+            const rawHMax = p.productionMax !== undefined ? p.productionMax : 'NA';
+
+            biomass.harvestMin = safeConvertH(rawHMin);
+            biomass.harvestMax = safeConvertH(rawHMax);
+            biomass.yieldMin = safeConvertY(rawYMin);
+            biomass.yieldMax = safeConvertY(rawYMax);
+            biomass.date = r.modifiedDateTime || r.predictionDate || r.createdDateTime || null;
+            biomass.timestamp = getRecordTime(r);
+            biomass.available = biomass.harvestMin !== null || biomass.yieldMin !== null;
+        }
+    }
+
+    // 3. Fallback when records is empty but single processed model exists
+    if (!tasumi.available && !biomass.available && d && !d.noPrediction) {
+        const m = ((d.modelType || (d._processed && d._processed.modelType)) || '').toUpperCase();
+        const proc = d._processed || d;
+        if (m === 'TASUMI') {
+            tasumi.harvestMin = safeConvertH(proc.h3_min);
+            tasumi.harvestMax = safeConvertH(proc.h3_max);
+            tasumi.yieldMin = safeConvertY(proc.y3_min);
+            tasumi.yieldMax = safeConvertY(proc.y3_max);
+            tasumi.available = tasumi.harvestMin !== null || tasumi.yieldMin !== null;
+        } else if (m === 'BIOMASS_DAYS' || m.includes('BIOMASS')) {
+            biomass.harvestMin = safeConvertH(proc.h3_min);
+            biomass.harvestMax = safeConvertH(proc.h3_max);
+            biomass.yieldMin = safeConvertY(proc.y3_min);
+            biomass.yieldMax = safeConvertY(proc.y3_max);
+            biomass.available = biomass.harvestMin !== null || biomass.yieldMin !== null;
+        }
+    }
+
+    // Determine latest model
+    let isTasumiLatest = false;
+    let isBiomassLatest = false;
+
+    if (tasumi.available && biomass.available) {
+        if (biomass.timestamp > tasumi.timestamp) {
+            isBiomassLatest = true;
+        } else {
+            // Tasumi is strictly newer OR timestamps are equal (Tasumi gets priority)
+            isTasumiLatest = true;
+        }
+    } else if (tasumi.available) {
+        isTasumiLatest = true;
+    } else if (biomass.available) {
+        isBiomassLatest = true;
+    }
+
+    return {
+        tasumi,
+        biomass,
+        isTasumiLatest,
+        isBiomassLatest,
+        latestModel: isTasumiLatest ? 'TASUMI' : (isBiomassLatest ? 'BIOMASS' : null)
+    };
+}
+
+function renderModelCell(tVal, bVal, isTasumiLatest, isBiomassLatest, tDate, bDate) {
+    const lBadgeHtml = ` <span style="background: rgba(6, 182, 212, 0.15); color: #06b6d4; font-size: 0.65rem; padding: 1px 4px; border-radius: 3px; font-weight: 600; display: inline-block; vertical-align: middle; margin-left: 3px;" title="Latest Model Prediction">L</span>`;
+
+    const formatVal = (v) => {
+        if (v === null || v === undefined || v === 'NA' || isNaN(v)) return '-';
+        if (typeof fmtSmart === 'function') return fmtSmart(v);
+        const s = Number(v).toFixed(2);
+        return s.endsWith('.00') ? s.slice(0, -3) : s;
+    };
+
+    const hasTVal = tVal !== null && tVal !== undefined && tVal !== 'NA' && !isNaN(tVal);
+    const hasBVal = bVal !== null && bVal !== undefined && bVal !== 'NA' && !isNaN(bVal);
+
+    const tDisplay = hasTVal ? formatVal(tVal) : '-';
+    const bDisplay = hasBVal ? formatVal(bVal) : '-';
+
+    const tBadge = (isTasumiLatest && hasTVal) ? lBadgeHtml : '';
+    const bBadge = (isBiomassLatest && hasBVal) ? lBadgeHtml : '';
+
+    const tColor = hasTVal ? 'var(--text-primary)' : 'var(--text-secondary)';
+    const bColor = hasBVal ? 'var(--text-primary)' : 'var(--text-secondary)';
+
+    const tTitle = tDate ? `Tasumi Date: ${tDate}` : 'Tasumi Model';
+    const bTitle = bDate ? `Biomass Date: ${bDate}` : 'Biomass Model';
+
+    return `
+        <div style="font-size: 0.8rem; line-height: 1.35; white-space: nowrap;" title="${tTitle}">
+            <span style="font-weight: 600; color: #818cf8;">T:</span> <span style="color: ${tColor};">${tDisplay}</span>${tBadge}
+        </div>
+        <div style="font-size: 0.8rem; line-height: 1.35; margin-top: 2px; white-space: nowrap;" title="${bTitle}">
+            <span style="font-weight: 600; color: #34d399;">B:</span> <span style="color: ${bColor};">${bDisplay}</span>${bBadge}
+        </div>
+    `;
+}
+
 if (typeof module !== 'undefined') {
     module.exports = {
         isWithinAnalysisWindow,
@@ -1746,6 +1954,8 @@ if (typeof module !== 'undefined') {
         formatTrendDate,
         extractPlotMultiModelData,
         resolveYieldPredictionRules,
-        sortYieldBaseData
+        sortYieldBaseData,
+        getPlotPredictionModelComparison,
+        renderModelCell
     };
 }

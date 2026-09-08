@@ -1260,7 +1260,10 @@
                 <table id="all-plots-table" class="plots-table" style="width: 100%; border-collapse: collapse;">
                     <thead>
                         <tr style="background: rgba(139, 92, 246, 0.1); text-align: left;">
-                            <th style="padding: 1rem; border-bottom: 2px solid var(--secondary-color);">Plot Name</th>
+                            <th id="th-plot-name"
+                                style="padding: 1rem; border-bottom: 2px solid var(--secondary-color); cursor: pointer;"
+                                onclick="sortTable('name')">Plot Name <span id="sort-icon-name"
+                                    class="ml-1"></span></th>
                             <th id="th-audited-area"
                                 style="padding: 1rem; border-bottom: 2px solid var(--secondary-color); cursor: pointer;"
                                 onclick="sortTable('auditedArea')">Audited Area <span id="sort-icon-auditedArea"

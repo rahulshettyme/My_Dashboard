@@ -19,8 +19,9 @@ The Yield Prediction API (`/services/farm/api/plot-risk/yield?caIds={caIds}`) ma
 
 ### Strict 3-Rule Hierarchy
 1. **Rule 1: Use `TASUMI` data as yield and harvest data if present**:
-   - If one or more records with `modelType: "TASUMI"` (case-insensitive) are present, the system MUST select this record.
-   - If multiple `TASUMI` records exist, the most recent record (determined by `modifiedDateTime` $\to$ `predictionDate` $\to$ `createdDateTime` DESC) is selected as the authoritative data.
+   - If a record with `modelType: "TASUMI"` (case-insensitive) is present, the system MUST select this record.
+   - **Single Record Domain Invariant**: Upstream API responses will **always return at most a single `TASUMI` record per plot** (there will never be multiple `TASUMI` records). Code-level sorting or indexing `tasumiRecords[0]` is a defensive safety net.
+   - **Crucial Key Constraint for TASUMI**: For `TASUMI`, remote sensing calculations strictly correspond to the `predictionDate` key (e.g. `2026-08-14`). Database record update timestamps (`modifiedDateTime`, e.g. `2026-09-04`) must NEVER override the model's actual `predictionDate`. The `predictionDate` is compared against the Biomass latest cutoff date when evaluating the `L` (Latest) badge in the base data table.
 2. **Rule 2: If `TASUMI` is not present, use the latest `BIOMASS_DAYS` values (do not aggregate all biomass dates)**:
    - If no `TASUMI` record exists, the system checks for records with `modelType: "BIOMASS_DAYS"`.
    - If multiple `BIOMASS_DAYS` records exist, the most recent record (by timestamp DESC) is selected.
@@ -136,9 +137,41 @@ To guarantee consistent presentation across the dashboard, all base yield record
    - `processData(rows)` enforces natural ascending sort across all inputs (API and Excel uploads), establishing sorted order for `globalData`.
    - The Base Plot Data table defaults to Plot Name Ascending (`sort-by` dropdown default), with toggleable Asc/Desc support.
 
+### F. Multi-Model Prediction Display in Base Data Table (TASUMI & BIOMASS)
+To align with the Crop Health satellite data table presentation and provide transparent multi-model visibility, the prediction columns in the base data table (`#all-plots-table`):
+- `Pred Harv Min`
+- `Pred Harv Max`
+- `Pred Yield Min`
+- `Pred Yield Max`
+
+display values for both AI prediction models simultaneously:
+1. **Model Prefixes**:
+   - `T:` for Tasumi model predictions (styled with `#818cf8` indigo accent).
+   - `B:` for Biomass model predictions (styled with `#34d399` emerald accent).
+2. **Strict Vertical Ordering (Tasumi Always on Top)**:
+   - Line 1: `T: <value>` (Tasumi is displayed on top unconditionally).
+   - Line 2: `B: <value>` (Biomass is displayed on the bottom line).
+   - Both lines maintain consistent row heights matching 2-line cells in the table (e.g. `Re-est Harvest` and `Re-est Yield`).
+3. **Latest Prediction Indicator (`L` Badge)**:
+   - An inline cyan badge (`L`) with styling matching the Health satellite table (`background: rgba(6, 182, 212, 0.15); color: #06b6d4; font-size: 0.65rem; font-weight: 600; padding: 1px 4px; border-radius: 3px;`) is appended exclusively to the chronologically newer model:
+     - **Tasumi Timestamp**: Extracted strictly from `predictionDate` (with fallback to `createdDateTime` / `modifiedDateTime` only if `predictionDate` is missing), ensuring that remote sensing predictions (e.g. `2026-08-14`) are not masked by later database modification timestamps (`2026-09-04`).
+     - **Biomass Timestamp**: Extracted from the latest `gddPredictions` entry's `cutoff_date` (or `modifiedDateTime` / `predictionDate` / `createdDateTime` fallback).
+     - **Precedence**: If both timestamps are identical, Tasumi receives the `L` badge per Priority Rule 1.
+     - If only one model has valid data for a plot, that model receives the `L` badge.
+     - If a model is absent or evaluated as `'NA'`, it renders a gray `-` and receives no `L` badge.
+4. **Column Sorting Support**:
+   - All columns in `#all-plots-table`, including `Plot Name`, `Audited Area`, `Exp/Re-est Harvest`, and `Pred Harv/Yield Min/Max`, support interactive ascending/descending sorting via `sortTable(column)` with header indicator arrows (`▲` / `▼`).
+
 ---
 
 ## 4. Change Log (Feature & Logic Audit Trail)
+* **2026-09-08**: Updated Base Data Table of Yield for Multi-Model Display (TASUMI & BIOMASS):
+  1. Enforced `predictionDate` key for TASUMI model instead of `modifiedDateTime` (e.g. `predictionDate: 2026-08-14` vs `modifiedDateTime: 2026-09-04`), guaranteeing accurate chronological comparison with Biomass cutoff dates (e.g. `2026-08-29`).
+  2. Implemented `getPlotPredictionModelComparison(d, yieldUnit, harvestUnit)` and `renderModelCell()` to extract and render both Tasumi (`T:`) and Biomass (`B:`) predictions.
+  3. Enforced Tasumi on top line always (`T:`) and Biomass on bottom line (`B:`).
+  4. Added inline `L` badge for the chronologically latest model based on timestamp comparison.
+  5. Enabled interactive column sorting for all table headers (`Plot Name`, `auditedArea`, `h1`, `h2`, `h3_min`, `h3_max`, `y1`, `y2`, `y3_min`, `y3_max`) with indicator arrows.
+  6. Added Test 25 to regression suite (25/25 tests passing: 11 existing, 14 new).
 * **2026-09-07**: Implemented natural alphanumeric ascending sorting for Base Yield Data:
   1. Added `sortYieldBaseData(rows)` ensuring `globalData` is sorted by plot name ascending (`localeCompare` with `numeric: true`).
   2. Updated `generateDataFromAPI()` and `processData(rows)` to sort base plot yield arrays upon load.
