@@ -1907,25 +1907,59 @@ function createTrendChart(canvas, opts) {
     const pointBgColors = opts.labels.map((_, i) => (i === opts.tasumiIndex ? (isDark ? '#6366f1' : '#4d7c0f') : primaryLineColor));
     const pointBorderColors = opts.labels.map((_, i) => (i === opts.tasumiIndex ? '#ffffff' : primaryLineColor));
 
-    const datasets = [
-        {
-            label: opts.metricType === 'yield' ? 'Forecasted Yield' : 'Forecasted Harvest',
-            data: opts.trendData,
-            borderColor: primaryLineColor,
-            backgroundColor: fillColor,
-            fill: true,
-            tension: 0.25,
-            borderWidth: 2.5,
-            pointRadius: pointRadii,
-            pointHoverRadius: 8,
-            pointBackgroundColor: pointBgColors,
-            pointBorderColor: pointBorderColors,
-            pointBorderWidth: 2,
-            order: 1
-        }
-    ];
+    const hasMinMax = Array.isArray(opts.minData) && opts.minData.length > 0 &&
+                      Array.isArray(opts.maxData) && opts.maxData.length > 0;
 
-    // Reference line: Standard (Expected)
+    const datasets = [];
+
+    // 1. Min and Max confidence band surrounding the predicted average
+    if (hasMinMax) {
+        // Upper boundary (Max Predicted)
+        datasets.push({
+            label: 'Forecast Max',
+            data: opts.maxData,
+            borderColor: isDark ? 'rgba(132, 204, 22, 0.45)' : 'rgba(74, 222, 128, 0.65)',
+            borderWidth: 1.2,
+            pointRadius: 0,
+            pointHoverRadius: 0,
+            fill: false,
+            tension: 0.25,
+            order: 2
+        });
+
+        // Lower boundary (Min Predicted) with shaded fill between Min and Max
+        datasets.push({
+            label: 'Forecast Min',
+            data: opts.minData,
+            borderColor: isDark ? 'rgba(132, 204, 22, 0.45)' : 'rgba(74, 222, 128, 0.65)',
+            borderWidth: 1.2,
+            pointRadius: 0,
+            pointHoverRadius: 0,
+            backgroundColor: isDark ? 'rgba(132, 204, 22, 0.2)' : 'rgba(187, 247, 208, 0.55)',
+            fill: '-1', // fills to preceding dataset (Forecast Max)
+            tension: 0.25,
+            order: 3
+        });
+    }
+
+    // 2. Central Average Prediction line (Forecasted Yield / Forecasted Harvest)
+    datasets.push({
+        label: opts.metricType === 'yield' ? 'Forecasted Yield' : 'Forecasted Harvest',
+        data: opts.trendData,
+        borderColor: primaryLineColor,
+        backgroundColor: 'transparent',
+        fill: false,
+        tension: 0.25,
+        borderWidth: 2.5,
+        pointRadius: pointRadii,
+        pointHoverRadius: 8,
+        pointBackgroundColor: pointBgColors,
+        pointBorderColor: pointBorderColors,
+        pointBorderWidth: 2,
+        order: 1
+    });
+
+    // 3. Reference line: Standard (Expected)
     if (opts.stdVal > 0) {
         datasets.push({
             label: opts.metricType === 'yield' ? 'Standard Yield' : 'Standard Harvest',
@@ -1935,11 +1969,11 @@ function createTrendChart(canvas, opts) {
             borderWidth: 1.8,
             pointRadius: 0,
             fill: false,
-            order: 2
+            order: 4
         });
     }
 
-    // Reference line: Re-Estimated
+    // 4. Reference line: Re-Estimated
     if (opts.reVal > 0 && Math.abs(opts.reVal - opts.stdVal) > 0.01) {
         datasets.push({
             label: opts.metricType === 'yield' ? 'Re-Estimated Yield' : 'Re-Estimated Harvest',
@@ -1949,21 +1983,21 @@ function createTrendChart(canvas, opts) {
             borderWidth: 1.8,
             pointRadius: 0,
             fill: false,
-            order: 3
+            order: 5
         });
     }
 
-    // Reference line: Maximum Attainable
+    // 5. Reference line: Maximum Attainable
     if (opts.maxVal > 0) {
         datasets.push({
             label: opts.metricType === 'yield' ? 'Maximum Attainable Yield' : 'Maximum Attainable Harvest',
             data: opts.labels.map(() => opts.maxVal),
             borderColor: isDark ? '#64748b' : '#334155',
             borderDash: [6, 6],
-            borderWidth: 1.5,
+            borderWidth: 1.8,
             pointRadius: 0,
             fill: false,
-            order: 4
+            order: 6
         });
     }
 
@@ -1989,7 +2023,15 @@ function createTrendChart(canvas, opts) {
                         boxWidth: 12,
                         boxHeight: 2,
                         usePointStyle: false,
-                        font: { size: opts.isModal ? 12 : 10 }
+                        font: { size: opts.isModal ? 12 : 10 },
+                        filter: function(item) {
+                            const t = item.text || '';
+                            if (t === 'Forecast Max' || t === 'Forecast Min' ||
+                                t === 'Harvest Max' || t === 'Harvest Min') {
+                                return false;
+                            }
+                            return true;
+                        }
                     }
                 },
                 tooltip: {
@@ -2001,7 +2043,8 @@ function createTrendChart(canvas, opts) {
                     padding: 10,
                     displayColors: false,
                     filter: function(tooltipItem) {
-                        return tooltipItem.datasetIndex === 0;
+                        const lbl = tooltipItem.dataset.label || '';
+                        return lbl.startsWith('Forecasted');
                     },
                     callbacks: {
                         title: function(items) {
@@ -2027,6 +2070,12 @@ function createTrendChart(canvas, opts) {
             },
             scales: {
                 x: {
+                    title: {
+                        display: opts.isModal,
+                        text: 'Year (2026)',
+                        color: textColor,
+                        font: { size: 10, weight: '500' }
+                    },
                     grid: { color: gridColor, drawBorder: false },
                     ticks: {
                         color: textColor,
@@ -2038,6 +2087,12 @@ function createTrendChart(canvas, opts) {
                     }
                 },
                 y: {
+                    title: {
+                        display: opts.isModal,
+                        text: opts.metricType === 'yield' ? `Yield (${opts.unitLabel})` : `Harvest (${opts.unitLabel})`,
+                        color: textColor,
+                        font: { size: 10, weight: '500' }
+                    },
                     grid: { color: gridColor, drawBorder: false },
                     ticks: {
                         color: textColor,
@@ -2206,10 +2261,21 @@ function renderModalTrendChart(modelData, tab) {
         if (predLabel) predLabel.textContent = 'Forecasted Yield';
         if (stdVal) stdVal.textContent = fmtSmart(modelData.stdYield);
         if (stdUnit) stdUnit.textContent = modelData.yieldUnitLabel;
+
+        const lastIdx = modelData.yieldTrend.length - 1;
+        const latestMin = (modelData.tasumi && modelData.tasumi.yieldMin !== null)
+            ? modelData.tasumi.yieldMin
+            : (modelData.yieldMinTrend && modelData.yieldMinTrend[lastIdx] !== undefined ? modelData.yieldMinTrend[lastIdx] : null);
+        const latestMax = (modelData.tasumi && modelData.tasumi.yieldMax !== null)
+            ? modelData.tasumi.yieldMax
+            : (modelData.yieldMaxTrend && modelData.yieldMaxTrend[lastIdx] !== undefined ? modelData.yieldMaxTrend[lastIdx] : null);
+
         if (predVal) {
-            predVal.textContent = modelData.tasumi.yieldMin !== null
-                ? `${fmtSmart(modelData.tasumi.yieldMin)} - ${fmtSmart(modelData.tasumi.yieldMax)}`
-                : `${fmtSmart(modelData.yieldTrend[modelData.yieldTrend.length - 1])}`;
+            if (latestMin !== null && latestMax !== null) {
+                predVal.textContent = `${fmtSmart(latestMin)} - ${fmtSmart(latestMax)}`;
+            } else {
+                predVal.textContent = `${fmtSmart(modelData.yieldTrend[lastIdx])}`;
+            }
         }
         if (predUnit) predUnit.textContent = modelData.yieldUnitLabel;
         if (chartTitle) chartTitle.textContent = 'Yield Forecast Trend';
@@ -2218,13 +2284,33 @@ function renderModalTrendChart(modelData, tab) {
         if (predLabel) predLabel.textContent = 'Forecasted Harvest';
         if (stdVal) stdVal.textContent = fmtSmart(modelData.stdHarvest);
         if (stdUnit) stdUnit.textContent = modelData.harvestUnitLabel;
+
+        const lastIdx = modelData.harvestTrend.length - 1;
+        const latestMin = (modelData.tasumi && modelData.tasumi.harvestMin !== null)
+            ? modelData.tasumi.harvestMin
+            : (modelData.harvestMinTrend && modelData.harvestMinTrend[lastIdx] !== undefined ? modelData.harvestMinTrend[lastIdx] : null);
+        const latestMax = (modelData.tasumi && modelData.tasumi.harvestMax !== null)
+            ? modelData.tasumi.harvestMax
+            : (modelData.harvestMaxTrend && modelData.harvestMaxTrend[lastIdx] !== undefined ? modelData.harvestMaxTrend[lastIdx] : null);
+
         if (predVal) {
-            predVal.textContent = modelData.tasumi.harvestMin !== null
-                ? `${fmtSmart(modelData.tasumi.harvestMin)} - ${fmtSmart(modelData.tasumi.harvestMax)}`
-                : `${fmtSmart(modelData.harvestTrend[modelData.harvestTrend.length - 1])}`;
+            if (latestMin !== null && latestMax !== null) {
+                predVal.textContent = `${fmtSmart(latestMin)} - ${fmtSmart(latestMax)}`;
+            } else {
+                predVal.textContent = `${fmtSmart(modelData.harvestTrend[lastIdx])}`;
+            }
         }
         if (predUnit) predUnit.textContent = modelData.harvestUnitLabel;
-        if (chartTitle) chartTitle.textContent = 'Harvest Analysis Trend';
+        if (chartTitle) chartTitle.textContent = 'Harvest Forecast Trend';
+    }
+
+    const updateTimeEl = document.getElementById('modal-update-time');
+    if (updateTimeEl) {
+        const dateStr = (modelData.tasumi && modelData.tasumi.date) ||
+                        (modelData.labels && modelData.labels.length > 0 ? modelData.labels[modelData.labels.length - 1] : null);
+        if (dateStr) {
+            updateTimeEl.textContent = `Showing latest data. Last updated ${dateStr}.`;
+        }
     }
 
     if (modalTrendChartInstance) modalTrendChartInstance.destroy();

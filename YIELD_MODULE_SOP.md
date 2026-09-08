@@ -128,6 +128,11 @@ When a plot has `modelType: "BIOMASS_DAYS"` present in its prediction records (`
      - **Min Predicted**: Lower boundary prediction value (`yieldMin` or `productionMin`).
      - **Average**: Central average prediction value (`yieldAvg` or `productionAvg`).
    - Standard reference lines (Standard, Re-Estimated, Maximum Attainable) are filtered from the point tooltip so the hover dialog remains dedicated to the predicted confidence range and mean for the hovered date.
+5. **Min-Max Shaded Confidence Interval Band**:
+   - The chart renders upper (`Forecast Max`) and lower (`Forecast Min`) prediction boundary lines surrounding the central predicted average line (`Forecasted Yield` / `Forecasted Harvest`).
+   - The area between `Forecast Min` and `Forecast Max` is filled with a translucent green band (`rgba(187, 247, 208, 0.55)` in light mode, `rgba(132, 204, 22, 0.2)` in dark mode) via Chart.js relative filler (`fill: '-1'`), illustrating the model's confidence interval at each cutoff date.
+   - The modal summary header displays the latest prediction interval as a range (e.g., `1,740.15 - 1,923.07 Kilogram/Acre`).
+   - Chart legends filter out internal boundary datasets, cleanly presenting `Forecasted Yield`, `Maximum Attainable Yield`, `Standard Yield`, and `Re-Estimated Yield`.
 
 ### E. Base Yield Data Ordering & Natural Sorting
 To guarantee consistent presentation across the dashboard, all base yield records (`globalData`), API-generated plot arrays, and the base plot data table (`#base-yield-table-wrapper`) are sorted ascending by plot name (`Plot Name` / `CA Name`):
@@ -180,6 +185,11 @@ display values for both AI prediction models simultaneously:
 ---
 
 ## 4. Change Log (Feature & Logic Audit Trail)
+* **2026-09-08**: Visualized Min and Max Confidence Interval Band Around Predicted Average Value:
+  1. Rendered upper (`Forecast Max`) and lower (`Forecast Min`) boundary lines with translucent green fill (`fill: '-1'`) around the central predicted average curve in `createTrendChart()`.
+  2. Updated modal summary header to display the min-max forecast range (e.g. `1,740.15 - 1,923.07`) matching Cropin UI.
+  3. Added X-axis (`Year (2026)`) and Y-axis (`Yield (Unit)`) scale titles and filtered internal boundary datasets from legend.
+  4. Regression test suite verified (26/26 tests passing).
 * **2026-09-08**: Integrated Variety API (`/services/farm/api/varieties/<varietyId>`) and Max Attainable Yield in Base Table:
   1. Implemented backend proxy endpoint `GET /api/user-aggregate/variety-details` and `extractVarietyYieldDetails()` in `server.js`.
   2. Implemented in-memory promise caching (`varietyDetailsCache` in `aggregate_script_backup.js`) to ensure only 1 API call per unique `varietyId` regardless of the number of plots.
