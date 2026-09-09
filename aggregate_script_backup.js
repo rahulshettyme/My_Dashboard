@@ -2023,6 +2023,24 @@ function extractPlotMultiModelData(d) {
     };
 }
 
+/**
+ * Formats Y-axis tick values cleanly without duplicate rounded labels (e.g. 1.5k, 2k, 2.5k instead of 2k, 2k, 3k).
+ */
+function formatTrendYTick(v) {
+    if (v === null || v === undefined || isNaN(v)) return '';
+    if (v === 0) return '0';
+    const absVal = Math.abs(v);
+    if (absVal >= 1000000) {
+        const val = v / 1000000;
+        return (val % 1 === 0 ? val.toFixed(0) : parseFloat(val.toFixed(2))) + 'M';
+    }
+    if (absVal >= 1000) {
+        const val = v / 1000;
+        return (val % 1 === 0 ? val.toFixed(0) : parseFloat(val.toFixed(2))) + 'k';
+    }
+    return v % 1 === 0 ? v.toString() : parseFloat(v.toFixed(2)).toString();
+}
+
 function createTrendChart(canvas, opts) {
     const isDark = !opts.isModal;
     const textColor = isDark ? '#94a3b8' : '#64748b';
@@ -2226,7 +2244,7 @@ function createTrendChart(canvas, opts) {
                         color: textColor,
                         font: { size: opts.isModal ? 11 : 9 },
                         callback: function(v) {
-                            return v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v;
+                            return formatTrendYTick(v);
                         }
                     }
                 }

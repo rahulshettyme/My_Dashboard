@@ -2083,6 +2083,24 @@ function formatCardLevelDiff(predMin, predMax, baseline) {
     };
 }
 
+/**
+ * Formats Y-axis tick values cleanly without duplicate rounded labels (e.g. 1.5k, 2k, 2.5k instead of 2k, 2k, 3k).
+ */
+function formatTrendYTick(v) {
+    if (v === null || v === undefined || isNaN(v)) return '';
+    if (v === 0) return '0';
+    const absVal = Math.abs(v);
+    if (absVal >= 1000000) {
+        const val = v / 1000000;
+        return (val % 1 === 0 ? val.toFixed(0) : parseFloat(val.toFixed(2))) + 'M';
+    }
+    if (absVal >= 1000) {
+        const val = v / 1000;
+        return (val % 1 === 0 ? val.toFixed(0) : parseFloat(val.toFixed(2))) + 'k';
+    }
+    return v % 1 === 0 ? v.toString() : parseFloat(v.toFixed(2)).toString();
+}
+
 if (typeof module !== 'undefined') {
     module.exports = {
         isWithinAnalysisWindow,
@@ -2107,6 +2125,7 @@ if (typeof module !== 'undefined') {
         extractVarietyYieldDetails,
         isWithinPredictedRange,
         calculateClosestDiff,
-        formatCardLevelDiff
+        formatCardLevelDiff,
+        formatTrendYTick
     };
 }

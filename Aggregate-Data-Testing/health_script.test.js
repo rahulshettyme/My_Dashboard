@@ -929,6 +929,46 @@ const tests = [
             const aggHarvExpFormatted = healthScript.formatCardLevelDiff(aggHarvMin, aggHarvMax, aggHarvExp);
             assert.strictEqual(aggHarvExpFormatted.text, '↓ 5.00%', 'Should compute closest boundary 95 vs 100 (-5.00%)');
         }
+    },
+    {
+        name: 'formatTrendYTick_scale_formatting_no_duplicate_labels',
+        fn: () => {
+            // Case 1: Exact user screenshot scenario (500 to 3000 in steps of 500)
+            // Old bug: [500, 1000, 1500, 2000, 2500, 3000] produced ['500', '1k', '2k', '2k', '3k', '3k'] (duplicates!)
+            // New fix: produces ['500', '1k', '1.5k', '2k', '2.5k', '3k'] with 0 duplicate labels.
+            const userValues = [500, 1000, 1500, 2000, 2500, 3000];
+            const formatted = userValues.map(healthScript.formatTrendYTick);
+            assert.deepStrictEqual(
+                formatted,
+                ['500', '1k', '1.5k', '2k', '2.5k', '3k'],
+                'Should format intermediate thousand ticks with decimals, eliminating duplicate labels'
+            );
+            const uniqueSet = new Set(formatted);
+            assert.strictEqual(uniqueSet.size, formatted.length, 'Every Y-axis tick label must be unique');
+
+            // Case 2: Intermediate quarter-thousand steps (e.g. Harvest 1250, 2750)
+            assert.strictEqual(healthScript.formatTrendYTick(1250), '1.25k');
+            assert.strictEqual(healthScript.formatTrendYTick(2750), '2.75k');
+            assert.strictEqual(healthScript.formatTrendYTick(10000), '10k');
+            assert.strictEqual(healthScript.formatTrendYTick(12500), '12.5k');
+
+            // Case 3: Decimal yield values in Tonnes/Ha (e.g. 0 to 12 Tonnes/Ha)
+            assert.strictEqual(healthScript.formatTrendYTick(0), '0');
+            assert.strictEqual(healthScript.formatTrendYTick(2.5), '2.5');
+            assert.strictEqual(healthScript.formatTrendYTick(5), '5');
+            assert.strictEqual(healthScript.formatTrendYTick(7.5), '7.5');
+            assert.strictEqual(healthScript.formatTrendYTick(10), '10');
+
+            // Case 4: Millions (large harvest projects)
+            assert.strictEqual(healthScript.formatTrendYTick(1000000), '1M');
+            assert.strictEqual(healthScript.formatTrendYTick(1500000), '1.5M');
+            assert.strictEqual(healthScript.formatTrendYTick(2000000), '2M');
+
+            // Case 5: Edge cases (null, undefined, NaN)
+            assert.strictEqual(healthScript.formatTrendYTick(null), '');
+            assert.strictEqual(healthScript.formatTrendYTick(undefined), '');
+            assert.strictEqual(healthScript.formatTrendYTick(NaN), '');
+        }
     }
 ];
 

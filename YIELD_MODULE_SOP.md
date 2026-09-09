@@ -160,6 +160,12 @@ When a plot has `modelType: "BIOMASS_DAYS"` present in its prediction records (`
    - The area between `Forecast Min` and `Forecast Max` is filled with a translucent green band (`rgba(187, 247, 208, 0.55)` in light mode, `rgba(132, 204, 22, 0.2)` in dark mode) via Chart.js relative filler (`fill: '-1'`), illustrating the model's confidence interval at each cutoff date.
    - The modal summary header displays the latest prediction interval as a range (e.g., `1,740.15 - 1,923.07 Kilogram/Acre`).
    - Chart legends filter out internal boundary datasets, cleanly presenting `Forecasted Yield`, `Maximum Attainable Yield`, `Standard Yield`, and `Re-Estimated Yield`.
+6. **Y-Axis Scale Dynamic Number Formatting (Zero Duplicate Labels)**:
+   - Ticks on the vertical Y-axis format values dynamically via `formatTrendYTick(v)`:
+     - Values $\ge 1,000,000$: formatted in Millions with clean decimals without trailing zeros (`1.5M`, `2M`).
+     - Values $\ge 1,000$: formatted in Thousands (`1.5k`, `2k`, `2.5k`, `3k`), preserving exact decimals on fractional thousand ticks (`1.5k`, `2.5k`), strictly eliminating duplicate rounded labels (e.g. previous bug of `2k, 2k, 3k, 3k`).
+     - Values $< 1,000$: formatted as clean integers or decimals (`500`, `7.5`, `0`).
+   - Applied universally to both Plot-Level Yield and Harvest trend charts, as well as the Enlarge Modal dialog.
 
 ### E. Base Yield Data Ordering & Natural Sorting
 To guarantee consistent presentation across the dashboard, all base yield records (`globalData`), API-generated plot arrays, and the base plot data table (`#base-yield-table-wrapper`) are sorted ascending by plot name (`Plot Name` / `CA Name`):
@@ -212,6 +218,14 @@ display values for both AI prediction models simultaneously:
 ---
 
 ## 4. Change Log (Feature & Logic Audit Trail)
+* **2026-09-09**: Fixed Y-Axis Scale Values in Plot-Level Yield & Harvest Trend Charts (Eliminated Duplicate Labels):
+  1. Root cause: Y-axis tick callback used `(v / 1000).toFixed(0) + 'k'`, which rounded non-exact thousand ticks (e.g. 1500 $\to$ 2k, 2500 $\to$ 3k), causing duplicate consecutive labels (`2k, 2k, 3k, 3k`).
+  2. Implemented `formatTrendYTick(v)` in `aggregate_script_backup.js` and `health_script.js`:
+     - Values $\ge 1,000$: dynamically formats with decimals when needed (`1.5k`, `2k`, `2.5k`, `3k`) with no trailing zeros.
+     - Values $< 1,000$: cleanly displays numeric value (`500`, `7.5`, `0`).
+     - Values $\ge 1,000,000$: formats in Millions (`1.5M`, `2M`).
+  3. Verified fix applies universally to Plot Yield trend chart, Plot Harvest trend chart, and Enlarge Modal dialog.
+  4. Added Test 28 to regression test suite verifying distinct, accurate Y-axis tick formatting (28/28 tests passing: 11 existing, 17 new).
 * **2026-09-08**: Extended Card Level Percentage & 'Within Range' Logic to Aggregated Cards:
   1. Added Card Level metric rows to project-wide **Aggregated Yield Analysis** (`#agg-card-level`, `#agg-card-level-exp`, `#agg-card-level-re`) and **Aggregated Harvest Analysis** (`#agg-harvest-card-level`, `#agg-harvest-card-level-exp`, `#agg-harvest-card-level-re`) cards in `aggregate_dashboard_backup.html`.
   2. Implemented identical closest boundary percentage difference and within-range detection in `processData()` for aggregate yield and harvest.
