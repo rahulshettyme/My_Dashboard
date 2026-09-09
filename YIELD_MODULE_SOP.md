@@ -124,6 +124,16 @@ Aggregate values are computed by converting all plot values into base standard u
   $$\text{Agg Re Yield} = \frac{\text{Agg Re Harvest}}{\text{Total Area}}$$
   $$\text{Agg AI Yield Min} = \frac{\sum (Y_{3\text{min}} \times \text{Plot Area (Ha)})}{\text{Total Area}}$$
   $$\text{Agg AI Yield Max} = \frac{\sum (Y_{3\text{max}} \times \text{Plot Area (Ha)})}{\text{Total Area}}$$
+- **Card Level Percentage Difference & Within Range Logic (Aggregated Cards)**:
+  - Applied identically to project-wide aggregate cards:
+    - **Aggregated Yield Analysis** (`#agg-card-level`, `#agg-card-level-exp`, `#agg-card-level-re`):
+      - Evaluates aggregate yield baselines ($\text{Agg Exp Yield}$, $\text{Agg Re Yield}$) against the aggregate AI yield range $[\text{Agg AI Yield Min}, \text{Agg AI Yield Max}]$.
+      - Primary baseline: $\text{Agg Re Yield}$ if present ($> 0$), else $\text{Agg Exp Yield}$.
+      - If baseline is within range, displays `👍 Within range`; otherwise displays the percentage difference from the closer boundary ($\text{min}$ or $\text{max}$).
+    - **Aggregated Harvest Analysis** (`#agg-harvest-card-level`, `#agg-harvest-card-level-exp`, `#agg-harvest-card-level-re`):
+      - Evaluates aggregate harvest baselines ($\text{Agg Exp Harvest}$, $\text{Agg Re Harvest}$) against the aggregate AI harvest range $[\text{Agg AI Harvest Min}, \text{Agg AI Harvest Max}]$.
+      - Primary baseline: $\text{Agg Re Harvest}$ if present ($> 0$), else $\text{Agg Exp Harvest}$.
+      - If baseline is within range, displays `👍 Within range`; otherwise displays the percentage difference from the closer boundary ($\text{min}$ or $\text{max}$).
 
 ### D. Multi-Model Trend Graph Visualization (BIOMASS_DAYS & TASUMI)
 When a plot has `modelType: "BIOMASS_DAYS"` present in its prediction records (`yieldRawRecords`), the dashboard displays interactive forecast trend charts within the plot-level cards and in an expandable "Yield & Growth" modal dialog:
@@ -202,6 +212,12 @@ display values for both AI prediction models simultaneously:
 ---
 
 ## 4. Change Log (Feature & Logic Audit Trail)
+* **2026-09-08**: Extended Card Level Percentage & 'Within Range' Logic to Aggregated Cards:
+  1. Added Card Level metric rows to project-wide **Aggregated Yield Analysis** (`#agg-card-level`, `#agg-card-level-exp`, `#agg-card-level-re`) and **Aggregated Harvest Analysis** (`#agg-harvest-card-level`, `#agg-harvest-card-level-exp`, `#agg-harvest-card-level-re`) cards in `aggregate_dashboard_backup.html`.
+  2. Implemented identical closest boundary percentage difference and within-range detection in `processData()` for aggregate yield and harvest.
+  3. Enforced baseline selection precedence: Re-estimated total/yield when present ($> 0$), falling back to Expected.
+  4. Updated `diffIds` in `resetData()` to cleanly reset all aggregated card level elements.
+  5. Added Case 7 to Test 27 in regression suite verifying aggregated card level calculations (27/27 tests passing: 11 existing, 16 new).
 * **2026-09-08**: Added 'Within range' & Green Thumbs-Up Status to Plot Card Level Logic:
   1. Implemented interval check: If the baseline value (Re-estimated if present, else Expected) falls within the predicted interval ($\min(\text{predMin}, \text{predMax}) \le \text{baseline} \le \max(\text{predMin}, \text{predMax})$), card level displays **Within range** with an inline green thumbs-up icon (`👍 Within range`).
   2. Maintained closest boundary percentage difference calculation ($\text{min}$ or $\text{max}$) exclusively when the baseline falls outside the predicted interval.

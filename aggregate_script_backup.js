@@ -1157,11 +1157,20 @@ function processData(rows) {
             updateElement('agg-ai-harvest-max', fmtSmart(aiHarvestMaxTonSum));
             calculateDataTestRangeDiff('agg-ai-harvest-diff-exp', aiHarvestMinTonSum, aiHarvestMaxTonSum, expHarvestTonSum);
             calculateDataTestRangeDiff('agg-ai-harvest-diff-re', aiHarvestMinTonSum, aiHarvestMaxTonSum, reHarvestTonSum);
+
+            // Card level for Aggregate Harvest
+            const aggHarvestPrimaryBaseline = (reHarvestTonSum > 0) ? reHarvestTonSum : expHarvestTonSum;
+            renderClosestDiffElement('agg-harvest-card-level', aiHarvestMinTonSum, aiHarvestMaxTonSum, aggHarvestPrimaryBaseline);
+            renderClosestDiffElement('agg-harvest-card-level-exp', aiHarvestMinTonSum, aiHarvestMaxTonSum, expHarvestTonSum);
+            renderClosestDiffElement('agg-harvest-card-level-re', aiHarvestMinTonSum, aiHarvestMaxTonSum, reHarvestTonSum);
         } else {
             updateElement('agg-ai-harvest-min', '-');
             updateElement('agg-ai-harvest-max', '-');
             updateElement('agg-ai-harvest-diff-exp', '-');
             updateElement('agg-ai-harvest-diff-re', '-');
+            updateElement('agg-harvest-card-level', '-');
+            updateElement('agg-harvest-card-level-exp', '-');
+            updateElement('agg-harvest-card-level-re', '-');
         }
 
         // Aggregate Yield (Tonnes/Ha)
@@ -1179,11 +1188,20 @@ function processData(rows) {
             updateElement('agg-ai-yield-max', fmtSmart(aiMaxYieldAgg));
             calculateDataTestRangeDiff('agg-ai-diff-exp', aiMinYieldAgg, aiMaxYieldAgg, expYieldAgg);
             calculateDataTestRangeDiff('agg-ai-diff-re', aiMinYieldAgg, aiMaxYieldAgg, reYieldAgg);
+
+            // Card level for Aggregate Yield
+            const aggYieldPrimaryBaseline = (reYieldAgg > 0) ? reYieldAgg : expYieldAgg;
+            renderClosestDiffElement('agg-card-level', aiMinYieldAgg, aiMaxYieldAgg, aggYieldPrimaryBaseline);
+            renderClosestDiffElement('agg-card-level-exp', aiMinYieldAgg, aiMaxYieldAgg, expYieldAgg);
+            renderClosestDiffElement('agg-card-level-re', aiMinYieldAgg, aiMaxYieldAgg, reYieldAgg);
         } else {
             updateElement('agg-ai-yield-min', '-');
             updateElement('agg-ai-yield-max', '-');
             updateElement('agg-ai-diff-exp', '-');
             updateElement('agg-ai-diff-re', '-');
+            updateElement('agg-card-level', '-');
+            updateElement('agg-card-level-exp', '-');
+            updateElement('agg-card-level-re', '-');
         }
 
         aggregateRaw = {
@@ -2974,7 +2992,9 @@ function clearAllDataUI() {
 
     const diffIds = [
         'agg-re-harvest-diff', 'agg-ai-harvest-diff-exp', 'agg-ai-harvest-diff-re', 
-        'agg-re-diff', 'agg-ai-diff-exp', 'agg-ai-diff-re', 'agg-card-level'
+        'agg-harvest-card-level', 'agg-harvest-card-level-exp', 'agg-harvest-card-level-re',
+        'agg-re-diff', 'agg-ai-diff-exp', 'agg-ai-diff-re', 
+        'agg-card-level', 'agg-card-level-exp', 'agg-card-level-re'
     ];
     diffIds.forEach(id => {
         const el = document.getElementById(id);

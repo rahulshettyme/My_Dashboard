@@ -926,7 +926,18 @@
                                 </div>
                             </div>
                         </div>
-                        <!-- Plot Level removed per user request -->
+                        <div class="metric-row" style="align-items: flex-start;">
+                            <div>
+                                <div class="metric-label">Card level</div>
+                                <span class="sub-text">Closest vs Expected</span>
+                                <span class="sub-text">Closest vs Re-estimated</span>
+                            </div>
+                            <div style="text-align: right;">
+                                <div class="metric-value"><span id="agg-card-level">-</span></div>
+                                <div class="sub-text" id="agg-card-level-exp">-</div>
+                                <div class="sub-text" id="agg-card-level-re">-</div>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Harvest Analysis -->
@@ -968,6 +979,18 @@
                                 <div class="sub-text" id="agg-ai-harvest-diff-re">
                                     <span class="value-green">↑ 0%</span> - <span class="value-green">↑ 0%</span>
                                 </div>
+                            </div>
+                        </div>
+                        <div class="metric-row" style="align-items: flex-start;">
+                            <div>
+                                <div class="metric-label">Card level</div>
+                                <span class="sub-text">Closest vs Expected</span>
+                                <span class="sub-text">Closest vs Re-estimated</span>
+                            </div>
+                            <div style="text-align: right;">
+                                <div class="metric-value"><span id="agg-harvest-card-level">-</span></div>
+                                <div class="sub-text" id="agg-harvest-card-level-exp">-</div>
+                                <div class="sub-text" id="agg-harvest-card-level-re">-</div>
                             </div>
                         </div>
                         <div class="metric-row" id="agg-collected-harvest-row"

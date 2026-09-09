@@ -901,6 +901,33 @@ const tests = [
             assert.strictEqual(healthScript.calculateClosestDiff(NaN, NaN, 1000), null, 'NaN predictions return null');
             assert.strictEqual(healthScript.formatCardLevelDiff(100, 200, null).text, '-');
             assert.strictEqual(healthScript.formatCardLevelDiff(NaN, NaN, 1000).text, '-');
+
+            // Case 7: Aggregate Card Level calculations (Yield Tonnes/Ha & Harvest Tonnes)
+            // 7a: Aggregate Yield within range
+            const aggYieldExp = 8.5;
+            const aggYieldRe = 8.7;
+            const aggYieldMin = 7.0;
+            const aggYieldMax = 9.2;
+            const aggYieldPrimaryBaseline = (aggYieldRe > 0) ? aggYieldRe : aggYieldExp;
+            const aggYieldFormatted = healthScript.formatCardLevelDiff(aggYieldMin, aggYieldMax, aggYieldPrimaryBaseline);
+            assert.strictEqual(aggYieldFormatted.isWithinRange, true, 'Aggregate yield should be within range');
+            assert.strictEqual(aggYieldFormatted.text, 'Within range');
+            assert.ok(aggYieldFormatted.html.includes('Within range'));
+
+            // 7b: Aggregate Harvest outside range with Re-estimated precedence
+            const aggHarvExp = 100.0;
+            const aggHarvRe = 110.0;
+            const aggHarvMin = 80.0;
+            const aggHarvMax = 95.0;
+            const aggHarvPrimaryBaseline = (aggHarvRe > 0) ? aggHarvRe : aggHarvExp;
+            const aggHarvFormatted = healthScript.formatCardLevelDiff(aggHarvMin, aggHarvMax, aggHarvPrimaryBaseline);
+            assert.strictEqual(aggHarvFormatted.isWithinRange, false, 'Aggregate harvest should be outside range');
+            assert.strictEqual(aggHarvFormatted.text, '↓ 13.64%', 'Should compute closest boundary 95 vs 110 (-13.64%)');
+            assert.ok(aggHarvFormatted.html.includes('value-red'));
+
+            // 7c: Aggregate Harvest sub-line vs Expected
+            const aggHarvExpFormatted = healthScript.formatCardLevelDiff(aggHarvMin, aggHarvMax, aggHarvExp);
+            assert.strictEqual(aggHarvExpFormatted.text, '↓ 5.00%', 'Should compute closest boundary 95 vs 100 (-5.00%)');
         }
     }
 ];
