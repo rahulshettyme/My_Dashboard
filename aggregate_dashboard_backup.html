@@ -1055,18 +1055,27 @@
 
             <!-- 2. Plot Level Section -->
             <section class="dashboard-section">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
                     <h2 class="section-title" style="margin-bottom: 0;">2. Plot Level</h2>
-                    <div style="display: flex; align-items: center; gap: 0.5rem;">
-                        <span style="color: var(--text-secondary); font-size: 0.9rem; margin-right: 0.5rem;">Filter
-                            Plots:</span>
-                        <select id="prediction-filter"
-                            style="padding: 0.4rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--card-bg); color: var(--text-primary); cursor: pointer;">
-                            <option value="all">Show All Plots</option>
-                            <option value="available" selected>Prediction Available</option>
-                            <option value="unavailable">Prediction Not Available</option>
-                            <option value="not_enabled">Plot Intelligence Not Enabled</option>
-                        </select>
+                    <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
+                        <div
+                            style="display: flex; align-items: center; gap: 0.6rem; background: rgba(255, 255, 255, 0.05); padding: 0.4rem 0.8rem; border-radius: 6px; border: 1px solid var(--border-color);">
+                            <input type="checkbox" id="hide-biomass-after-tasumi" onchange="handleHideBiomassAfterTasumiChange(event)"
+                                style="cursor: pointer; width: 16px; height: 16px;">
+                            <label for="hide-biomass-after-tasumi"
+                                style="font-size: 0.85rem; color: var(--text-primary); cursor: pointer; user-select: none;">Hide Biomass after Tasumi</label>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <span style="color: var(--text-secondary); font-size: 0.9rem; margin-right: 0.5rem;">Filter
+                                Plots:</span>
+                            <select id="prediction-filter"
+                                style="padding: 0.4rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--card-bg); color: var(--text-primary); cursor: pointer;">
+                                <option value="all">Show All Plots</option>
+                                <option value="available" selected>Prediction Available</option>
+                                <option value="unavailable">Prediction Not Available</option>
+                                <option value="not_enabled">Plot Intelligence Not Enabled</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
 
@@ -1871,7 +1880,13 @@
         <div class="modal-content" style="max-width: 850px; width: 90%; background: #ffffff; color: #1e293b; border-radius: 12px; padding: 1.5rem; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.1);">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.75rem;">
                 <h2 style="font-size: 1.25rem; font-weight: 700; color: #0f172a; margin: 0;">Yield &amp; Growth</h2>
-                <span class="close-modal" onclick="closeYieldGrowthModal()" style="font-size: 1.5rem; cursor: pointer; color: #64748b; line-height: 1;">&times;</span>
+                <div style="display: flex; align-items: center; gap: 1rem;">
+                    <div style="display: flex; align-items: center; gap: 0.4rem; background: #f1f5f9; padding: 0.3rem 0.6rem; border-radius: 6px; border: 1px solid #cbd5e1;">
+                        <input type="checkbox" id="modal-hide-biomass-after-tasumi" onchange="handleHideBiomassAfterTasumiChange(event)" style="cursor: pointer; width: 14px; height: 14px;">
+                        <label for="modal-hide-biomass-after-tasumi" style="font-size: 0.8rem; color: #334155; font-weight: 500; cursor: pointer; user-select: none;">Hide Biomass after Tasumi</label>
+                    </div>
+                    <span class="close-modal" onclick="closeYieldGrowthModal()" style="font-size: 1.5rem; cursor: pointer; color: #64748b; line-height: 1;">&times;</span>
+                </div>
             </div>
 
             <!-- Tab Navigation -->

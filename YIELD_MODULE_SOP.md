@@ -166,6 +166,17 @@ When a plot has `modelType: "BIOMASS_DAYS"` present in its prediction records (`
      - Values $\ge 1,000$: formatted in Thousands (`1.5k`, `2k`, `2.5k`, `3k`), preserving exact decimals on fractional thousand ticks (`1.5k`, `2.5k`), strictly eliminating duplicate rounded labels (e.g. previous bug of `2k, 2k, 3k, 3k`).
      - Values $< 1,000$: formatted as clean integers or decimals (`500`, `7.5`, `0`).
    - Applied universally to both Plot-Level Yield and Harvest trend charts, as well as the Enlarge Modal dialog.
+7. **'Hide Biomass after Tasumi' Plot-Level Trend Filter Option**:
+   - A toggle checkbox `#hide-biomass-after-tasumi` is provided in the Section 2 (Plot Level) header (and synchronized in the Enlarge Modal header `#modal-hide-biomass-after-tasumi`).
+   - When checked:
+     - The trend chart stops showing any Biomass Days data points whose cutoff date is chronologically after the plot's authoritative Tasumi prediction date (`bISODate > tasumiISODate`).
+     - If both Biomass Days and Tasumi have data on the exact same calendar day (`bISODate === tasumiISODate`), the system considers **Tasumi only** by filtering out the Biomass data point on that date and plotting the authoritative Tasumi point.
+     - Only Biomass cutoff dates strictly preceding Tasumi (`bISODate < tasumiISODate`) are rendered on the trend progression leading up to Tasumi at the end.
+   - When unchecked (default):
+     - All chronological Biomass cutoff dates are plotted along with the Tasumi point.
+   - **Scope Isolation Constraint**:
+     - This toggle strictly modifies the visual dataset passed to the trend charts (`plot-yield-trend-chart`, `plot-harvest-trend-chart`, and `modal-trend-canvas`).
+     - It **never alters** plot metric values (Expected, Re-estimated, Predicted min/max, Card Level status/percentage) or any records in the base data table (`#all-plots-table`) or aggregate cards.
 
 ### E. Base Yield Data Ordering & Natural Sorting
 To guarantee consistent presentation across the dashboard, all base yield records (`globalData`), API-generated plot arrays, and the base plot data table (`#base-yield-table-wrapper`) are sorted ascending by plot name (`Plot Name` / `CA Name`):
@@ -218,6 +229,14 @@ display values for both AI prediction models simultaneously:
 ---
 
 ## 4. Change Log (Feature & Logic Audit Trail)
+* **2026-09-09**: Added 'Hide Biomass after Tasumi' Option for Plot-Level Trend Charts:
+  1. Added checkbox `Hide Biomass after Tasumi` (`#hide-biomass-after-tasumi`) in Section 2 (Plot Level) header and synchronized `#modal-hide-biomass-after-tasumi` in Yield & Growth enlarge modal.
+  2. Updated `extractPlotMultiModelData()` in `aggregate_script_backup.js` and `health_script.js`:
+     - Stops showing biomass data generated after tasumi date (`bISODate > tasumiISODate`).
+     - Same-day conflict resolution: if both models have data on the same day (`bISODate === tasumiISODate`), considers Tasumi only (excludes biomass on that date).
+     - Renders progression curves leading up to Tasumi seamlessly.
+  3. Enforced strict scope isolation: change applies exclusively to trend charts without affecting plot card values, card-level within range/diff logic, base data table, or aggregates.
+  4. Added Test 29 to regression test suite (29/29 tests passing: 11 existing, 18 new).
 * **2026-09-09**: Fixed Y-Axis Scale Values in Plot-Level Yield & Harvest Trend Charts (Eliminated Duplicate Labels):
   1. Root cause: Y-axis tick callback used `(v / 1000).toFixed(0) + 'k'`, which rounded non-exact thousand ticks (e.g. 1500 $\to$ 2k, 2500 $\to$ 3k), causing duplicate consecutive labels (`2k, 2k, 3k, 3k`).
   2. Implemented `formatTrendYTick(v)` in `aggregate_script_backup.js` and `health_script.js`:

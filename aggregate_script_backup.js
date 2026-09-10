@@ -1867,7 +1867,7 @@ function formatTrendDate(dateStr) {
     return dateStr;
 }
 
-function extractPlotMultiModelData(d) {
+function extractPlotMultiModelData(d, hideBiomassAfterTasumi = null) {
     if (!d || !Array.isArray(d.yieldRawRecords)) return null;
 
     const bDaysRecord = d.yieldRawRecords.find(r => (r.modelType || '').toUpperCase() === 'BIOMASS_DAYS');
@@ -1877,42 +1877,14 @@ function extractPlotMultiModelData(d) {
         return null;
     }
 
+    const shouldHide = hideBiomassAfterTasumi !== null
+        ? !!hideBiomassAfterTasumi
+        : (typeof document !== 'undefined' && document.getElementById('hide-biomass-after-tasumi')?.checked || false);
+
     const yieldUnit = getDataYieldUnit();
     const harvestUnit = getDataHarvestUnit();
 
-    // Sort biomass days progression chronologically
-    const sortedGdd = [...bDaysRecord.gddPredictions].sort((a, b) => (a.cutoff_date || '').localeCompare(b.cutoff_date || ''));
-
-    const labels = [];
-    const yieldBiomassData = [];
-    const yieldBiomassMin = [];
-    const yieldBiomassMax = [];
-    const harvestBiomassData = [];
-    const harvestBiomassMin = [];
-    const harvestBiomassMax = [];
-
-    sortedGdd.forEach(p => {
-        labels.push(formatTrendDate(p.cutoff_date));
-
-        // Raw units in gddPredictions: Yield in Tonnes/Ha, Production in Tonnes
-        const rawYAvg = parseFloat(p.yieldAvg || p.yield_days || p.yieldMin || 0);
-        const rawYMin = parseFloat(p.yieldMin !== undefined ? p.yieldMin : rawYAvg);
-        const rawYMax = parseFloat(p.yieldMax !== undefined ? p.yieldMax : rawYAvg);
-
-        const rawHAvg = parseFloat(p.productionAvg || p.productionMin || 0);
-        const rawHMin = parseFloat(p.productionMin !== undefined ? p.productionMin : rawHAvg);
-        const rawHMax = parseFloat(p.productionMax !== undefined ? p.productionMax : rawHAvg);
-
-        yieldBiomassData.push(parseFloat(convertYield(rawYAvg, yieldUnit).toFixed(2)));
-        yieldBiomassMin.push(parseFloat(convertYield(Math.min(rawYMin, rawYMax), yieldUnit).toFixed(2)));
-        yieldBiomassMax.push(parseFloat(convertYield(Math.max(rawYMin, rawYMax), yieldUnit).toFixed(2)));
-
-        harvestBiomassData.push(parseFloat(convertHarvest(rawHAvg, harvestUnit).toFixed(2)));
-        harvestBiomassMin.push(parseFloat(convertHarvest(Math.min(rawHMin, rawHMax), harvestUnit).toFixed(2)));
-        harvestBiomassMax.push(parseFloat(convertHarvest(Math.max(rawHMin, rawHMax), harvestUnit).toFixed(2)));
-    });
-
-    // Extract authoritative TASUMI point
+    // Extract authoritative TASUMI point first so we have its date for filtering
     let tasumiYieldAvg = null;
     let tasumiYieldMin = null;
     let tasumiYieldMax = null;
@@ -1920,6 +1892,7 @@ function extractPlotMultiModelData(d) {
     let tasumiHarvestMin = null;
     let tasumiHarvestMax = null;
     let tasumiDateStr = null;
+    let tasumiISODate = null;
 
     if (tasumiRecord && tasumiRecord.parameters) {
         const p = tasumiRecord.parameters;
@@ -1939,10 +1912,62 @@ function extractPlotMultiModelData(d) {
         tasumiHarvestMin = parseFloat(convertHarvest(Math.min(rawHMin, rawHMax), harvestUnit).toFixed(2));
         tasumiHarvestMax = parseFloat(convertHarvest(Math.max(rawHMin, rawHMax), harvestUnit).toFixed(2));
 
+        const rawTasumiDate = tasumiRecord.predictionDate || tasumiRecord.createdDateTime || tasumiRecord.modifiedDateTime || null;
+        if (rawTasumiDate) {
+            const rawStr = String(rawTasumiDate);
+            const m = rawStr.match(/^\d{4}-\d{2}-\d{2}/);
+            tasumiISODate = m ? m[0] : (new Date(rawTasumiDate).toISOString().substring(0, 10));
+        }
+
         tasumiDateStr = tasumiRecord.predictionDate 
             ? formatTrendDate(tasumiRecord.predictionDate.substring(0, 10)) 
             : (tasumiRecord.createdDateTime ? formatTrendDate(tasumiRecord.createdDateTime.substring(0, 10)) : 'Latest');
     }
+
+    // Sort biomass days progression chronologically
+    const sortedGdd = [...bDaysRecord.gddPredictions].sort((a, b) => (a.cutoff_date || '').localeCompare(b.cutoff_date || ''));
+
+    // Filter biomass days progression if hideBiomassAfterTasumi is enabled and tasumi prediction exists
+    let effectiveGdd = sortedGdd;
+    if (shouldHide && tasumiISODate && tasumiYieldAvg !== null) {
+        effectiveGdd = sortedGdd.filter(p => {
+            if (!p.cutoff_date) return true;
+            const bDateStr = String(p.cutoff_date);
+            const m = bDateStr.match(/^\d{4}-\d{2}-\d{2}/);
+            const bISODate = m ? m[0] : (new Date(p.cutoff_date).toISOString().substring(0, 10));
+            // Stop showing biomass after tasumi; if both have data on same day, consider tasumi only
+            return bISODate < tasumiISODate;
+        });
+    }
+
+    const labels = [];
+    const yieldBiomassData = [];
+    const yieldBiomassMin = [];
+    const yieldBiomassMax = [];
+    const harvestBiomassData = [];
+    const harvestBiomassMin = [];
+    const harvestBiomassMax = [];
+
+    effectiveGdd.forEach(p => {
+        labels.push(formatTrendDate(p.cutoff_date));
+
+        // Raw units in gddPredictions: Yield in Tonnes/Ha, Production in Tonnes
+        const rawYAvg = parseFloat(p.yieldAvg || p.yield_days || p.yieldMin || 0);
+        const rawYMin = parseFloat(p.yieldMin !== undefined ? p.yieldMin : rawYAvg);
+        const rawYMax = parseFloat(p.yieldMax !== undefined ? p.yieldMax : rawYAvg);
+
+        const rawHAvg = parseFloat(p.productionAvg || p.productionMin || 0);
+        const rawHMin = parseFloat(p.productionMin !== undefined ? p.productionMin : rawHAvg);
+        const rawHMax = parseFloat(p.productionMax !== undefined ? p.productionMax : rawHAvg);
+
+        yieldBiomassData.push(parseFloat(convertYield(rawYAvg, yieldUnit).toFixed(2)));
+        yieldBiomassMin.push(parseFloat(convertYield(Math.min(rawYMin, rawYMax), yieldUnit).toFixed(2)));
+        yieldBiomassMax.push(parseFloat(convertYield(Math.max(rawYMin, rawYMax), yieldUnit).toFixed(2)));
+
+        harvestBiomassData.push(parseFloat(convertHarvest(rawHAvg, harvestUnit).toFixed(2)));
+        harvestBiomassMin.push(parseFloat(convertHarvest(Math.min(rawHMin, rawHMax), harvestUnit).toFixed(2)));
+        harvestBiomassMax.push(parseFloat(convertHarvest(Math.max(rawHMin, rawHMax), harvestUnit).toFixed(2)));
+    });
 
     // Unified trend progression matching Image 2 & 3:
     // Append the TASUMI point at the end of the trend line
@@ -2253,12 +2278,25 @@ function createTrendChart(canvas, opts) {
     });
 }
 
+function handleHideBiomassAfterTasumiChange(e) {
+    const isChecked = e ? e.target.checked : (document.getElementById('hide-biomass-after-tasumi')?.checked || false);
+    const plotCb = document.getElementById('hide-biomass-after-tasumi');
+    const modalCb = document.getElementById('modal-hide-biomass-after-tasumi');
+    if (plotCb && plotCb.checked !== isChecked) plotCb.checked = isChecked;
+    if (modalCb && modalCb.checked !== isChecked) modalCb.checked = isChecked;
+
+    if (activePlotForTrend) {
+        renderPlotTrendCharts(activePlotForTrend);
+    }
+}
+
 function renderPlotTrendCharts(d) {
     activePlotForTrend = d;
     const yieldContainer = document.getElementById('plot-yield-chart-container');
     const harvestContainer = document.getElementById('plot-harvest-chart-container');
 
-    const modelData = extractPlotMultiModelData(d);
+    const shouldHide = document.getElementById('hide-biomass-after-tasumi')?.checked || false;
+    const modelData = extractPlotMultiModelData(d, shouldHide);
 
     if (!modelData) {
         if (yieldContainer) yieldContainer.classList.add('hidden');
@@ -2331,7 +2369,8 @@ function openYieldGrowthModal(tab) {
 
     if (d) {
         activePlotForTrend = d;
-        const modelData = extractPlotMultiModelData(d);
+        const shouldHide = document.getElementById('hide-biomass-after-tasumi')?.checked || false;
+        const modelData = extractPlotMultiModelData(d, shouldHide);
         if (modelData) {
             renderModalTrendChart(modelData, currentModalTrendTab);
         }
@@ -2381,7 +2420,8 @@ function switchYieldGrowthTab(tab) {
     }
 
     if (activePlotForTrend) {
-        const modelData = extractPlotMultiModelData(activePlotForTrend);
+        const shouldHide = document.getElementById('hide-biomass-after-tasumi')?.checked || false;
+        const modelData = extractPlotMultiModelData(activePlotForTrend, shouldHide);
         if (modelData) {
             renderModalTrendChart(modelData, tab);
         }
@@ -5534,6 +5574,7 @@ window.convertValueToMetricTon = convertValueToMetricTon;
 
 // Plot Multi-Model Trend Chart Exports
 window.renderPlotTrendCharts = renderPlotTrendCharts;
+window.handleHideBiomassAfterTasumiChange = handleHideBiomassAfterTasumiChange;
 window.openYieldGrowthModal = openYieldGrowthModal;
 window.closeYieldGrowthModal = closeYieldGrowthModal;
 window.switchYieldGrowthTab = switchYieldGrowthTab;

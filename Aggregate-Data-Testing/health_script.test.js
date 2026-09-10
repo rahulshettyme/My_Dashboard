@@ -969,6 +969,127 @@ const tests = [
             assert.strictEqual(healthScript.formatTrendYTick(undefined), '');
             assert.strictEqual(healthScript.formatTrendYTick(NaN), '');
         }
+    },
+    {
+        name: 'extractPlotMultiModelData_hideBiomassAfterTasumi_option',
+        fn: () => {
+            const mockPlotWithBoth = {
+                y1: 15,
+                y2: 18,
+                h1: 30,
+                h2: 36,
+                auditedArea: 2.0,
+                areaUnit: 'Acre',
+                yieldRawRecords: [
+                    {
+                        modelType: 'BIOMASS_DAYS',
+                        gddPredictions: [
+                            { cutoff_date: '2026-05-31', yieldAvg: 5.0, yieldMin: 4.5, yieldMax: 5.5, productionAvg: 10.0, productionMin: 9.0, productionMax: 11.0 },
+                            { cutoff_date: '2026-06-15', yieldAvg: 8.0, yieldMin: 7.5, yieldMax: 8.5, productionAvg: 16.0, productionMin: 15.0, productionMax: 17.0 },
+                            { cutoff_date: '2026-08-14', yieldAvg: 12.0, yieldMin: 11.0, yieldMax: 13.0, productionAvg: 24.0, productionMin: 22.0, productionMax: 26.0 }, // Same day as Tasumi
+                            { cutoff_date: '2026-08-29', yieldAvg: 15.0, yieldMin: 14.0, yieldMax: 16.0, productionAvg: 30.0, productionMin: 28.0, productionMax: 32.0 }  // After Tasumi
+                        ]
+                    },
+                    {
+                        modelType: 'TASUMI',
+                        predictionDate: '2026-08-14T00:00:00.000Z',
+                        parameters: {
+                            yieldAvg: 14.0,
+                            yieldMin: 13.0,
+                            yieldMax: 15.0,
+                            productionAvg: 28.0,
+                            productionMin: 26.0,
+                            productionMax: 30.0
+                        }
+                    }
+                ]
+            };
+
+            // Case 1: hideBiomassAfterTasumi is false (default behavior)
+            const defaultData = healthScript.extractPlotMultiModelData(mockPlotWithBoth, 'tonne_ha', 'tonnes', false);
+            assert.ok(defaultData, 'Should return valid chart data');
+            assert.strictEqual(defaultData.biomassLabels.length, 4, 'Biomass labels should have all 4 dates');
+            assert.deepStrictEqual(
+                defaultData.biomassLabels,
+                ['31 May', '15 Jun', '14 Aug', '29 Aug'],
+                'Biomass progression should retain all cutoff dates'
+            );
+            assert.strictEqual(defaultData.labels.length, 5, 'Unified labels should include 4 biomass points + 1 tasumi point');
+            assert.deepStrictEqual(
+                defaultData.labels,
+                ['31 May', '15 Jun', '14 Aug', '29 Aug', '14 Aug']
+            );
+
+            // Case 2: hideBiomassAfterTasumi is true
+            // Rule: Stop showing biomass after tasumi (2026-08-29 dropped)
+            // Rule: If both biomass and tasumi have data on same day, consider tasumi only (2026-08-14 biomass dropped)
+            const filteredData = healthScript.extractPlotMultiModelData(mockPlotWithBoth, 'tonne_ha', 'tonnes', true);
+            assert.ok(filteredData, 'Should return valid chart data');
+            assert.strictEqual(filteredData.biomassLabels.length, 2, 'Biomass labels should only retain dates strictly before Tasumi');
+            assert.deepStrictEqual(
+                filteredData.biomassLabels,
+                ['31 May', '15 Jun'],
+                'Biomass on 14 Aug (same day) and 29 Aug (after) must be excluded'
+            );
+            assert.strictEqual(filteredData.labels.length, 3, 'Unified chart labels should have 2 biomass points + 1 tasumi point');
+            assert.deepStrictEqual(
+                filteredData.labels,
+                ['31 May', '15 Jun', '14 Aug'],
+                'Final trend should end cleanly at Tasumi on 14 Aug'
+            );
+            assert.strictEqual(filteredData.tasumi.index, 2, 'Tasumi point index should be at end (index 2)');
+            assert.strictEqual(filteredData.yieldTrend[2], 14.0, 'Final point in yieldTrend should be Tasumi value');
+
+            // Case 3: Plot with only BIOMASS_DAYS (no TASUMI present)
+            const plotWithoutTasumi = {
+                y1: 10,
+                h1: 20,
+                yieldRawRecords: [
+                    {
+                        modelType: 'BIOMASS_DAYS',
+                        gddPredictions: [
+                            { cutoff_date: '2026-05-31', yieldAvg: 5.0, yieldMin: 4.5, yieldMax: 5.5, productionAvg: 10.0, productionMin: 9.0, productionMax: 11.0 },
+                            { cutoff_date: '2026-08-29', yieldAvg: 15.0, yieldMin: 14.0, yieldMax: 16.0, productionAvg: 30.0, productionMin: 28.0, productionMax: 32.0 }
+                        ]
+                    }
+                ]
+            };
+            const noTasumiFiltered = healthScript.extractPlotMultiModelData(plotWithoutTasumi, 'tonne_ha', 'tonnes', true);
+            assert.strictEqual(noTasumiFiltered.labels.length, 2, 'When Tasumi is absent, all biomass points should remain');
+            assert.deepStrictEqual(noTasumiFiltered.labels, ['31 May', '29 Aug']);
+
+            // Case 4: Plot where all biomass points are on or after Tasumi date
+            const plotBiomassAfterTasumiOnly = {
+                y1: 10,
+                h1: 20,
+                yieldRawRecords: [
+                    {
+                        modelType: 'BIOMASS_DAYS',
+                        gddPredictions: [
+                            { cutoff_date: '2026-08-14', yieldAvg: 12.0, yieldMin: 11.0, yieldMax: 13.0, productionAvg: 24.0, productionMin: 22.0, productionMax: 26.0 },
+                            { cutoff_date: '2026-08-29', yieldAvg: 15.0, yieldMin: 14.0, yieldMax: 16.0, productionAvg: 30.0, productionMin: 28.0, productionMax: 32.0 }
+                        ]
+                    },
+                    {
+                        modelType: 'TASUMI',
+                        predictionDate: '2026-08-14T00:00:00.000Z',
+                        parameters: {
+                            yieldAvg: 14.0,
+                            yieldMin: 13.0,
+                            yieldMax: 15.0,
+                            productionAvg: 28.0,
+                            productionMin: 26.0,
+                            productionMax: 30.0
+                        }
+                    }
+                ]
+            };
+            const onlyTasumiRemains = healthScript.extractPlotMultiModelData(plotBiomassAfterTasumiOnly, 'tonne_ha', 'tonnes', true);
+            assert.strictEqual(onlyTasumiRemains.biomassLabels.length, 0, 'No biomass points should remain before 14 Aug');
+            assert.deepStrictEqual(onlyTasumiRemains.labels, ['14 Aug'], 'Only Tasumi should remain on 14 Aug');
+            assert.strictEqual(onlyTasumiRemains.yieldTrend.length, 1);
+            assert.strictEqual(onlyTasumiRemains.yieldTrend[0], 14.0);
+        }
     }
 ];
 
