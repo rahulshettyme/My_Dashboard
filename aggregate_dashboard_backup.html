@@ -1060,10 +1060,10 @@
                     <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
                         <div
                             style="display: flex; align-items: center; gap: 0.6rem; background: rgba(255, 255, 255, 0.05); padding: 0.4rem 0.8rem; border-radius: 6px; border: 1px solid var(--border-color);">
-                            <input type="checkbox" id="hide-biomass-after-tasumi" onchange="handleHideBiomassAfterTasumiChange(event)"
+                            <input type="checkbox" id="show-biomass-after-tasumi" onchange="handleShowBiomassAfterTasumiChange(event)"
                                 style="cursor: pointer; width: 16px; height: 16px;">
-                            <label for="hide-biomass-after-tasumi"
-                                style="font-size: 0.85rem; color: var(--text-primary); cursor: pointer; user-select: none;">Hide Biomass after Tasumi</label>
+                            <label for="show-biomass-after-tasumi"
+                                style="font-size: 0.85rem; color: var(--text-primary); cursor: pointer; user-select: none;">Show Biomass after Tasumi</label>
                         </div>
                         <div style="display: flex; align-items: center; gap: 0.5rem;">
                             <span style="color: var(--text-secondary); font-size: 0.9rem; margin-right: 0.5rem;">Filter
@@ -1104,9 +1104,13 @@
                             </button>
                         </div>
                         <input type="hidden" id="plot-select-value">
-                        <div id="plot-audited-area"
-                            style="margin-top: 0.5rem; color: var(--text-secondary); font-size: 0.9rem;">
-                            <!-- Audited Area will appear here -->
+                        <div style="display: flex; align-items: center; gap: 1.5rem; margin-top: 0.5rem; font-size: 0.9rem; flex-wrap: wrap;">
+                            <div id="plot-audited-area" style="color: var(--text-secondary);">
+                                <!-- Audited Area will appear here -->
+                            </div>
+                            <div id="plot-tasumi-status" style="color: var(--text-secondary);">
+                                <!-- Tasumi generated will appear here -->
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1882,8 +1886,8 @@
                 <h2 style="font-size: 1.25rem; font-weight: 700; color: #0f172a; margin: 0;">Yield &amp; Growth</h2>
                 <div style="display: flex; align-items: center; gap: 1rem;">
                     <div style="display: flex; align-items: center; gap: 0.4rem; background: #f1f5f9; padding: 0.3rem 0.6rem; border-radius: 6px; border: 1px solid #cbd5e1;">
-                        <input type="checkbox" id="modal-hide-biomass-after-tasumi" onchange="handleHideBiomassAfterTasumiChange(event)" style="cursor: pointer; width: 14px; height: 14px;">
-                        <label for="modal-hide-biomass-after-tasumi" style="font-size: 0.8rem; color: #334155; font-weight: 500; cursor: pointer; user-select: none;">Hide Biomass after Tasumi</label>
+                        <input type="checkbox" id="modal-show-biomass-after-tasumi" onchange="handleShowBiomassAfterTasumiChange(event)" style="cursor: pointer; width: 14px; height: 14px;">
+                        <label for="modal-show-biomass-after-tasumi" style="font-size: 0.8rem; color: #334155; font-weight: 500; cursor: pointer; user-select: none;">Show Biomass after Tasumi</label>
                     </div>
                     <span class="close-modal" onclick="closeYieldGrowthModal()" style="font-size: 1.5rem; cursor: pointer; color: #64748b; line-height: 1;">&times;</span>
                 </div>

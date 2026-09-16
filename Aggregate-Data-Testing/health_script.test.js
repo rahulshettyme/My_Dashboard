@@ -971,7 +971,7 @@ const tests = [
         }
     },
     {
-        name: 'extractPlotMultiModelData_hideBiomassAfterTasumi_option',
+        name: 'extractPlotMultiModelData_showBiomassAfterTasumi_option',
         fn: () => {
             const mockPlotWithBoth = {
                 y1: 15,
@@ -1005,40 +1005,41 @@ const tests = [
                 ]
             };
 
-            // Case 1: hideBiomassAfterTasumi is false (default behavior)
+            // Case 1: showBiomassAfterTasumi is false (default behavior)
+            // By default: Trend chart does NOT show biomass data after Tasumi
+            // Same-day: If both have data on same day, consider Tasumi only (biomass on 14 Aug dropped)
             const defaultData = healthScript.extractPlotMultiModelData(mockPlotWithBoth, 'tonne_ha', 'tonnes', false);
             assert.ok(defaultData, 'Should return valid chart data');
-            assert.strictEqual(defaultData.biomassLabels.length, 4, 'Biomass labels should have all 4 dates');
+            assert.strictEqual(defaultData.biomassLabels.length, 2, 'By default, biomass labels should only retain dates strictly before Tasumi');
             assert.deepStrictEqual(
                 defaultData.biomassLabels,
-                ['31 May', '15 Jun', '14 Aug', '29 Aug'],
-                'Biomass progression should retain all cutoff dates'
+                ['31 May', '15 Jun'],
+                'Biomass on 14 Aug (same day) and 29 Aug (after) must be excluded by default'
             );
-            assert.strictEqual(defaultData.labels.length, 5, 'Unified labels should include 4 biomass points + 1 tasumi point');
+            assert.strictEqual(defaultData.labels.length, 3, 'Unified chart labels should have 2 biomass points + 1 tasumi point');
             assert.deepStrictEqual(
                 defaultData.labels,
+                ['31 May', '15 Jun', '14 Aug'],
+                'Default trend should end cleanly at Tasumi on 14 Aug'
+            );
+            assert.strictEqual(defaultData.tasumi.index, 2, 'Tasumi point index should be at end (index 2)');
+            assert.strictEqual(defaultData.yieldTrend[2], 14.0, 'Final point in yieldTrend should be Tasumi value');
+
+            // Case 2: showBiomassAfterTasumi is true (user opt-in by checking the checkbox)
+            // Shows all biomass points along with Tasumi
+            const optInData = healthScript.extractPlotMultiModelData(mockPlotWithBoth, 'tonne_ha', 'tonnes', true);
+            assert.ok(optInData, 'Should return valid chart data');
+            assert.strictEqual(optInData.biomassLabels.length, 4, 'When Show Biomass after Tasumi is checked, all 4 biomass dates must be included');
+            assert.deepStrictEqual(
+                optInData.biomassLabels,
+                ['31 May', '15 Jun', '14 Aug', '29 Aug'],
+                'Full biomass progression retained when opted in'
+            );
+            assert.strictEqual(optInData.labels.length, 5, 'Unified labels should include 4 biomass points + 1 tasumi point');
+            assert.deepStrictEqual(
+                optInData.labels,
                 ['31 May', '15 Jun', '14 Aug', '29 Aug', '14 Aug']
             );
-
-            // Case 2: hideBiomassAfterTasumi is true
-            // Rule: Stop showing biomass after tasumi (2026-08-29 dropped)
-            // Rule: If both biomass and tasumi have data on same day, consider tasumi only (2026-08-14 biomass dropped)
-            const filteredData = healthScript.extractPlotMultiModelData(mockPlotWithBoth, 'tonne_ha', 'tonnes', true);
-            assert.ok(filteredData, 'Should return valid chart data');
-            assert.strictEqual(filteredData.biomassLabels.length, 2, 'Biomass labels should only retain dates strictly before Tasumi');
-            assert.deepStrictEqual(
-                filteredData.biomassLabels,
-                ['31 May', '15 Jun'],
-                'Biomass on 14 Aug (same day) and 29 Aug (after) must be excluded'
-            );
-            assert.strictEqual(filteredData.labels.length, 3, 'Unified chart labels should have 2 biomass points + 1 tasumi point');
-            assert.deepStrictEqual(
-                filteredData.labels,
-                ['31 May', '15 Jun', '14 Aug'],
-                'Final trend should end cleanly at Tasumi on 14 Aug'
-            );
-            assert.strictEqual(filteredData.tasumi.index, 2, 'Tasumi point index should be at end (index 2)');
-            assert.strictEqual(filteredData.yieldTrend[2], 14.0, 'Final point in yieldTrend should be Tasumi value');
 
             // Case 3: Plot with only BIOMASS_DAYS (no TASUMI present)
             const plotWithoutTasumi = {
@@ -1054,9 +1055,9 @@ const tests = [
                     }
                 ]
             };
-            const noTasumiFiltered = healthScript.extractPlotMultiModelData(plotWithoutTasumi, 'tonne_ha', 'tonnes', true);
-            assert.strictEqual(noTasumiFiltered.labels.length, 2, 'When Tasumi is absent, all biomass points should remain');
-            assert.deepStrictEqual(noTasumiFiltered.labels, ['31 May', '29 Aug']);
+            const noTasumiDefault = healthScript.extractPlotMultiModelData(plotWithoutTasumi, 'tonne_ha', 'tonnes', false);
+            assert.strictEqual(noTasumiDefault.labels.length, 2, 'When Tasumi is absent, all biomass points should remain by default');
+            assert.deepStrictEqual(noTasumiDefault.labels, ['31 May', '29 Aug']);
 
             // Case 4: Plot where all biomass points are on or after Tasumi date
             const plotBiomassAfterTasumiOnly = {
@@ -1084,11 +1085,17 @@ const tests = [
                     }
                 ]
             };
-            const onlyTasumiRemains = healthScript.extractPlotMultiModelData(plotBiomassAfterTasumiOnly, 'tonne_ha', 'tonnes', true);
-            assert.strictEqual(onlyTasumiRemains.biomassLabels.length, 0, 'No biomass points should remain before 14 Aug');
+            // Default (false): only Tasumi remains
+            const onlyTasumiRemains = healthScript.extractPlotMultiModelData(plotBiomassAfterTasumiOnly, 'tonne_ha', 'tonnes', false);
+            assert.strictEqual(onlyTasumiRemains.biomassLabels.length, 0, 'No biomass points should remain before 14 Aug by default');
             assert.deepStrictEqual(onlyTasumiRemains.labels, ['14 Aug'], 'Only Tasumi should remain on 14 Aug');
             assert.strictEqual(onlyTasumiRemains.yieldTrend.length, 1);
             assert.strictEqual(onlyTasumiRemains.yieldTrend[0], 14.0);
+
+            // Opt-in (true): both biomass points + Tasumi shown
+            const allShown = healthScript.extractPlotMultiModelData(plotBiomassAfterTasumiOnly, 'tonne_ha', 'tonnes', true);
+            assert.strictEqual(allShown.biomassLabels.length, 2);
+            assert.strictEqual(allShown.labels.length, 3);
         }
     }
 ];

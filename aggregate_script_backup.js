@@ -1226,6 +1226,8 @@ function updatePlotData(selectedPlot) {
     const row = globalData.find(r => r._processed && r._processed.name === selectedPlot);
 
     updateElement('plot-audited-area', '');
+    const tasumiStatusEl = document.getElementById('plot-tasumi-status');
+    if (tasumiStatusEl) tasumiStatusEl.innerHTML = '';
 
     if (row && row._processed) {
         const d = row._processed;
@@ -1237,6 +1239,23 @@ function updatePlotData(selectedPlot) {
             const areaVal = parseFloat(d.auditedArea);
             const aLabel = d.areaUnit === 'ha' ? 'Ha' : 'Acres';
             updateElement('plot-audited-area', `Audited Area: ${areaVal.toFixed(2)} ${aLabel}`);
+        }
+
+        let hasTasumi = false;
+        if (Array.isArray(d.yieldRawRecords)) {
+            const tRec = d.yieldRawRecords.find(r => (r.modelType || '').toUpperCase() === 'TASUMI');
+            if (tRec && tRec.parameters) {
+                const p = tRec.parameters;
+                hasTasumi = (p.yieldAvg !== undefined && p.yieldAvg !== null) ||
+                            (p.yieldMin !== undefined && p.yieldMin !== null) ||
+                            (p.productionAvg !== undefined && p.productionMin !== null) ||
+                            (tRec.yieldMin !== undefined && tRec.yieldMin !== null);
+            }
+        }
+        if (tasumiStatusEl) {
+            tasumiStatusEl.innerHTML = hasTasumi
+                ? `Tasumi generated: <span style="color: #22c55e; font-weight: 600;">Yes</span>`
+                : `Tasumi generated: <span style="color: #94a3b8; font-weight: 600;">No</span>`;
         }
 
         updateElement('plot-exp-yield', fmtSmart(d.y1));
@@ -1867,7 +1886,7 @@ function formatTrendDate(dateStr) {
     return dateStr;
 }
 
-function extractPlotMultiModelData(d, hideBiomassAfterTasumi = null) {
+function extractPlotMultiModelData(d, showBiomassAfterTasumi = null) {
     if (!d || !Array.isArray(d.yieldRawRecords)) return null;
 
     const bDaysRecord = d.yieldRawRecords.find(r => (r.modelType || '').toUpperCase() === 'BIOMASS_DAYS');
@@ -1877,9 +1896,13 @@ function extractPlotMultiModelData(d, hideBiomassAfterTasumi = null) {
         return null;
     }
 
-    const shouldHide = hideBiomassAfterTasumi !== null
-        ? !!hideBiomassAfterTasumi
-        : (typeof document !== 'undefined' && document.getElementById('hide-biomass-after-tasumi')?.checked || false);
+    const isShowChecked = showBiomassAfterTasumi !== null
+        ? !!showBiomassAfterTasumi
+        : (typeof document !== 'undefined' && document.getElementById('show-biomass-after-tasumi')?.checked || false);
+
+    // Default (isShowChecked === false): hide biomass after tasumi & consider tasumi only on same day
+    // Checked (isShowChecked === true): reveal all biomass points after tasumi
+    const shouldHide = !isShowChecked;
 
     const yieldUnit = getDataYieldUnit();
     const harvestUnit = getDataHarvestUnit();
@@ -2278,10 +2301,10 @@ function createTrendChart(canvas, opts) {
     });
 }
 
-function handleHideBiomassAfterTasumiChange(e) {
-    const isChecked = e ? e.target.checked : (document.getElementById('hide-biomass-after-tasumi')?.checked || false);
-    const plotCb = document.getElementById('hide-biomass-after-tasumi');
-    const modalCb = document.getElementById('modal-hide-biomass-after-tasumi');
+function handleShowBiomassAfterTasumiChange(e) {
+    const isChecked = e ? e.target.checked : (document.getElementById('show-biomass-after-tasumi')?.checked || false);
+    const plotCb = document.getElementById('show-biomass-after-tasumi');
+    const modalCb = document.getElementById('modal-show-biomass-after-tasumi');
     if (plotCb && plotCb.checked !== isChecked) plotCb.checked = isChecked;
     if (modalCb && modalCb.checked !== isChecked) modalCb.checked = isChecked;
 
@@ -2295,8 +2318,8 @@ function renderPlotTrendCharts(d) {
     const yieldContainer = document.getElementById('plot-yield-chart-container');
     const harvestContainer = document.getElementById('plot-harvest-chart-container');
 
-    const shouldHide = document.getElementById('hide-biomass-after-tasumi')?.checked || false;
-    const modelData = extractPlotMultiModelData(d, shouldHide);
+    const isShowChecked = document.getElementById('show-biomass-after-tasumi')?.checked || false;
+    const modelData = extractPlotMultiModelData(d, isShowChecked);
 
     if (!modelData) {
         if (yieldContainer) yieldContainer.classList.add('hidden');
@@ -2369,8 +2392,8 @@ function openYieldGrowthModal(tab) {
 
     if (d) {
         activePlotForTrend = d;
-        const shouldHide = document.getElementById('hide-biomass-after-tasumi')?.checked || false;
-        const modelData = extractPlotMultiModelData(d, shouldHide);
+        const isShowChecked = document.getElementById('show-biomass-after-tasumi')?.checked || false;
+        const modelData = extractPlotMultiModelData(d, isShowChecked);
         if (modelData) {
             renderModalTrendChart(modelData, currentModalTrendTab);
         }
@@ -2420,8 +2443,8 @@ function switchYieldGrowthTab(tab) {
     }
 
     if (activePlotForTrend) {
-        const shouldHide = document.getElementById('hide-biomass-after-tasumi')?.checked || false;
-        const modelData = extractPlotMultiModelData(activePlotForTrend, shouldHide);
+        const isShowChecked = document.getElementById('show-biomass-after-tasumi')?.checked || false;
+        const modelData = extractPlotMultiModelData(activePlotForTrend, isShowChecked);
         if (modelData) {
             renderModalTrendChart(modelData, tab);
         }
@@ -4812,6 +4835,8 @@ function clearPlotDisplay() {
         const el = document.getElementById(id);
         if (el) el.textContent = '-';
     });
+    const tasumiStatusEl = document.getElementById('plot-tasumi-status');
+    if (tasumiStatusEl) tasumiStatusEl.innerHTML = '';
 
     ['plot-re-diff', 'plot-re-yield-diff', 'plot-app-yield-diff-exp', 'plot-app-yield-diff-re',
         'plot-re-harvest-diff', 'plot-app-harvest-diff-exp', 'plot-app-harvest-diff-re'].forEach(id => {
@@ -5574,7 +5599,7 @@ window.convertValueToMetricTon = convertValueToMetricTon;
 
 // Plot Multi-Model Trend Chart Exports
 window.renderPlotTrendCharts = renderPlotTrendCharts;
-window.handleHideBiomassAfterTasumiChange = handleHideBiomassAfterTasumiChange;
+window.handleShowBiomassAfterTasumiChange = handleShowBiomassAfterTasumiChange;
 window.openYieldGrowthModal = openYieldGrowthModal;
 window.closeYieldGrowthModal = closeYieldGrowthModal;
 window.switchYieldGrowthTab = switchYieldGrowthTab;

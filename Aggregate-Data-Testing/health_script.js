@@ -1507,7 +1507,7 @@ function formatTrendDate(dateStr) {
     return dateStr;
 }
 
-function extractPlotMultiModelData(d, yieldUnitOverride = null, harvestUnitOverride = null, hideBiomassAfterTasumi = false) {
+function extractPlotMultiModelData(d, yieldUnitOverride = null, harvestUnitOverride = null, showBiomassAfterTasumi = false) {
     if (!d || !Array.isArray(d.yieldRawRecords)) return null;
 
     const bDaysRecord = d.yieldRawRecords.find(r => (r.modelType || '').toUpperCase() === 'BIOMASS_DAYS');
@@ -1562,9 +1562,10 @@ function extractPlotMultiModelData(d, yieldUnitOverride = null, harvestUnitOverr
     // Sort biomass days progression chronologically
     const sortedGdd = [...bDaysRecord.gddPredictions].sort((a, b) => (a.cutoff_date || '').localeCompare(b.cutoff_date || ''));
 
-    // Filter biomass days progression if hideBiomassAfterTasumi is enabled and tasumi prediction exists
+    // Filter biomass days progression if showBiomassAfterTasumi is false (default) and tasumi prediction exists
     let effectiveGdd = sortedGdd;
-    if (hideBiomassAfterTasumi && tasumiISODate && tasumiYieldAvg !== null) {
+    const shouldHide = !showBiomassAfterTasumi;
+    if (shouldHide && tasumiISODate && tasumiYieldAvg !== null) {
         effectiveGdd = sortedGdd.filter(p => {
             if (!p.cutoff_date) return true;
             const bDateStr = String(p.cutoff_date);

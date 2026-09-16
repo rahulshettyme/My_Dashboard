@@ -166,14 +166,14 @@ When a plot has `modelType: "BIOMASS_DAYS"` present in its prediction records (`
      - Values $\ge 1,000$: formatted in Thousands (`1.5k`, `2k`, `2.5k`, `3k`), preserving exact decimals on fractional thousand ticks (`1.5k`, `2.5k`), strictly eliminating duplicate rounded labels (e.g. previous bug of `2k, 2k, 3k, 3k`).
      - Values $< 1,000$: formatted as clean integers or decimals (`500`, `7.5`, `0`).
    - Applied universally to both Plot-Level Yield and Harvest trend charts, as well as the Enlarge Modal dialog.
-7. **'Hide Biomass after Tasumi' Plot-Level Trend Filter Option**:
-   - A toggle checkbox `#hide-biomass-after-tasumi` is provided in the Section 2 (Plot Level) header (and synchronized in the Enlarge Modal header `#modal-hide-biomass-after-tasumi`).
-   - When checked:
+7. **'Show Biomass after Tasumi' Plot-Level Trend Filter Option**:
+   - A toggle checkbox `#show-biomass-after-tasumi` is provided in the Section 2 (Plot Level) header (and synchronized in the Enlarge Modal header `#modal-show-biomass-after-tasumi`), unchecked by default.
+   - **Default Behavior (Unchecked)**:
      - The trend chart stops showing any Biomass Days data points whose cutoff date is chronologically after the plot's authoritative Tasumi prediction date (`bISODate > tasumiISODate`).
      - If both Biomass Days and Tasumi have data on the exact same calendar day (`bISODate === tasumiISODate`), the system considers **Tasumi only** by filtering out the Biomass data point on that date and plotting the authoritative Tasumi point.
-     - Only Biomass cutoff dates strictly preceding Tasumi (`bISODate < tasumiISODate`) are rendered on the trend progression leading up to Tasumi at the end.
-   - When unchecked (default):
-     - All chronological Biomass cutoff dates are plotted along with the Tasumi point.
+     - The trend curve terminates cleanly with the Tasumi prediction as the culmination point.
+   - **User Opt-in (Checked)**:
+     - All chronological Biomass cutoff dates are plotted along with the Tasumi point, showing the full progression even after Tasumi.
    - **Scope Isolation Constraint**:
      - This toggle strictly modifies the visual dataset passed to the trend charts (`plot-yield-trend-chart`, `plot-harvest-trend-chart`, and `modal-trend-canvas`).
      - It **never alters** plot metric values (Expected, Re-estimated, Predicted min/max, Card Level status/percentage) or any records in the base data table (`#all-plots-table`) or aggregate cards.
@@ -229,6 +229,11 @@ display values for both AI prediction models simultaneously:
 ---
 
 ## 4. Change Log (Feature & Logic Audit Trail)
+* **2026-09-16**: Updated Plot-Level Trend Chart 'Show Biomass after Tasumi' and Added 'Tasumi generated' Indicator:
+  1. Renamed checkbox to `Show Biomass after Tasumi` (`#show-biomass-after-tasumi`), unchecked/disabled by default.
+  2. Inverted default behavior: by default (unchecked), biomass data generated after Tasumi is hidden and same-day conflict defaults to Tasumi only; only upon user checking the box are all biomass points displayed.
+  3. Added plot-level status label `Tasumi generated: Yes / No` (`#plot-tasumi-status`) directly next to `Audited Area` providing immediate transparency on whether the culmination point on the trend chart is Tasumi or Biomass Days.
+  4. Updated Test 29 in regression test suite (29/29 tests passing: 11 existing, 18 new).
 * **2026-09-09**: Added 'Hide Biomass after Tasumi' Option for Plot-Level Trend Charts:
   1. Added checkbox `Hide Biomass after Tasumi` (`#hide-biomass-after-tasumi`) in Section 2 (Plot Level) header and synchronized `#modal-hide-biomass-after-tasumi` in Yield & Growth enlarge modal.
   2. Updated `extractPlotMultiModelData()` in `aggregate_script_backup.js` and `health_script.js`:
