@@ -2123,6 +2123,80 @@ function formatTrendYTick(v) {
     return v % 1 === 0 ? v.toString() : parseFloat(v.toFixed(2)).toString();
 }
 
+/**
+ * Extracts and formats top summary metric values for the enlarged Yield & Growth modal.
+ * @param {Object} modelData 
+ * @param {string} tab 'yield' or 'harvest'
+ */
+function extractModalSummaryValues(modelData, tab = 'yield') {
+    if (!modelData) return null;
+    const isYield = tab === 'yield';
+
+    const formatVal = (v) => {
+        if (v === null || v === undefined || v === 'NA' || isNaN(v)) return '-';
+        if (typeof fmtSmart === 'function') return fmtSmart(v);
+        const s = Number(v).toFixed(2);
+        return s.endsWith('.00') ? s.slice(0, -3) : s;
+    };
+
+    const stdLabel = isYield ? 'Standard Yield' : 'Standard Harvest';
+    const reLabel = isYield ? 'Re-estimated Yield' : 'Re-estimated Harvest';
+    const predLabel = isYield ? 'Forecasted Yield' : 'Forecasted Harvest';
+
+    const rawStd = isYield ? modelData.stdYield : modelData.stdHarvest;
+    const rawRe = isYield ? modelData.reYield : modelData.reHarvest;
+    const unitLabel = isYield ? modelData.yieldUnitLabel : modelData.harvestUnitLabel;
+
+    const stdVal = (rawStd !== undefined && rawStd !== null && !isNaN(rawStd) && Number(rawStd) > 0)
+        ? formatVal(rawStd)
+        : '-';
+
+    const hasRe = rawRe !== undefined && rawRe !== null && !isNaN(rawRe) && Number(rawRe) > 0;
+    const reVal = hasRe ? formatVal(rawRe) : '-';
+
+    const trend = isYield ? modelData.yieldTrend : modelData.harvestTrend;
+    const minTrend = isYield ? modelData.yieldMinTrend : modelData.harvestMinTrend;
+    const maxTrend = isYield ? modelData.yieldMaxTrend : modelData.harvestMaxTrend;
+    const lastIdx = (trend && trend.length > 0) ? trend.length - 1 : -1;
+
+    let latestMin = null;
+    let latestMax = null;
+    if (isYield) {
+        latestMin = (modelData.tasumi && modelData.tasumi.yieldMin !== null)
+            ? modelData.tasumi.yieldMin
+            : (minTrend && minTrend[lastIdx] !== undefined ? minTrend[lastIdx] : null);
+        latestMax = (modelData.tasumi && modelData.tasumi.yieldMax !== null)
+            ? modelData.tasumi.yieldMax
+            : (maxTrend && maxTrend[lastIdx] !== undefined ? maxTrend[lastIdx] : null);
+    } else {
+        latestMin = (modelData.tasumi && modelData.tasumi.harvestMin !== null)
+            ? modelData.tasumi.harvestMin
+            : (minTrend && minTrend[lastIdx] !== undefined ? minTrend[lastIdx] : null);
+        latestMax = (modelData.tasumi && modelData.tasumi.harvestMax !== null)
+            ? modelData.tasumi.harvestMax
+            : (maxTrend && maxTrend[lastIdx] !== undefined ? maxTrend[lastIdx] : null);
+    }
+
+    let predVal = '-';
+    if (latestMin !== null && latestMax !== null) {
+        predVal = `${formatVal(latestMin)} - ${formatVal(latestMax)}`;
+    } else if (lastIdx >= 0 && trend && trend[lastIdx] !== undefined) {
+        predVal = `${formatVal(trend[lastIdx])}`;
+    }
+
+    return {
+        stdLabel,
+        stdVal,
+        stdUnit: unitLabel,
+        reLabel,
+        reVal,
+        reUnit: unitLabel,
+        predLabel,
+        predVal,
+        predUnit: unitLabel
+    };
+}
+
 if (typeof module !== 'undefined') {
     module.exports = {
         isWithinAnalysisWindow,
@@ -2148,6 +2222,7 @@ if (typeof module !== 'undefined') {
         isWithinPredictedRange,
         calculateClosestDiff,
         formatCardLevelDiff,
-        formatTrendYTick
+        formatTrendYTick,
+        extractModalSummaryValues
     };
 }

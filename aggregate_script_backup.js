@@ -2458,18 +2458,26 @@ function renderModalTrendChart(modelData, tab) {
 
     // Update Header Summary Values matching Image 2 & 3
     const stdLabel = document.getElementById('modal-summary-label-std');
+    const reLabel = document.getElementById('modal-summary-label-re');
     const predLabel = document.getElementById('modal-summary-label-pred');
     const stdVal = document.getElementById('modal-summary-val-std');
     const stdUnit = document.getElementById('modal-summary-unit-std');
+    const reVal = document.getElementById('modal-summary-val-re');
+    const reUnit = document.getElementById('modal-summary-unit-re');
     const predVal = document.getElementById('modal-summary-val-pred');
     const predUnit = document.getElementById('modal-summary-unit-pred');
     const chartTitle = document.getElementById('modal-chart-title');
 
     if (isYield) {
         if (stdLabel) stdLabel.textContent = 'Standard Yield';
+        if (reLabel) reLabel.textContent = 'Re-estimated Yield';
         if (predLabel) predLabel.textContent = 'Forecasted Yield';
-        if (stdVal) stdVal.textContent = fmtSmart(modelData.stdYield);
+        if (stdVal) stdVal.textContent = (modelData.stdYield !== undefined && modelData.stdYield !== null && !isNaN(modelData.stdYield) && Number(modelData.stdYield) > 0) ? fmtSmart(modelData.stdYield) : '-';
         if (stdUnit) stdUnit.textContent = modelData.yieldUnitLabel;
+
+        const hasReYield = modelData.reYield !== undefined && modelData.reYield !== null && !isNaN(modelData.reYield) && Number(modelData.reYield) > 0;
+        if (reVal) reVal.textContent = hasReYield ? fmtSmart(modelData.reYield) : '-';
+        if (reUnit) reUnit.textContent = modelData.yieldUnitLabel;
 
         const lastIdx = modelData.yieldTrend.length - 1;
         const latestMin = (modelData.tasumi && modelData.tasumi.yieldMin !== null)
@@ -2490,9 +2498,14 @@ function renderModalTrendChart(modelData, tab) {
         if (chartTitle) chartTitle.textContent = 'Yield Forecast Trend';
     } else {
         if (stdLabel) stdLabel.textContent = 'Standard Harvest';
+        if (reLabel) reLabel.textContent = 'Re-estimated Harvest';
         if (predLabel) predLabel.textContent = 'Forecasted Harvest';
-        if (stdVal) stdVal.textContent = fmtSmart(modelData.stdHarvest);
+        if (stdVal) stdVal.textContent = (modelData.stdHarvest !== undefined && modelData.stdHarvest !== null && !isNaN(modelData.stdHarvest) && Number(modelData.stdHarvest) > 0) ? fmtSmart(modelData.stdHarvest) : '-';
         if (stdUnit) stdUnit.textContent = modelData.harvestUnitLabel;
+
+        const hasReHarvest = modelData.reHarvest !== undefined && modelData.reHarvest !== null && !isNaN(modelData.reHarvest) && Number(modelData.reHarvest) > 0;
+        if (reVal) reVal.textContent = hasReHarvest ? fmtSmart(modelData.reHarvest) : '-';
+        if (reUnit) reUnit.textContent = modelData.harvestUnitLabel;
 
         const lastIdx = modelData.harvestTrend.length - 1;
         const latestMin = (modelData.tasumi && modelData.tasumi.harvestMin !== null)
@@ -4829,7 +4842,8 @@ function clearPlotDisplay() {
         'plot-exp-harvest', 'plot-re-harvest',
         'plot-app-harvest-min', 'plot-app-harvest-max',
         'plot-card-level', 'plot-card-level-exp', 'plot-card-level-re',
-        'plot-harvest-card-level', 'plot-harvest-card-level-exp', 'plot-harvest-card-level-re'
+        'plot-harvest-card-level', 'plot-harvest-card-level-exp', 'plot-harvest-card-level-re',
+        'modal-summary-val-std', 'modal-summary-val-re', 'modal-summary-val-pred'
     ];
     plotElements.forEach(id => {
         const el = document.getElementById(id);

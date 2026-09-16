@@ -1097,6 +1097,91 @@ const tests = [
             assert.strictEqual(allShown.biomassLabels.length, 2);
             assert.strictEqual(allShown.labels.length, 3);
         }
+    },
+    {
+        name: 'extractModalSummaryValues_enlarged_modal_yield_and_harvest',
+        fn: () => {
+            const mockModelData = {
+                stdYield: 15000,
+                reYield: 12500,
+                stdHarvest: 45300,
+                reHarvest: 38000,
+                yieldUnitLabel: 'Kilogram/Acre',
+                harvestUnitLabel: 'Kilogram',
+                yieldTrend: [3000, 3200],
+                yieldMinTrend: [2800, 3049.31],
+                yieldMaxTrend: [3100, 3370.23],
+                harvestTrend: [8000, 9500],
+                harvestMinTrend: [7500, 9209],
+                harvestMaxTrend: [8500, 10179],
+                tasumi: {
+                    yieldMin: 3049.31,
+                    yieldMax: 3370.23,
+                    harvestMin: 9209,
+                    harvestMax: 10179
+                }
+            };
+
+            // Case 1: Yield Tab
+            const yieldSummary = healthScript.extractModalSummaryValues(mockModelData, 'yield');
+            assert.strictEqual(yieldSummary.stdLabel, 'Standard Yield');
+            assert.strictEqual(yieldSummary.stdVal, '15000');
+            assert.strictEqual(yieldSummary.stdUnit, 'Kilogram/Acre');
+            assert.strictEqual(yieldSummary.reLabel, 'Re-estimated Yield');
+            assert.strictEqual(yieldSummary.reVal, '12500');
+            assert.strictEqual(yieldSummary.reUnit, 'Kilogram/Acre');
+            assert.strictEqual(yieldSummary.predLabel, 'Forecasted Yield');
+            assert.strictEqual(yieldSummary.predVal, '3049.31 - 3370.23');
+            assert.strictEqual(yieldSummary.predUnit, 'Kilogram/Acre');
+
+            // Case 2: Harvest Tab
+            const harvestSummary = healthScript.extractModalSummaryValues(mockModelData, 'harvest');
+            assert.strictEqual(harvestSummary.stdLabel, 'Standard Harvest');
+            assert.strictEqual(harvestSummary.stdVal, '45300');
+            assert.strictEqual(harvestSummary.stdUnit, 'Kilogram');
+            assert.strictEqual(harvestSummary.reLabel, 'Re-estimated Harvest');
+            assert.strictEqual(harvestSummary.reVal, '38000');
+            assert.strictEqual(harvestSummary.reUnit, 'Kilogram');
+            assert.strictEqual(harvestSummary.predLabel, 'Forecasted Harvest');
+            assert.strictEqual(harvestSummary.predVal, '9209 - 10179');
+            assert.strictEqual(harvestSummary.predUnit, 'Kilogram');
+
+            // Case 3: When Re-estimated is 0 or absent
+            const mockNoRe = {
+                stdYield: 15000,
+                reYield: 0,
+                stdHarvest: 45300,
+                reHarvest: null,
+                yieldUnitLabel: 'Kilogram/Acre',
+                harvestUnitLabel: 'Kilogram',
+                yieldTrend: [3200],
+                harvestTrend: [9500],
+                tasumi: { yieldMin: null, yieldMax: null, harvestMin: null, harvestMax: null }
+            };
+            const noReYield = healthScript.extractModalSummaryValues(mockNoRe, 'yield');
+            assert.strictEqual(noReYield.reVal, '-');
+            const noReHarvest = healthScript.extractModalSummaryValues(mockNoRe, 'harvest');
+            assert.strictEqual(noReHarvest.reVal, '-');
+
+            // Case 4: When Standard is 0 or absent
+            const mockNoStd = {
+                stdYield: 0,
+                reYield: 12000,
+                stdHarvest: null,
+                reHarvest: 35000,
+                yieldUnitLabel: 'Tonnes/Ha',
+                harvestUnitLabel: 'Tonnes',
+                yieldTrend: [10],
+                harvestTrend: [25],
+                tasumi: { yieldMin: null, yieldMax: null, harvestMin: null, harvestMax: null }
+            };
+            const noStdYield = healthScript.extractModalSummaryValues(mockNoStd, 'yield');
+            assert.strictEqual(noStdYield.stdVal, '-');
+            assert.strictEqual(noStdYield.reVal, '12000');
+            const noStdHarvest = healthScript.extractModalSummaryValues(mockNoStd, 'harvest');
+            assert.strictEqual(noStdHarvest.stdVal, '-');
+            assert.strictEqual(noStdHarvest.reVal, '35000');
+        }
     }
 ];
 

@@ -178,6 +178,13 @@ When a plot has `modelType: "BIOMASS_DAYS"` present in its prediction records (`
      - This toggle strictly modifies the visual dataset passed to the trend charts (`plot-yield-trend-chart`, `plot-harvest-trend-chart`, and `modal-trend-canvas`).
      - It **never alters** plot metric values (Expected, Re-estimated, Predicted min/max, Card Level status/percentage) or any records in the base data table (`#all-plots-table`) or aggregate cards.
 
+8. **Enlarged Yield & Growth Modal Top Summary Information**:
+   - The enlarged modal dialog (`#yield-growth-modal`) displays 3 standardized metric rows above the forecast trend chart:
+     - **Standard Yield / Standard Harvest**: Configured baseline from crop configuration (`#modal-summary-val-std`, `#modal-summary-unit-std`) with subtitle `From Crop Configuration` (with the previous 'View' link removed).
+     - **Re-estimated Yield / Re-estimated Harvest**: Field-audited baseline (`#modal-summary-val-re`, `#modal-summary-unit-re`) with subtitle `From Field Audit`. When Re-estimated data is absent or $0$, cleanly displays `-`.
+     - **Forecasted Yield / Forecasted Harvest**: Remote sensing model prediction interval (`#modal-summary-val-pred`, `#modal-summary-unit-pred`) with subtitle `🌿 Powered By Cropin AI`.
+   - All 3 rows adapt dynamically when switching between the `Yield Analysis` and `Harvest Analysis` tabs, using active plot display units (`yieldUnitLabel` and `harvestUnitLabel`).
+
 ### E. Base Yield Data Ordering & Natural Sorting
 To guarantee consistent presentation across the dashboard, all base yield records (`globalData`), API-generated plot arrays, and the base plot data table (`#base-yield-table-wrapper`) are sorted ascending by plot name (`Plot Name` / `CA Name`):
 1. **Natural Alphanumeric Ordering**: Sorting utilizes `localeCompare(..., undefined, { numeric: true, sensitivity: 'base' })`, ensuring natural progression (e.g. `Plot 1, Plot 2, Plot 10` rather than ASCII `Plot 1, Plot 10, Plot 2`).
@@ -229,6 +236,11 @@ display values for both AI prediction models simultaneously:
 ---
 
 ## 4. Change Log (Feature & Logic Audit Trail)
+* **2026-09-16**: Updated Enlarged Yield & Harvest Cards (Yield & Growth Modal):
+  1. Added Re-estimated Yield and Re-estimated Harvest to the top summary header of `#yield-growth-modal` (`#modal-summary-label-re`, `#modal-summary-val-re`, `#modal-summary-unit-re`) with subtitle `From Field Audit`.
+  2. Structured the top summary information into 3 clean, responsive metric rows (Standard, Re-estimated, Forecasted) guaranteeing alignment across all zoom levels and viewports.
+  3. Removed the non-functional 'View' button link from the 'Standard yield' and 'Standard harvest' section (`From Crop Configuration`).
+  4. Added Test 30 to regression test suite verifying modal summary value extraction and fallback handling (30/30 tests passing: 11 existing, 19 new).
 * **2026-09-16**: Updated Plot-Level Trend Chart 'Show Biomass after Tasumi' and Added 'Tasumi generated' Indicator:
   1. Renamed checkbox to `Show Biomass after Tasumi` (`#show-biomass-after-tasumi`), unchecked/disabled by default.
   2. Inverted default behavior: by default (unchecked), biomass data generated after Tasumi is hidden and same-day conflict defaults to Tasumi only; only upon user checking the box are all biomass points displayed.
