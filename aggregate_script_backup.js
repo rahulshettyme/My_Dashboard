@@ -506,7 +506,7 @@ const fmtYield = (val) => {
 };
 const fmtHarvest = (val) => {
     if (val === null || val === undefined || val === 'NA' || isNaN(val)) return '-';
-    return Math.round(Number(val)).toString();
+    return Number(val).toFixed(2);
 };
 const fmtSmart = (val) => {
     if (val === null || val === undefined || val === 'NA' || isNaN(val)) return '-';

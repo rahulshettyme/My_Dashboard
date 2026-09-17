@@ -85,6 +85,7 @@ For a plot with audited area $A$, expected harvest $H_1$, and re-estimated harve
   $$\text{massFactor} = \text{getDynamicFactor}(\text{'Metric Ton'}, q, \text{'Mass'})$$
   $$H_{3\text{min}} = \text{productionMin} \times \text{massFactor}$$
   $$H_{3\text{max}} = \text{productionMax} \times \text{massFactor}$$
+  - **Formatting & Decimal Precision**: Predicted Harvest values in the plot card are formatted with 2 decimal places roundoff via `fmtHarvest` (`Number(val).toFixed(2)`), matching `fmtYield` and preventing loss of precision when crop harvest units are `TON` or fractional (e.g. `1.52 - 2.56` instead of `2 - 3`).
 - **Predicted Yield (in plot yield unit $q/a$)**:
   $$\text{massFactor} = \text{getDynamicFactor}(\text{'Metric Ton'}, q, \text{'Mass'})$$
   $$\text{areaFactor} = \text{getDynamicFactor}(\text{'Hectare'}, a, \text{'Area'})$$
@@ -236,6 +237,14 @@ display values for both AI prediction models simultaneously:
 ---
 
 ## 4. Change Log (Feature & Logic Audit Trail)
+* **2026-09-16**: Fixed Browser Global Scope Identifier Collision & Added Browser Scripts Syntax Test:
+  1. Root cause: `Aggregate-Data-Testing/health_script.js` declared `const fmtYield` in the top-level scope, which collided with `const fmtYield` in `aggregate_script_backup.js` when both scripts were loaded in `aggregate_dashboard_backup.html`, throwing `Uncaught SyntaxError: Identifier 'fmtYield' has already been declared` and halting initialization of environment selection.
+  2. Scoped Node-specific exports inside `if (typeof module !== 'undefined')` in `health_script.js`, ensuring zero global identifier collisions in browser environments.
+  3. Added Test 32 (`browserScripts_syntax_and_global_scope_collision_check`) to regression suite to sequentially execute `components/export_manager.js`, `aggregate_script_backup.js`, and `health_script.js` in a shared browser-like VM context, permanently preventing any syntax errors or global collisions from bypassing regression testing (32/32 tests passing: 30 existing, 2 new).
+* **2026-09-16**: Updated Plot-Level Predicted Harvest Formatting (`fmtHarvest`) to 2 Decimal Places Roundoff:
+  1. Updated `fmtHarvest` in `aggregate_script_backup.js` and `health_script.js` to format with 2 decimal places roundoff (`Number(val).toFixed(2)`), replacing `Math.round()` which previously rounded small/decimal unit values (e.g. `1.52 - 2.56 TON`) to integers (`2 - 3`).
+  2. Aligned `fmtHarvest` with `fmtYield` and table formatting for complete consistency across plot cards, modals, and base table.
+  3. Added Test 31 to regression test suite verifying `fmtHarvest` and `fmtYield` with 2 decimal points roundoff and null/fallback handling (31/31 tests passing: 30 existing, 1 new).
 * **2026-09-16**: Updated Enlarged Yield & Harvest Cards (Yield & Growth Modal):
   1. Added Re-estimated Yield and Re-estimated Harvest to the top summary header of `#yield-growth-modal` (`#modal-summary-label-re`, `#modal-summary-val-re`, `#modal-summary-unit-re`) with subtitle `From Field Audit`.
   2. Structured the top summary information into 3 clean, responsive metric rows (Standard, Re-estimated, Forecasted) guaranteeing alignment across all zoom levels and viewports.

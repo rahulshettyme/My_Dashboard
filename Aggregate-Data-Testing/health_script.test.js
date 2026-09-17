@@ -2,7 +2,7 @@ const assert = require('assert');
 const healthScript = require('./health_script.js');
 const { selectYieldPredictionParameters } = require('../server.js');
 
-const baselineCount = 11;
+const baselineCount = 30;
 
 const tests = [
     {
@@ -1181,6 +1181,98 @@ const tests = [
             const noStdHarvest = healthScript.extractModalSummaryValues(mockNoStd, 'harvest');
             assert.strictEqual(noStdHarvest.stdVal, '-');
             assert.strictEqual(noStdHarvest.reVal, '35000');
+        }
+    },
+    {
+        name: 'fmtHarvest_and_fmtYield_two_decimal_points_roundoff',
+        fn: () => {
+            // Test fmtHarvest with 2 decimal points roundoff
+            assert.strictEqual(healthScript.fmtHarvest(1.524), '1.52', '1.524 should round to 1.52');
+            assert.strictEqual(healthScript.fmtHarvest(2.555), '2.56', '2.555 should round to 2.56');
+            assert.strictEqual(healthScript.fmtHarvest(2), '2.00', '2 should format to 2.00');
+            assert.strictEqual(healthScript.fmtHarvest(0), '0.00', '0 should format to 0.00');
+            assert.strictEqual(healthScript.fmtHarvest('1.524'), '1.52', 'string 1.524 should round to 1.52');
+            assert.strictEqual(healthScript.fmtHarvest(12345.678), '12345.68', '12345.678 should round to 12345.68');
+
+            // Test fallbacks
+            assert.strictEqual(healthScript.fmtHarvest(null), '-', 'null should return -');
+            assert.strictEqual(healthScript.fmtHarvest(undefined), '-', 'undefined should return -');
+            assert.strictEqual(healthScript.fmtHarvest('NA'), '-', 'NA should return -');
+            assert.strictEqual(healthScript.fmtHarvest(NaN), '-', 'NaN should return -');
+
+            // Test fmtYield consistency
+            assert.strictEqual(healthScript.fmtYield(1.524), '1.52', 'fmtYield 1.524 should round to 1.52');
+            assert.strictEqual(healthScript.fmtYield(2.555), '2.56', 'fmtYield 2.555 should round to 2.56');
+            assert.strictEqual(healthScript.fmtYield(null), '-', 'fmtYield null should return -');
+        }
+    },
+    {
+        name: 'browserScripts_syntax_and_global_scope_collision_check',
+        fn: () => {
+            const fs = require('fs');
+            const vm = require('vm');
+            const path = require('path');
+
+            const dummyEl = {
+                addEventListener: () => {},
+                appendChild: () => {},
+                style: {},
+                classList: { add: () => {}, remove: () => {}, contains: () => false },
+                setAttribute: () => {},
+                getAttribute: () => null,
+                innerHTML: '',
+                textContent: ''
+            };
+
+            const dom = {
+                addEventListener: () => {},
+                getElementById: () => dummyEl,
+                querySelector: () => dummyEl,
+                querySelectorAll: () => [],
+                createElement: () => ({ ...dummyEl })
+            };
+
+            const contextObj = {
+                console: { log: () => {}, warn: () => {}, error: () => {} },
+                document: dom,
+                location: { href: '', search: '', pathname: '' },
+                sessionStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+                localStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+                setTimeout: () => {},
+                clearTimeout: () => {},
+                setInterval: () => {},
+                clearInterval: () => {},
+                navigator: { userAgent: 'node' },
+                Chart: function() { this.destroy = () => {}; },
+                XLSX: {},
+                api: { getEnvironments: () => Promise.resolve([]), getDb: () => Promise.resolve({}) }
+            };
+            contextObj.window = contextObj;
+            contextObj.global = contextObj;
+
+            const context = vm.createContext(contextObj);
+
+            // 1. Verify components/export_manager.js loads without error
+            const exportManagerPath = path.join(__dirname, '../components/export_manager.js');
+            const exportManagerCode = fs.readFileSync(exportManagerPath, 'utf8');
+            vm.runInContext(exportManagerCode, context, { filename: 'components/export_manager.js' });
+
+            // 2. Verify aggregate_script_backup.js loads without syntax error
+            const aggScriptPath = path.join(__dirname, '../aggregate_script_backup.js');
+            const aggScriptCode = fs.readFileSync(aggScriptPath, 'utf8');
+            vm.runInContext(aggScriptCode, context, { filename: 'aggregate_script_backup.js' });
+
+            // 3. Verify Aggregate-Data-Testing/health_script.js loads into the same global context without identifier collision
+            const healthScriptPath = path.join(__dirname, 'health_script.js');
+            const healthScriptCode = fs.readFileSync(healthScriptPath, 'utf8');
+            vm.runInContext(healthScriptCode, context, { filename: 'Aggregate-Data-Testing/health_script.js' });
+
+            // 4. Assert core application functions exist on window/global
+            assert.strictEqual(vm.runInContext('typeof initSearchableDropdown', context), 'function', 'initSearchableDropdown must be defined in global scope');
+            assert.strictEqual(vm.runInContext('typeof fmtYield', context), 'function', 'fmtYield must be defined in global scope');
+            assert.strictEqual(vm.runInContext('typeof fmtHarvest', context), 'function', 'fmtHarvest must be defined in global scope');
+            assert.strictEqual(vm.runInContext('typeof fmtSmart', context), 'function', 'fmtSmart must be defined in global scope');
+            assert.strictEqual(vm.runInContext('typeof renderEnvironments', context), 'function', 'renderEnvironments must be defined in global scope');
         }
     }
 ];

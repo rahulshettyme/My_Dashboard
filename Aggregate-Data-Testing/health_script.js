@@ -2198,6 +2198,22 @@ function extractModalSummaryValues(modelData, tab = 'yield') {
 }
 
 if (typeof module !== 'undefined') {
+    const fmtYield = (val) => {
+        if (val === null || val === undefined || val === 'NA' || isNaN(val)) return '-';
+        return Number(val).toFixed(2);
+    };
+
+    const fmtHarvest = (val) => {
+        if (val === null || val === undefined || val === 'NA' || isNaN(val)) return '-';
+        return Number(val).toFixed(2);
+    };
+
+    const fmtSmart = (val) => {
+        if (val === null || val === undefined || val === 'NA' || isNaN(val)) return '-';
+        const s = Number(val).toFixed(2);
+        return s.endsWith('.00') ? s.slice(0, -3) : s;
+    };
+
     module.exports = {
         isWithinAnalysisWindow,
         formatDateToDMY,
@@ -2212,6 +2228,9 @@ if (typeof module !== 'undefined') {
         getFallbackFactor,
         convertYield,
         convertHarvest,
+        fmtYield,
+        fmtHarvest,
+        fmtSmart,
         formatTrendDate,
         extractPlotMultiModelData,
         resolveYieldPredictionRules,
