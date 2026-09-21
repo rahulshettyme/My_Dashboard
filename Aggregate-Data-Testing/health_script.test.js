@@ -1,6 +1,6 @@
 const assert = require('assert');
 const healthScript = require('./health_script.js');
-const { selectYieldPredictionParameters } = require('../server.js');
+const { selectYieldPredictionParameters, extractGrowthStageData } = require('../server.js');
 
 const baselineCount = 30;
 
@@ -1207,6 +1207,194 @@ const tests = [
         }
     },
     {
+        name: 'extractGrowthStageData_dailyInterpretation_and_latest_stage_extraction',
+        fn: () => {
+            const mockGrowthApiResponse = {
+                "totalItems": 32,
+                "currentPageItems": 20,
+                "currentPage": 0,
+                "totalPages": 2,
+                "units": {},
+                "records": [
+                    {
+                        "id": "6ab09effd58eb647f9c18f3a",
+                        "createdDateTime": "2026-09-21T03:05:18.851Z",
+                        "modifiedDateTime": "2026-09-21T03:05:18.851Z",
+                        "date": "2026-09-20T00:00:00Z",
+                        "boundaryId": "605160125660",
+                        "cropGrowthStage": {
+                            "cropStageName": "Tuber Initiation",
+                            "gdd": 544.35,
+                            "dd": 18.25,
+                            "dayProgression": 1.62,
+                            "seasonProgression": 48.38666666666666,
+                            "stageInterpretation": "Emergence stage was normal-growing compared to its historical condition.",
+                            "overAllInterpretation": "Expected Crop maturity date range is 31-10-2026 to 04-11-2026",
+                            "dailyInterpretation": "Normal Growth",
+                            "harvestWindowStartDate": "2026-10-31T00:00:00Z",
+                            "harvestWindowEndDate": "2026-11-04T00:00:00Z"
+                        }
+                    },
+                    {
+                        "id": "6aaf4d4bb6a7bbfb8340a406",
+                        "date": "2026-09-19T00:00:00Z",
+                        "cropGrowthStage": {
+                            "cropStageName": "Emergence",
+                            "dailyInterpretation": "Slow Growth"
+                        }
+                    }
+                ]
+            };
+
+            const result = extractGrowthStageData(mockGrowthApiResponse, '605160125660');
+            assert.strictEqual(result.caId, '605160125660', 'caId should match');
+            assert.strictEqual(result.cropStageName, 'Tuber Initiation', 'cropStageName should match latest record');
+            assert.strictEqual(result.dailyInterpretation, 'Normal Growth', 'dailyInterpretation should match latest record');
+            assert.strictEqual(result.seasonProgression, 48.38666666666666, 'seasonProgression should match latest record');
+            assert.strictEqual(result.harvestWindowStartDate, '2026-10-31T00:00:00Z', 'harvestWindowStartDate should match latest record');
+            assert.strictEqual(result.harvestWindowEndDate, '2026-11-04T00:00:00Z', 'harvestWindowEndDate should match latest record');
+
+            // Fallback when dailyInterpretation is missing
+            const mockNoInterpretation = {
+                records: [
+                    {
+                        cropGrowthStage: {
+                            cropStageName: 'Flowering'
+                        }
+                    }
+                ]
+            };
+            const resultNoInterp = extractGrowthStageData(mockNoInterpretation, '123');
+            assert.strictEqual(resultNoInterp.dailyInterpretation, '-', 'Missing dailyInterpretation should fallback to "-"');
+
+            // Fallback when records are empty
+            const resultEmpty = extractGrowthStageData({ records: [] }, '123');
+            assert.strictEqual(resultEmpty._rawEmpty, true, 'Empty records should return _rawEmpty flag');
+        }
+    },
+    {
+        name: 'computeProgressionMetrics_stacked_bins_and_insights_calculation',
+        fn: () => {
+            const fs = require('fs');
+            const vm = require('vm');
+            const path = require('path');
+
+            const dummyEl = {
+                addEventListener: () => {},
+                appendChild: () => {},
+                style: {},
+                classList: { add: () => {}, remove: () => {}, contains: () => false },
+                setAttribute: () => {},
+                getAttribute: () => null,
+                innerHTML: '',
+                textContent: ''
+            };
+
+            const dom = {
+                addEventListener: () => {},
+                getElementById: () => dummyEl,
+                querySelector: () => dummyEl,
+                querySelectorAll: () => [],
+                createElement: () => ({ ...dummyEl })
+            };
+
+            const contextObj = {
+                console: { log: () => {}, warn: () => {}, error: () => {} },
+                document: dom,
+                location: { href: '', search: '', pathname: '' },
+                sessionStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+                localStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+                setTimeout: () => {},
+                clearTimeout: () => {},
+                setInterval: () => {},
+                clearInterval: () => {},
+                navigator: { userAgent: 'node' },
+                Chart: function() { this.destroy = () => {}; },
+                XLSX: {},
+                api: { getEnvironments: () => Promise.resolve([]), getDb: () => Promise.resolve({}) }
+            };
+            contextObj.window = contextObj;
+            contextObj.global = contextObj;
+
+            const context = vm.createContext(contextObj);
+            const exportManagerPath = path.join(__dirname, '../components/export_manager.js');
+            const exportManagerCode = fs.readFileSync(exportManagerPath, 'utf8');
+            vm.runInContext(exportManagerCode, context, { filename: 'components/export_manager.js' });
+
+            const aggScriptPath = path.join(__dirname, '../aggregate_script_backup.js');
+            const aggScriptCode = fs.readFileSync(aggScriptPath, 'utf8');
+            vm.runInContext(aggScriptCode, context, { filename: 'aggregate_script_backup.js' });
+
+            const computeMetrics = context.computeProgressionMetrics;
+            assert.strictEqual(typeof computeMetrics, 'function', 'computeProgressionMetrics must be defined');
+
+            // Construct 100 mock plots matching the design screenshot
+            const mockPlots = [];
+            // 9 harvested plots
+            for (let i = 0; i < 9; i++) {
+                mockPlots.push({
+                    plotName: `Harvested Plot ${i}`,
+                    isHarvested: 'Yes',
+                    progression: '100',
+                    dailyInterpretation: 'Normal Growth'
+                });
+            }
+
+            // 91 active plots:
+            // Bin 0 (0-20%): 8 plots (4 slow, 4 normal)
+            for (let i = 0; i < 4; i++) mockPlots.push({ plotName: `P_B0_S_${i}`, isHarvested: 'No', progression: '15', dailyInterpretation: 'Slow Growth' });
+            for (let i = 0; i < 4; i++) mockPlots.push({ plotName: `P_B0_N_${i}`, isHarvested: 'No', progression: '18', dailyInterpretation: 'Normal Growth' });
+
+            // Bin 1 (20-40%): 20 plots (10 slow, 8 normal, 2 fast)
+            for (let i = 0; i < 10; i++) mockPlots.push({ plotName: `P_B1_S_${i}`, isHarvested: 'No', progression: '30', dailyInterpretation: 'Slow Growth' });
+            for (let i = 0; i < 8; i++) mockPlots.push({ plotName: `P_B1_N_${i}`, isHarvested: 'No', progression: '35', dailyInterpretation: 'Normal Growth' });
+            for (let i = 0; i < 2; i++) mockPlots.push({ plotName: `P_B1_F_${i}`, isHarvested: 'No', progression: '38', dailyInterpretation: 'Fast Growth' });
+
+            // Bin 2 (40-60%): 25 plots (15 slow, 10 normal)
+            for (let i = 0; i < 15; i++) mockPlots.push({ plotName: `P_B2_S_${i}`, isHarvested: 'No', progression: '50', dailyInterpretation: 'Slow Growth' });
+            for (let i = 0; i < 10; i++) mockPlots.push({ plotName: `P_B2_N_${i}`, isHarvested: 'No', progression: '55', dailyInterpretation: 'Normal Growth' });
+
+            // Bin 3 (60-80%): 15 plots (6 slow, 8 normal, 1 fast)
+            for (let i = 0; i < 6; i++) mockPlots.push({ plotName: `P_B3_S_${i}`, isHarvested: 'No', progression: '70', dailyInterpretation: 'Slow Growth' });
+            for (let i = 0; i < 8; i++) mockPlots.push({ plotName: `P_B3_N_${i}`, isHarvested: 'No', progression: '75', dailyInterpretation: 'Normal Growth' });
+            for (let i = 0; i < 1; i++) mockPlots.push({ plotName: `P_B3_F_${i}`, isHarvested: 'No', progression: '78', dailyInterpretation: 'Fast Growth' });
+
+            // Bin 4 (80-100%): 23 plots (10 slow, 10 normal, 3 fast - matching Callout 1 tooltip!)
+            for (let i = 0; i < 10; i++) mockPlots.push({ plotName: `P_B4_S_${i}`, isHarvested: 'No', progression: '90', dailyInterpretation: 'Slow Growth' });
+            for (let i = 0; i < 10; i++) mockPlots.push({ plotName: `P_B4_N_${i}`, isHarvested: 'No', progression: '95', dailyInterpretation: 'Normal Growth' });
+            for (let i = 0; i < 3; i++) mockPlots.push({ plotName: `P_B4_F_${i}`, isHarvested: 'No', progression: '98', dailyInterpretation: 'Fast Growth' });
+
+            // 1. Scenario: Hide Harvested Plots IS selected (hideHarvested = true)
+            const metricsHidden = computeMetrics(mockPlots, 100, null, true);
+            assert.strictEqual(metricsHidden.totalPlotsCount, 100, 'Total plots count should be 100');
+            assert.strictEqual(metricsHidden.harvestedCount, 9, 'Harvested plots count should be 9');
+            assert.strictEqual(metricsHidden.analysisCount, 91, 'Plots under analysis count should be 91 when hideHarvested is true');
+            assert.strictEqual(metricsHidden.slowPlotsCount, 45, 'Slow growth plots count should be 45');
+            assert.strictEqual(metricsHidden.normalPlotsCount, 40, 'Normal growth plots count should be 40');
+            assert.strictEqual(metricsHidden.fastPlotsCount, 6, 'Fast growth plots count should be 6');
+            assert.strictEqual(metricsHidden.onTrackCount, 46, 'On track count (normal + fast) should be 46');
+
+            // Check bins for hideHarvested = true
+            assert.strictEqual(metricsHidden.bins[0].allPlots.length, 8, 'Bin 0 - 20% should have 8 plots');
+            assert.strictEqual(metricsHidden.bins[1].allPlots.length, 20, 'Bin 20 - 40% should have 20 plots');
+            assert.strictEqual(metricsHidden.bins[2].allPlots.length, 25, 'Bin 40 - 60% should have 25 plots');
+            assert.strictEqual(metricsHidden.bins[3].allPlots.length, 15, 'Bin 60 - 80% should have 15 plots');
+            assert.strictEqual(metricsHidden.bins[4].allPlots.length, 23, 'Bin 80 - 100% should have 23 plots');
+
+            // 2. Scenario: Hide Harvested Plots is NOT selected (default, hideHarvested = false)
+            const metricsIncluded = computeMetrics(mockPlots, 100, null, false);
+            assert.strictEqual(metricsIncluded.totalPlotsCount, 100, 'Total plots count should be 100');
+            assert.strictEqual(metricsIncluded.harvestedCount, 9, 'Harvested plots count should be 9');
+            assert.strictEqual(metricsIncluded.analysisCount, 100, 'Plots under analysis count should include harvested (100) when hideHarvested is false');
+            assert.strictEqual(metricsIncluded.slowPlotsCount, 45, 'Slow growth plots count should be 45');
+            assert.strictEqual(metricsIncluded.normalPlotsCount, 49, 'Normal growth plots count should include 9 harvested plots (40 + 9 = 49)');
+            assert.strictEqual(metricsIncluded.fastPlotsCount, 6, 'Fast growth plots count should be 6');
+            assert.strictEqual(metricsIncluded.onTrackCount, 55, 'On track count should be 55 (49 normal + 6 fast)');
+            // Bin 4 should have 23 active + 9 harvested = 32 plots
+            assert.strictEqual(metricsIncluded.bins[4].allPlots.length, 32, 'Bin 4 should include the 9 harvested plots in 80 - 100%');
+        }
+    },
+    {
         name: 'browserScripts_syntax_and_global_scope_collision_check',
         fn: () => {
             const fs = require('fs');
@@ -1273,6 +1461,7 @@ const tests = [
             assert.strictEqual(vm.runInContext('typeof fmtHarvest', context), 'function', 'fmtHarvest must be defined in global scope');
             assert.strictEqual(vm.runInContext('typeof fmtSmart', context), 'function', 'fmtSmart must be defined in global scope');
             assert.strictEqual(vm.runInContext('typeof renderEnvironments', context), 'function', 'renderEnvironments must be defined in global scope');
+            assert.strictEqual(vm.runInContext('typeof computeProgressionMetrics', context), 'function', 'computeProgressionMetrics must be defined in global scope');
         }
     }
 ];

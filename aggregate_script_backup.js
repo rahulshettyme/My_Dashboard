@@ -3067,6 +3067,7 @@ function clearAllDataUI() {
         'plot-count', 'agg-total-area', 'agg-plots-count', 'agg-exp-harvest', 'agg-re-harvest', 
         'agg-ai-harvest-min', 'agg-ai-harvest-max', 'agg-exp-yield', 'agg-re-yield', 
         'agg-ai-yield-min', 'agg-ai-yield-max', 'growth-prog-total', 'growth-prog-harvested', 
+        'growth-prog-under-analysis', 'growth-prog-slow', 'growth-prog-normal', 'growth-prog-fast',
         'harvest-plots-covered', 'harvest-window-range', 'stat-harvest-plots-covered', 'stat-harvest-collected',
         'growth-status', 'progress-text'
     ];
@@ -3074,6 +3075,10 @@ function clearAllDataUI() {
         const el = document.getElementById(id);
         if (el) el.textContent = '-';
     });
+    const insightBannerEl = document.getElementById('growth-prog-insight-text');
+    if (insightBannerEl) {
+        insightBannerEl.innerHTML = '<strong>- plots</strong> are progressing <strong>on track</strong>, while <strong>- plots</strong> show <strong>slow growth and require attention</strong>';
+    }
     
     // Extra resets for module status spans
     ['yield-status', 'growth-status', 'health-status'].forEach(id => {
@@ -3842,6 +3847,7 @@ async function handleLoadGrowthData() {
                 harvestedDate: formatDate(harvestDate),
                 currentStage: (growth && growth.cropStageName) ? growth.cropStageName : "-",
                 progression: (growth && growth.seasonProgression) ? (parseFloat(growth.seasonProgression) || 0).toFixed(2) : "-",
+                dailyInterpretation: (growth && growth.dailyInterpretation) ? growth.dailyInterpretation : "-",
                 hStart: (growth && growth.harvestWindowStartDate) ? formatDate(growth.harvestWindowStartDate) : "-",
                 hEnd: (growth && growth.harvestWindowEndDate) ? formatDate(growth.harvestWindowEndDate) : "-",
                 rawHStart: rawHStart,
@@ -3865,7 +3871,7 @@ async function handleLoadGrowthData() {
 
         window.currentGrowthResults = growthResults;
         
-        // Reset toggles to unchecked on load
+        // Toggle to hide harvested plots defaults to unchecked (include harvested plots unless selected)
         const chartToggle = document.getElementById('hide-harvested-chart');
         if (chartToggle) chartToggle.checked = false;
         const tableToggle = document.getElementById('hide-harvested-table');
@@ -3887,7 +3893,11 @@ async function handleLoadGrowthData() {
         if (tableControls) tableControls.classList.remove('hidden');
 
         renderGrowthTable(growthResults);
-        renderGrowthProgressionChart(growthResults);
+        const hideHarvestedInitial = (chartToggle && chartToggle.checked) ? true : false;
+        const initialProgResults = hideHarvestedInitial 
+            ? growthResults.filter(r => r.isHarvested !== "Yes") 
+            : growthResults;
+        renderGrowthProgressionChart(initialProgResults, hideHarvestedInitial);
         renderGrowthStageChart(growthResults);
         renderHarvestWindowChart(growthResults);
         renderHarvestWindowDailyChart(growthResults);
@@ -3974,7 +3984,12 @@ function syncGrowthWithYield() {
 
     // Re-render components
     renderGrowthTable(window.currentGrowthResults);
-    renderGrowthProgressionChart(window.currentGrowthResults);
+    const chartToggleSync = document.getElementById('hide-harvested-chart');
+    const hideHarvestedSync = (chartToggleSync && chartToggleSync.checked) ? true : false;
+    const syncProgResults = hideHarvestedSync 
+        ? window.currentGrowthResults.filter(r => r.isHarvested !== "Yes") 
+        : window.currentGrowthResults;
+    renderGrowthProgressionChart(syncProgResults, hideHarvestedSync);
     renderGrowthStageChart(window.currentGrowthResults);
     renderHarvestWindowChart(window.currentGrowthResults);
     renderHarvestWindowDailyChart(window.currentGrowthResults);
@@ -4016,6 +4031,7 @@ function renderGrowthTable(results) {
                             <th style="${headerStyle}" ${hoverEffect} onclick="handleGrowthTableSort('harvestedDate')">Harvested Date ${getSortIcon('harvestedDate')}</th>
                             <th style="${headerStyle}" ${hoverEffect} onclick="handleGrowthTableSort('currentStage')">Current Stage ${getSortIcon('currentStage')}</th>
                             <th style="${headerStyle}" ${hoverEffect} onclick="handleGrowthTableSort('progression')">Progression ${getSortIcon('progression')}</th>
+                            <th style="${headerStyle}" ${hoverEffect} onclick="handleGrowthTableSort('dailyInterpretation')">Daily Interpretation ${getSortIcon('dailyInterpretation')}</th>
                             <th style="${headerStyle}" ${hoverEffect} onclick="handleGrowthTableSort('hStart')">Start Date ${getSortIcon('hStart')}</th>
                             <th style="${headerStyle}" ${hoverEffect} onclick="handleGrowthTableSort('hEnd')">End Date ${getSortIcon('hEnd')}</th>
                         </tr>
@@ -4024,7 +4040,7 @@ function renderGrowthTable(results) {
     `;
 
     if (results.length === 0) {
-        html += `<tr><td colspan="9" style="padding: 2rem; text-align: center; color: var(--text-secondary);">No growth data available for the selected plots.</td></tr>`;
+        html += `<tr><td colspan="10" style="padding: 2rem; text-align: center; color: var(--text-secondary);">No growth data available for the selected plots.</td></tr>`;
     } else {
         results.forEach(res => {
             html += `
@@ -4036,6 +4052,7 @@ function renderGrowthTable(results) {
                     <td style="padding: 1rem;">${res.harvestedDate || '-'}</td>
                     <td style="padding: 1rem;">${res.currentStage || '-'}</td>
                     <td style="padding: 1rem;">${res.progression}%</td>
+                    <td style="padding: 1rem;">${res.dailyInterpretation || '-'}</td>
                     <td style="padding: 1rem;">${res.hStart || '-'}</td>
                     <td style="padding: 1rem;">${res.hEnd || '-'}</td>
                 </tr>
@@ -4113,54 +4130,137 @@ const drawValuesPlugin = {
     }
 };
 
-function renderGrowthProgressionChart(results) {
+function computeProgressionMetrics(fullResults, totalPlotsCount, plotsToBin, hideHarvested = false) {
+    const allPlots = fullResults || [];
+    const totalCount = totalPlotsCount || allPlots.length;
+    const harvestedPlots = allPlots.filter(r => r.isHarvested === "Yes");
+    
+    // Include harvested plots in analysis and category counts unless 'Hide Harvested Plots' is selected
+    const analysisPlots = hideHarvested 
+        ? allPlots.filter(r => r.isHarvested !== "Yes") 
+        : allPlots;
+
+    let slowPlotsCount = 0;
+    let normalPlotsCount = 0;
+    let fastPlotsCount = 0;
+
+    analysisPlots.forEach(r => {
+        const interp = (r.dailyInterpretation || '').toLowerCase().trim();
+        if (interp.includes('slow')) {
+            slowPlotsCount++;
+        } else if (interp.includes('fast')) {
+            fastPlotsCount++;
+        } else {
+            normalPlotsCount++;
+        }
+    });
+
+    const onTrackCount = normalPlotsCount + fastPlotsCount;
+
+    const bins = [
+        { label: '0 - 20%', slowPlots: [], normalPlots: [], fastPlots: [], allPlots: [], totalArea: 0 },
+        { label: '20 - 40%', slowPlots: [], normalPlots: [], fastPlots: [], allPlots: [], totalArea: 0 },
+        { label: '40 - 60%', slowPlots: [], normalPlots: [], fastPlots: [], allPlots: [], totalArea: 0 },
+        { label: '60 - 80%', slowPlots: [], normalPlots: [], fastPlots: [], allPlots: [], totalArea: 0 },
+        { label: '80 - 100%', slowPlots: [], normalPlots: [], fastPlots: [], allPlots: [], totalArea: 0 }
+    ];
+
+    const targetPlots = plotsToBin || analysisPlots;
+    targetPlots.forEach(res => {
+        if (res.progression === "-" || res.progression === null) return;
+        
+        let pVal = parseFloat(res.progression);
+        if (isNaN(pVal)) return;
+
+        // Backend returns seasonProgression, e.g., 0.8 -> convert to percentage
+        if (pVal <= 1.0) {
+            pVal = pVal * 100;
+        }
+
+        let binIdx = 0;
+        if (pVal <= 20) binIdx = 0;
+        else if (pVal <= 40) binIdx = 1;
+        else if (pVal <= 60) binIdx = 2;
+        else if (pVal <= 80) binIdx = 3;
+        else binIdx = 4;
+
+        const interp = (res.dailyInterpretation || '').toLowerCase().trim();
+        if (interp.includes('slow')) {
+            bins[binIdx].slowPlots.push(res);
+        } else if (interp.includes('fast')) {
+            bins[binIdx].fastPlots.push(res);
+        } else {
+            bins[binIdx].normalPlots.push(res);
+        }
+        bins[binIdx].allPlots.push(res);
+
+        if (res.auditedArea !== "NA") {
+            bins[binIdx].totalArea += (parseFloat(res.auditedArea) || 0);
+        }
+    });
+
+    return {
+        totalPlotsCount: totalCount,
+        harvestedCount: harvestedPlots.length,
+        analysisCount: analysisPlots.length,
+        slowPlotsCount,
+        normalPlotsCount,
+        fastPlotsCount,
+        onTrackCount,
+        bins
+    };
+}
+if (typeof window !== 'undefined') {
+    window.computeProgressionMetrics = computeProgressionMetrics;
+}
+
+function renderGrowthProgressionChart(results, hideHarvestedParam) {
     try {
         console.log(`[DEBUG] Rendering Progression Chart with ${results.length} plots`);
-        // Stats should always reflect the global data, not the filtered results
+        // Stats should always reflect the global data, not just filtered results
         const fullResults = window.currentGrowthResults || results;
-        const totalPlotsCount = fullResults.length;
-        const harvestedPlotsCount = fullResults.filter(r => r.isHarvested === "Yes").length;
+        const totalPlotsCount = (typeof plotsData !== 'undefined' && plotsData && plotsData.length) ? plotsData.length : fullResults.length;
+        
+        let hideHarvested = false;
+        if (typeof hideHarvestedParam === 'boolean') {
+            hideHarvested = hideHarvestedParam;
+        } else if (typeof document !== 'undefined' && document.getElementById('hide-harvested-chart')) {
+            hideHarvested = document.getElementById('hide-harvested-chart').checked;
+        }
 
-        const totalEl = document.getElementById('growth-prog-total');
+        const metrics = computeProgressionMetrics(fullResults, totalPlotsCount, results, hideHarvested);
+
+        const formatCount = n => String(n).padStart(2, '0');
+
+        const underAnalysisEl = document.getElementById('growth-prog-under-analysis');
         const harvestedEl = document.getElementById('growth-prog-harvested');
-        if (totalEl) totalEl.textContent = `${totalPlotsCount} / ${plotsData.length}`;
-        if (harvestedEl) harvestedEl.textContent = `${harvestedPlotsCount} / ${plotsData.length}`;
+        const slowEl = document.getElementById('growth-prog-slow');
+        const normalEl = document.getElementById('growth-prog-normal');
+        const fastEl = document.getElementById('growth-prog-fast');
+        const totalEl = document.getElementById('growth-prog-total');
 
-        // Initialize bins
-        const bins = [
-            { label: '0-20%', plots: [], totalArea: 0 },
-            { label: '20-40%', plots: [], totalArea: 0 },
-            { label: '40-60%', plots: [], totalArea: 0 },
-            { label: '60-80%', plots: [], totalArea: 0 },
-            { label: '80-100%', plots: [], totalArea: 0 }
-        ];
+        if (underAnalysisEl) underAnalysisEl.textContent = `${formatCount(metrics.analysisCount)} / ${formatCount(metrics.totalPlotsCount)}`;
+        if (harvestedEl) harvestedEl.textContent = `${formatCount(metrics.harvestedCount)} / ${formatCount(metrics.totalPlotsCount)}`;
+        if (slowEl) slowEl.textContent = formatCount(metrics.slowPlotsCount);
+        if (normalEl) normalEl.textContent = formatCount(metrics.normalPlotsCount);
+        if (fastEl) fastEl.textContent = formatCount(metrics.fastPlotsCount);
+        if (totalEl) totalEl.textContent = `${metrics.analysisCount} / ${metrics.totalPlotsCount}`;
 
-        results.forEach(res => {
-            if (res.progression === "-" || res.progression === null) return;
-            
-            let pVal = parseFloat(res.progression);
-            if (isNaN(pVal)) return;
-
-            // Backend returns seasonProgression, e.g., 0.8
-            // Convert to percentage
-            if (pVal <= 1.0) {
-                pVal = pVal * 100;
+        // Bottom insight banner
+        const insightEl = document.getElementById('growth-prog-insight-text');
+        if (insightEl) {
+            if (metrics.analysisCount === 0) {
+                insightEl.innerHTML = 'No plots currently under active growth analysis.';
+            } else if (metrics.slowPlotsCount === 0) {
+                insightEl.innerHTML = `<strong>${metrics.onTrackCount} plots</strong> are progressing <strong>on track</strong>.`;
+            } else if (metrics.onTrackCount === 0) {
+                insightEl.innerHTML = `<strong>${metrics.slowPlotsCount} plots</strong> show <strong>slow growth and require attention</strong>.`;
+            } else {
+                insightEl.innerHTML = `<strong>${metrics.onTrackCount} plots</strong> are progressing <strong>on track</strong>, while <strong>${metrics.slowPlotsCount} plots</strong> show <strong>slow growth and require attention</strong>`;
             }
+        }
 
-            let binIdx = 0;
-            if (pVal <= 20) binIdx = 0;
-            else if (pVal <= 40) binIdx = 1;
-            else if (pVal <= 60) binIdx = 2;
-            else if (pVal <= 80) binIdx = 3;
-            else binIdx = 4;
-
-            bins[binIdx].plots.push(res);
-            if (res.auditedArea !== "NA") {
-                bins[binIdx].totalArea += (parseFloat(res.auditedArea) || 0);
-            }
-        });
-
-        const areaUnit = companyPrefs.areaUnits || 'Acre';
+        const bins = metrics.bins;
 
         const canvas = document.getElementById('growthProgressionChart');
         if (!canvas) return;
@@ -4170,97 +4270,161 @@ function renderGrowthProgressionChart(results) {
             growthProgressionChartInstance.destroy();
         }
 
+        // Custom plugin to draw total sum above each stacked bar with underline
+        const growthProgressionTotalsPlugin = {
+            id: 'growthProgressionTotals',
+            afterDatasetsDraw: (chart) => {
+                const cCtx = chart.ctx;
+                const metaList = chart.data.datasets.map((_, i) => chart.getDatasetMeta(i));
+                const numBars = chart.data.labels.length;
+
+                for (let i = 0; i < numBars; i++) {
+                    let total = 0;
+                    let topY = null;
+                    let barX = null;
+
+                    chart.data.datasets.forEach((dataset, dIdx) => {
+                        const val = dataset.data[i] || 0;
+                        total += val;
+                        const bar = metaList[dIdx]?.data[i];
+                        if (bar) {
+                            barX = bar.x;
+                            if (val > 0) {
+                                if (topY === null || bar.y < topY) {
+                                    topY = bar.y;
+                                }
+                            }
+                        }
+                    });
+
+                    if (total === 0 || topY === null || barX === null) continue;
+
+                    cCtx.save();
+                    cCtx.font = 'bold 18px "Inter", sans-serif';
+                    cCtx.textAlign = 'center';
+                    cCtx.textBaseline = 'bottom';
+                    
+                    const textColor = '#f8fafc';
+                    cCtx.fillStyle = textColor;
+                    
+                    const textStr = String(total);
+                    const textY = topY - 10;
+                    cCtx.fillText(textStr, barX, textY);
+
+                    const textWidth = cCtx.measureText(textStr).width;
+                    cCtx.beginPath();
+                    cCtx.moveTo(barX - textWidth / 2 - 2, textY + 5);
+                    cCtx.lineTo(barX + textWidth / 2 + 2, textY + 5);
+                    cCtx.strokeStyle = textColor;
+                    cCtx.lineWidth = 2;
+                    cCtx.stroke();
+                    cCtx.restore();
+                }
+            }
+        };
+
         growthProgressionChartInstance = new Chart(ctx, {
             type: 'bar',
             data: {
                 labels: bins.map(b => b.label),
-                datasets: [{
-                    label: 'Plots',
-                    data: bins.map(b => b.plots.length),
-                    backgroundColor: '#06b6d4',
-                    barThickness: 50,
-                    borderRadius: 0, 
-                    borderWidth: 0
-                }]
+                datasets: [
+                    {
+                        label: 'Slow Growth',
+                        data: bins.map(b => b.slowPlots.length),
+                        backgroundColor: '#f6c445',
+                        stack: 'growthProgressionStack',
+                        barThickness: 45,
+                        borderRadius: 0,
+                        borderWidth: 0
+                    },
+                    {
+                        label: 'Normal Growth',
+                        data: bins.map(b => b.normalPlots.length),
+                        backgroundColor: '#264653',
+                        stack: 'growthProgressionStack',
+                        barThickness: 45,
+                        borderRadius: 0,
+                        borderWidth: 0
+                    },
+                    {
+                        label: 'Fast Growth',
+                        data: bins.map(b => b.fastPlots.length),
+                        backgroundColor: '#5cae57',
+                        stack: 'growthProgressionStack',
+                        barThickness: 45,
+                        borderRadius: 0,
+                        borderWidth: 0
+                    }
+                ]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                layout: { padding: { top: 70 } }, // Increased padding for bubbles
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                },
+                layout: {
+                    padding: { top: 35, bottom: 10 }
+                },
                 plugins: {
-                    legend: { display: false },
+                    legend: {
+                        display: true,
+                        position: 'bottom',
+                        align: 'start',
+                        labels: {
+                            usePointStyle: true,
+                            pointStyle: 'circle',
+                            boxWidth: 8,
+                            boxHeight: 8,
+                            padding: 20,
+                            color: '#94a3b8',
+                            font: { family: "'Inter', sans-serif", size: 13, weight: '500' }
+                        }
+                    },
                     tooltip: {
+                        enabled: true,
+                        backgroundColor: '#1e384c',
+                        padding: { top: 10, bottom: 10, left: 14, right: 14 },
+                        cornerRadius: 6,
+                        displayColors: false,
+                        titleFont: { size: 0 },
+                        bodyFont: { family: "'Inter', sans-serif", size: 13, weight: '600' },
+                        bodyColor: '#ffffff',
                         callbacks: {
+                            title: () => '',
                             label: function(context) {
-                                const b = bins[context.dataIndex];
-                                return [
-                                    'Plots: ' + context.raw,
-                                    'Area: ' + b.totalArea.toFixed(2) + ' ' + areaUnit
-                                ];
+                                const count = context.raw || 0;
+                                if (count === 0) return null;
+                                return `${context.dataset.label} - ${count} Plots`;
                             }
                         }
                     }
                 },
                 scales: {
-                    y: { display: false, beginAtZero: true },
                     x: {
-                        ticks: { color: '#e2e8f0', font: { size: 14 } },
-                        grid: { color: 'rgba(255, 255, 255, 0.1)', drawBorder: false }
+                        stacked: true,
+                        grid: { display: false, drawBorder: false },
+                        ticks: {
+                            color: '#94a3b8',
+                            font: { family: "'Inter', sans-serif", size: 13, weight: '500' }
+                        }
+                    },
+                    y: {
+                        stacked: true,
+                        display: false,
+                        beginAtZero: true,
+                        grace: '20%'
                     }
                 },
                 onClick: (e, elements) => {
                     if (elements.length > 0) {
                         const index = elements[0].index;
-                        showGrowthProgressionPlots(bins[index].label, bins[index].plots);
+                        showGrowthProgressionPlots(bins[index].label, bins[index].allPlots);
                     }
                 }
             },
-            plugins: [
-                drawValuesPlugin,
-                {
-                    id: 'progressionCustomLabels',
-                    afterDatasetsDraw: (chart) => {
-                        const ctx = chart.ctx;
-                        chart.data.datasets.forEach((dataset, i) => {
-                            const meta = chart.getDatasetMeta(i);
-                            meta.data.forEach((bar, index) => {
-                                const bData = bins[index];
-                                if (bData.plots.length === 0) return;
-
-                                const areaVal = bData.totalArea === 0 && bData.plots.every(p => p.auditedArea === "NA") ? "NA" : bData.totalArea.toFixed(2);
-                                const bubbleText = `${bData.plots.length} Plots, ${areaVal} ${areaUnit}`;
-                                ctx.font = '11px "Inter", sans-serif';
-                                const textWidth = ctx.measureText(bubbleText).width;
-                                const bW = textWidth + 12;
-                                const bH = 26;
-                                const bX = bar.x - (bW / 2);
-                                // User Request: more padding between number and bubble
-                                // bar.y is top of bar. drawValues draws at bar.y - 12. 
-                                // Moving bubble to -65 for more gap.
-                                const bY = bar.y - 65; 
-
-                                ctx.fillStyle = '#f8fafc';
-                                ctx.beginPath();
-                                if (ctx.roundRect) ctx.roundRect(bX, bY, bW, bH, 4);
-                                else ctx.rect(bX, bY, bW, bH);
-                                ctx.fill();
-
-                                ctx.beginPath();
-                                ctx.moveTo(bar.x - 4, bY + bH);
-                                ctx.lineTo(bar.x + 4, bY + bH);
-                                ctx.lineTo(bar.x, bY + bH + 5);
-                                ctx.closePath();
-                                ctx.fill();
-
-                                ctx.fillStyle = '#1e293b';
-                                ctx.textAlign = 'center';
-                                ctx.textBaseline = 'middle';
-                                ctx.fillText(bubbleText, bar.x, bY + (bH / 2));
-                            });
-                        });
-                    }
-                }
-            ]
+            plugins: [growthProgressionTotalsPlugin]
         });
 
         // Hide container initially
@@ -4680,7 +4844,7 @@ function showGrowthProgressionPlots(label, plots) {
     
     tbody.innerHTML = '';
     if (plots.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" style="padding: 1rem; text-align: center; color: var(--text-secondary);">No plots in this range.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" style="padding: 1rem; text-align: center; color: var(--text-secondary);">No plots in this range.</td></tr>';
     } else {
         plots.forEach(p => {
             const tr = document.createElement('tr');
@@ -4693,6 +4857,7 @@ function showGrowthProgressionPlots(label, plots) {
                 <td style="padding: 0.75rem; color: var(--text-secondary);">${p.harvestedDate || "-"}</td>
                 <td style="padding: 0.75rem; color: var(--text-secondary);">${p.currentStage || "-"}</td>
                 <td style="padding: 0.75rem; color: var(--text-secondary); font-weight: 600; color: var(--secondary-color);">${p.progression}%</td>
+                <td style="padding: 0.75rem; color: var(--text-secondary);">${p.dailyInterpretation || "-"}</td>
                 <td style="padding: 0.75rem; color: var(--text-secondary);">${p.hStart || "-"}</td>
                 <td style="padding: 0.75rem; color: var(--text-secondary);">${p.hEnd || "-"}</td>
             `;
@@ -4761,7 +4926,7 @@ function updateGrowthChart() {
         : window.currentGrowthResults;
     
     // Only Progression chart should be filtered per user request
-    renderGrowthProgressionChart(filteredResults);
+    renderGrowthProgressionChart(filteredResults, !!hideHarvested);
     
     // Stage, Harvest Window (Weekly), and Harvest Window (Daily) should show all data
     renderGrowthStageChart(window.currentGrowthResults);

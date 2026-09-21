@@ -1405,25 +1405,73 @@
                 <!-- Growth Progression Chart Section -->
                 <div class="analysis-card">
                     <div
-                        style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: flex-start;">
+                        style="margin-bottom: 1.25rem; display: flex; justify-content: space-between; align-items: center;">
                         <h3
                             style="margin: 0; font-size: 1.25rem; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem;">
-                            Growth project data - Progression window
+                            Growth Progression
                             <i class="fas fa-info-circle"
                                 style="font-size: 0.9rem; color: var(--text-secondary); cursor: help;"
                                 title="Displays the distribution of crop stage progression percentages"></i>
                         </h3>
                     </div>
 
-                    <div style="margin-bottom: 1.5rem; font-size: 0.95rem; color: var(--text-secondary);">
-                        <div style="margin-bottom: 0.5rem;">No of Plots - <strong id="growth-prog-total"
-                                style="color: var(--text-primary);">- / -</strong></div>
-                        <div>Total Plots Harvested - <strong id="growth-prog-harvested"
-                                style="color: var(--text-primary);">- / -</strong></div>
+                    <!-- Top Summary KPI Metrics Bar -->
+                    <div class="growth-prog-metrics-bar"
+                        style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 1.5rem; margin-bottom: 1.75rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--border-color);">
+                        <div>
+                            <div id="growth-prog-under-analysis"
+                                style="font-size: 1.35rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.25rem;">
+                                - / -</div>
+                            <div style="font-size: 0.85rem; color: var(--text-secondary);">Plots under Analysis</div>
+                        </div>
+                        <div>
+                            <div id="growth-prog-harvested"
+                                style="font-size: 1.35rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.25rem;">
+                                - / -</div>
+                            <div style="font-size: 0.85rem; color: var(--text-secondary);">Harvested Plots</div>
+                        </div>
+                        <div>
+                            <div id="growth-prog-slow"
+                                style="font-size: 1.35rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.25rem;">
+                                -</div>
+                            <div style="font-size: 0.85rem; color: var(--text-secondary); display: flex; align-items: center; gap: 0.35rem;">
+                                <i class="fas fa-exclamation-triangle" style="color: #f59e0b; font-size: 0.85rem;"></i>
+                                <span>Slow Growth Plots</span>
+                            </div>
+                        </div>
+                        <div>
+                            <div id="growth-prog-normal"
+                                style="font-size: 1.35rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.25rem;">
+                                -</div>
+                            <div style="font-size: 0.85rem; color: var(--text-secondary); display: flex; align-items: center; gap: 0.35rem;">
+                                <i class="far fa-check-circle" style="color: #264653; font-size: 0.85rem;"></i>
+                                <span>Normal Growth Plots</span>
+                            </div>
+                        </div>
+                        <div>
+                            <div id="growth-prog-fast"
+                                style="font-size: 1.35rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.25rem;">
+                                -</div>
+                            <div style="font-size: 0.85rem; color: var(--text-secondary); display: flex; align-items: center; gap: 0.35rem;">
+                                <i class="fas fa-history" style="color: #5cae57; font-size: 0.85rem;"></i>
+                                <span>Fast Growth Plots</span>
+                            </div>
+                        </div>
                     </div>
 
-                    <div style="position: relative; height: 300px; width: 100%;">
+                    <!-- Hidden legacy placeholder for backward compatibility -->
+                    <span id="growth-prog-total" class="hidden"></span>
+
+                    <div style="position: relative; height: 320px; width: 100%;">
                         <canvas id="growthProgressionChart"></canvas>
+                    </div>
+
+                    <!-- Bottom Insights Banner -->
+                    <div id="growth-prog-insight-banner"
+                        style="margin-top: 1.25rem; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.85rem 1.25rem; font-size: 0.95rem; color: var(--text-primary);">
+                        <span id="growth-prog-insight-text">
+                            <strong>- plots</strong> are progressing <strong>on track</strong>, while <strong>- plots</strong> show <strong>slow growth and require attention</strong>
+                        </span>
                     </div>
                 </div>
 
@@ -1465,6 +1513,9 @@
                                     <th
                                         style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
                                         Prog %</th>
+                                    <th
+                                        style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                                        Daily Interpretation</th>
                                     <th
                                         style="text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
                                         H-Start</th>

@@ -322,7 +322,7 @@ async function exportDashboardToPDF() {
             doc.addPage();
             addPageHeader("Base Plot Data Table");
             
-            const tableHeaders = ["Plot Name", "Audited Area", "Expected Harvest", "Is Harvested", "Harvested Date", "Current Stage", "Progression", "Start Date", "End Date"];
+            const tableHeaders = ["Plot Name", "Audited Area", "Expected Harvest", "Is Harvested", "Harvested Date", "Current Stage", "Progression", "Daily Interpretation", "Start Date", "End Date"];
             const tableRows = window.currentGrowthResults.map(p => [
                 p.plotName,
                 (p.auditedArea || 0).toFixed(2),
@@ -331,12 +331,13 @@ async function exportDashboardToPDF() {
                 p.harvestedDate || "-",
                 p.currentStage || "-",
                 (p.progression || 0) + "%",
+                p.dailyInterpretation || "-",
                 p.hStart || "-",
                 p.hEnd || "-"
             ]);
 
             doc.setFontSize(7);
-            const colWidths = [35, 12, 25, 12, 18, 28, 15, 18, 18]; // Total 181
+            const colWidths = [30, 12, 20, 12, 16, 24, 15, 22, 15, 15]; // Total 181
             let ty = 40;
 
             const drawHeaders = (y) => {

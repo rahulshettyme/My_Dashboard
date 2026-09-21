@@ -1938,6 +1938,32 @@ app.get('/api/user-aggregate/germination', (req, res) => {
 });
 
 
+// Helper to extract latest growth stage record details
+function extractGrowthStageData(parsedData, caIds) {
+    let growth = null;
+    if (parsedData && parsedData.records && Array.isArray(parsedData.records)) {
+        for (const rec of parsedData.records) {
+            if (rec.cropGrowthStage && rec.cropGrowthStage.cropStageName) {
+                growth = rec.cropGrowthStage;
+                break;
+            }
+        }
+    }
+
+    if (growth) {
+        return {
+            caId: caIds,
+            cropStageName: growth.cropStageName || "-",
+            seasonProgression: (growth.seasonProgression !== undefined && growth.seasonProgression !== null) ? growth.seasonProgression : 0,
+            dailyInterpretation: growth.dailyInterpretation || "-",
+            harvestWindowStartDate: growth.harvestWindowStartDate || "-",
+            harvestWindowEndDate: growth.harvestWindowEndDate || "-"
+        };
+    } else {
+        return { caId: caIds, _rawEmpty: true, _message: "No valid growth stage records found" };
+    }
+}
+
 // GET Growth Stage Data
 app.get('/api/user-aggregate/growth-stage', (req, res) => {
     const { environment, caIds } = req.query;
@@ -1981,27 +2007,8 @@ app.get('/api/user-aggregate/growth-stage', (req, res) => {
             try {
                 const parsedData = JSON.parse(data);
                 if (gRes.statusCode >= 200 && gRes.statusCode < 300) {
-                    let growth = null;
-                    if (parsedData.records && Array.isArray(parsedData.records)) {
-                        for (const rec of parsedData.records) {
-                            if (rec.cropGrowthStage && rec.cropGrowthStage.cropStageName) {
-                                growth = rec.cropGrowthStage;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (growth) {
-                        res.json({
-                            caId: caIds,
-                            cropStageName: growth.cropStageName || "-",
-                            seasonProgression: growth.seasonProgression || 0,
-                            harvestWindowStartDate: growth.harvestWindowStartDate || "-",
-                            harvestWindowEndDate: growth.harvestWindowEndDate || "-"
-                        });
-                    } else {
-                        res.json({ caId: caIds, _rawEmpty: true, _message: "No valid growth stage records found" });
-                    }
+                    const growthResult = extractGrowthStageData(parsedData, caIds);
+                    res.json(growthResult);
                 } else {
                     res.status(gRes.statusCode).send(data);
                 }
@@ -2168,6 +2175,7 @@ if (require.main === module) {
 
 module.exports = {
     app,
-    selectYieldPredictionParameters
+    selectYieldPredictionParameters,
+    extractGrowthStageData
 };
 
