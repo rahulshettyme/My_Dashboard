@@ -11,6 +11,13 @@ It operates at two granularities:
 1. **Plot Level**: Individual croppable area (CA) metrics, comparison between farmer configuration, field re-estimates, and remote AI model predictions.
 2. **Aggregate Level**: Project-wide totals and area-weighted averages across all plots where prediction data is available (with an option to include non-predicted plots).
 
+### Script Execution Order (Important for Runtime Behavior — previously undocumented)
+`aggregate_dashboard_backup.html` loads scripts as `api.js` (module) → `components/export_manager.js` (defer) → `aggregate_script_backup.js` (defer) → `Aggregate-Data-Testing/health_script.js` (classic script, **no `defer`**). Per HTML parsing rules, the non-deferred `health_script.js` actually executes **first**, synchronously mid-parse; the deferred scripts run afterward, in order, once parsing completes — so **`aggregate_script_backup.js` executes last**, not first as the markup order suggests.
+
+Both files declare 15 identically-named Yield-prediction helper functions as plain top-level `function` statements (`resolveUnitId`, `getDynamicFactor`, `getFallbackFactor`, `resolveYieldPredictionRules`, `sortYieldBaseData`, `getPlotPredictionModelComparison`, `renderModelCell`, `isWithinPredictedRange`, `formatCardLevelDiff`, `extractPlotMultiModelData`, `formatTrendYTick`, `convertYield`, `convertHarvest`, `extractVarietyYieldDetails`, `calculateClosestDiff`, `formatTrendDate`). Plain `function` redeclaration at global scope does not throw — it silently overwrites `window.<name>`. **Because `aggregate_script_backup.js` runs last, its declarations are authoritative for the live UI for all of these functions.** (Only `fmtYield`/`fmtHarvest`/`fmtSmart` are scoped inside `if (typeof module !== 'undefined')` in `health_script.js` to avoid a `const` redeclaration `SyntaxError` against `aggregate_script_backup.js`'s copies — this only prevents the crash, it doesn't change which file "wins" for these three, since `health_script.js`'s versions never execute their module-only block in-browser.) As of this audit (2026-09-22) all diffed shared functions were byte-identical between the two files, so there is currently no behavioral divergence — but this dual-declaration is fragile and any future edit made to only one file's copy will silently diverge from the other without any error.
+
+**Test coverage caveat**: Regression Test 32 (`browserScripts_syntax_and_global_scope_collision_check`) simulates script loading via Node's `vm.runInContext` in the HTML *source* order (`export_manager.js` → `aggregate_script_backup.js` → `health_script.js`), which does not model real browser `defer` timing and is therefore the reverse of the actual execution order described above. The test only asserts each shared function exists (`typeof fn === 'function'`), so it cannot detect which file's implementation is actually live in the browser, nor would it catch a regression where the two files' logic diverges.
+
 ---
 
 ## 2. Yield Prediction Model Selection Hierarchy
@@ -32,7 +39,9 @@ The Yield Prediction API (`/services/farm/api/plot-risk/yield?caIds={caIds}`) ma
    - If neither `TASUMI` nor `BIOMASS_DAYS` is present (e.g., only other models like `BIOMASS_GDD` exist, empty records array `[]`, or API error/disabled):
      - The plot's AI prediction model is marked as `'NA'`.
      - Plot-level predicted harvest and yield are marked as `'NA'`.
-     - The plot is **strictly excluded from aggregate calculations** (`Agg AI Harvest Min/Max` and `Agg AI Yield Min/Max` weighted sums), and is excluded from total aggregate area and expected/re-estimated harvest totals (unless the user explicitly checks "Include plots without prediction in aggregate").
+     - The plot is **strictly excluded from aggregate calculations** (`Agg AI Harvest Min/Max` and `Agg AI Yield Min/Max` weighted sums), and is excluded from total aggregate area and expected/re-estimated harvest totals (unless the user explicitly checks the **"Include no prediction plots"** checkbox, `id="include-no-prediction-agg"` — corrected 2026-09-22; the SOP previously misquoted this label as "Include plots without prediction in aggregate").
+   - **Additional exclusion condition (previously undocumented)**: A plot is also treated as "no prediction" and excluded from aggregation if its AI values resolve to **all-zero** (`h3_min`/`h3_max`/`y3_min`/`y3_max` all `0` or `null`), even when `modelType` is not literally `'NA'` (`isZero` check in `processData()`, `aggregate_script_backup.js`). This runs alongside the documented `isNA` check; the effective condition is `isPredictionAvailable = !isNA && !isZero`.
+   - **Additional bucket (previously undocumented)**: Plots whose Yield feature is not enabled for the CA are tracked separately as `plotsNotEnabled` (`notEnabledPlots`), distinct from the `'NA'`/excluded bucket described above — a third state beyond "has prediction" / "excluded (NA or zero)".
 
 ### Extracted Parameters
 From the selected record (or latest cutoff date), the following metrics are extracted:
@@ -62,14 +71,19 @@ Unit IDs vary across tenant databases and environments. **IDs must NEVER be hard
 The system dynamically resolves unit IDs at runtime using `resolveUnitId(unitType, candidates, masterData)`:
 1. Filters `unit-master` by `unitType` (`Mass` or `Area`).
 2. Matches candidates against `unitCode`, `name`, `unitSymbol`, and `unitShortCode` (case-insensitive).
-3. Matches aliases (e.g. `kgs` $\to$ `Kilogram`, `tonne`/`mt` $\to$ `Metric Ton`, `ha` $\to$ `Hectare`, `ac` $\to$ `Acre`).
+3. Matches aliases. **Full alias table (corrected/expanded 2026-09-22 — SOP previously documented only 4 examples)**, from `resolveUnitId()` in `aggregate_script_backup.js`:
+   - **Mass**: `kgs`/`kg`/`kilogram`/`kilograms` $\to$ `Kilogram`; `tonne`/`tonnes`/`mt`/`metric ton`/`ton (metric)` $\to$ `Metric Ton`; `ton`/`tons`/`us ton` $\to$ **`US Ton`** (a distinct unit from `Metric Ton` — do not conflate); `quintal`/`qtl` $\to$ `Quintal`; `gram`/`g` $\to$ `Gram`.
+   - **Area**: `acre`/`acres`/`ac` $\to$ `Acre`; `ha`/`hectare`/`hectares` $\to$ `Hectare`; `sq mt`/`square meter`/`sqm` $\to$ `Square Meter`; `bigha` $\to$ `Bigha`; `gunta` $\to$ `Gunta`.
 
 #### Factor Lookup & Inversion Math
 For conversion from source unit $S$ to target unit $T$:
 1. If $S = T$, $\text{Factor} = 1.0$.
 2. Direct rule: If `fromUnitId == S` and `toUnitId == T`, $\text{Factor} = \text{conversionFactor}$.
 3. Reciprocal rule: If `fromUnitId == T` and `toUnitId == S`, $\text{Factor} = \frac{1}{\text{conversionFactor}}$.
-4. Fallback: If no rule is found, standard baseline constants are applied as a safety net.
+4. Fallback: If no rule is found, standard baseline constants are applied as a safety net (`getFallbackFactor()`). **Exact constants (previously undocumented)**:
+   - **Area**: Hectare $\to$ Acre = `2.47105`; Acre $\to$ Hectare = `0.404686`.
+   - **Mass** (baseline "to Metric Ton" map, `toTon`): Metric Ton = `1.0`, Kilogram = `0.001`, US Ton = `0.9071847`, Quintal = `0.1`, Gram = `0.000001`. Final factor = `tgtToTon > 0 ? srcToTon / tgtToTon : 1.0`.
+   - **Legacy/parallel code paths note**: `fetchUnitConversions()` (legacy `/api/unit-conversions` endpoint) and `convertValueToMetricTon()` (own independent hardcoded fallback table) also exist in `aggregate_script_backup.js` and are still callable. They appear superseded by the dynamic `getDynamicFactor`/`resolveUnitId` system described above, but their continued presence means the "Zero Hardcoded IDs Constraint" heading should be read as applying to the active dynamic path, not as a guarantee that no hardcoded fallback values exist anywhere in the codebase.
 
 #### Session-Level Caching (Zero Latency)
 To eliminate latency, Master Unit rules are **NEVER** fetched per plot or per calculation.
@@ -81,6 +95,8 @@ For a plot with audited area $A$, expected harvest $H_1$, and re-estimated harve
   $$Y_1 = \frac{H_1}{A}$$
 - **Re-estimated Yield ($Y_2$)**:
   $$Y_2 = \frac{H_2}{A}$$
+  - **Computation timing (clarified 2026-09-22)**: $Y_1$/$Y_2$ are **not** recomputed live at card-render time. For API-sourced plots, `H/A` is computed once during data ingestion in `generateDataFromAPI()` and stored on the row (`d['Expected YIELD']`, post area-unit conversion). For Excel-uploaded rows, `'Expected YIELD'`/`'Re-estimated Yield'` columns are read directly from the sheet when present, with no recomputation. The formula above is correct, but it is an ingestion-time step, not a per-render calculation.
+  - **Field-naming note (2026-09-22)**: An initial `reEstYield` value is computed in `generateDataFromAPI()` from `caData.reestimatedValue / auditedArea`, but is immediately overwritten later in the same function by `H2/Area` (using the differently-named source field `caData.reEstimatedHarvest`) before rendering — the two similarly-named source fields (`reestimatedValue` vs `reEstimatedHarvest`) are not the same field. The final displayed $Y_2$ always comes from the `H2/Area` computation; the initial `reestimatedValue`-based computation is effectively dead and does not reach the UI.
 - **Predicted Harvest (in plot harvest unit $q$)**:
   $$\text{massFactor} = \text{getDynamicFactor}(\text{'Metric Ton'}, q, \text{'Mass'})$$
   $$H_{3\text{min}} = \text{productionMin} \times \text{massFactor}$$
@@ -130,11 +146,11 @@ Aggregate values are computed by converting all plot values into base standard u
     - **Aggregated Yield Analysis** (`#agg-card-level`, `#agg-card-level-exp`, `#agg-card-level-re`):
       - Evaluates aggregate yield baselines ($\text{Agg Exp Yield}$, $\text{Agg Re Yield}$) against the aggregate AI yield range $[\text{Agg AI Yield Min}, \text{Agg AI Yield Max}]$.
       - Primary baseline: $\text{Agg Re Yield}$ if present ($> 0$), else $\text{Agg Exp Yield}$.
-      - If baseline is within range, displays `👍 Within range`; otherwise displays the percentage difference from the closer boundary ($\text{min}$ or $\text{max}$).
+      - If baseline is within range, displays **Within range** with the same inline SVG thumbs-up icon used at plot level (corrected 2026-09-22 — this is not a literal `👍` emoji character); otherwise displays the percentage difference from the closer boundary ($\text{min}$ or $\text{max}$).
     - **Aggregated Harvest Analysis** (`#agg-harvest-card-level`, `#agg-harvest-card-level-exp`, `#agg-harvest-card-level-re`):
       - Evaluates aggregate harvest baselines ($\text{Agg Exp Harvest}$, $\text{Agg Re Harvest}$) against the aggregate AI harvest range $[\text{Agg AI Harvest Min}, \text{Agg AI Harvest Max}]$.
       - Primary baseline: $\text{Agg Re Harvest}$ if present ($> 0$), else $\text{Agg Exp Harvest}$.
-      - If baseline is within range, displays `👍 Within range`; otherwise displays the percentage difference from the closer boundary ($\text{min}$ or $\text{max}$).
+      - If baseline is within range, displays **Within range** with the same inline SVG thumbs-up icon used at plot level (not a literal `👍` emoji character); otherwise displays the percentage difference from the closer boundary ($\text{min}$ or $\text{max}$).
 
 ### D. Multi-Model Trend Graph Visualization (BIOMASS_DAYS & TASUMI)
 When a plot has `modelType: "BIOMASS_DAYS"` present in its prediction records (`yieldRawRecords`), the dashboard displays interactive forecast trend charts within the plot-level cards and in an expandable "Yield & Growth" modal dialog:
@@ -158,7 +174,7 @@ When a plot has `modelType: "BIOMASS_DAYS"` present in its prediction records (`
    - Standard reference lines (Standard, Re-Estimated, Maximum Attainable) are filtered from the point tooltip so the hover dialog remains dedicated to the predicted confidence range and mean for the hovered date.
 5. **Min-Max Shaded Confidence Interval Band**:
    - The chart renders upper (`Forecast Max`) and lower (`Forecast Min`) prediction boundary lines surrounding the central predicted average line (`Forecasted Yield` / `Forecasted Harvest`).
-   - The area between `Forecast Min` and `Forecast Max` is filled with a translucent green band (`rgba(187, 247, 208, 0.55)` in light mode, `rgba(132, 204, 22, 0.2)` in dark mode) via Chart.js relative filler (`fill: '-1'`), illustrating the model's confidence interval at each cutoff date.
+   - The area between `Forecast Min` and `Forecast Max` is filled with a translucent green band (`rgba(187, 247, 208, 0.55)` or `rgba(132, 204, 22, 0.2)`) via Chart.js relative filler (`fill: '-1'`), illustrating the model's confidence interval at each cutoff date. **Correction (2026-09-22)**: the color choice is **not** driven by the user's OS/app light-dark theme setting, despite the "light mode"/"dark mode" framing. `createTrendChart()` sets `isDark = !opts.isModal` — the embedded plot-card chart is always invoked with `isModal:false` and therefore always renders `rgba(132, 204, 22, 0.2)`; the enlarged Yield & Growth modal chart is always invoked with `isModal:true` and therefore always renders `rgba(187, 247, 208, 0.55)`. The correct framing is **embedded card chart** vs. **enlarged modal chart**, not light vs. dark theme.
    - The modal summary header displays the latest prediction interval as a range (e.g., `1,740.15 - 1,923.07 Kilogram/Acre`).
    - Chart legends filter out internal boundary datasets, cleanly presenting `Forecasted Yield`, `Maximum Attainable Yield`, `Standard Yield`, and `Re-Estimated Yield`.
 6. **Y-Axis Scale Dynamic Number Formatting (Zero Duplicate Labels)**:
@@ -179,12 +195,19 @@ When a plot has `modelType: "BIOMASS_DAYS"` present in its prediction records (`
      - This toggle strictly modifies the visual dataset passed to the trend charts (`plot-yield-trend-chart`, `plot-harvest-trend-chart`, and `modal-trend-canvas`).
      - It **never alters** plot metric values (Expected, Re-estimated, Predicted min/max, Card Level status/percentage) or any records in the base data table (`#all-plots-table`) or aggregate cards.
 
-8. **Enlarged Yield & Growth Modal Top Summary Information**:
+8. **Maximum Attainable Reference Line — Fallback Heuristic When Variety Data Is Unavailable (previously undocumented)**:
+   - When the real variety-derived `maxAttainableYield` (Section 3G) is unavailable, `extractPlotMultiModelData()` synthesizes a fallback reference line instead of omitting it:
+     $$\text{maxAttainableYield} = \text{stdYield} > 0 \ ? \ \text{stdYield} \times 1.85 \ : \ \text{maxYieldVal} \times 1.2$$
+     $$\text{maxAttainableHarvest} = \text{stdHarvest} > 0 \ ? \ \text{stdHarvest} \times 1.85 \ : \ \text{maxHarvestVal} \times 1.2$$
+   - i.e. **1.85×** the Standard (crop-configuration) Yield/Harvest if available, else **1.2×** the observed maximum value already present in the trend data. This synthetic line is visually indistinguishable from a real variety-derived Maximum Attainable line and should not be assumed accurate for plots without variety data.
+
+9. **Enlarged Yield & Growth Modal Top Summary Information**:
    - The enlarged modal dialog (`#yield-growth-modal`) displays 3 standardized metric rows above the forecast trend chart:
      - **Standard Yield / Standard Harvest**: Configured baseline from crop configuration (`#modal-summary-val-std`, `#modal-summary-unit-std`) with subtitle `From Crop Configuration` (with the previous 'View' link removed).
      - **Re-estimated Yield / Re-estimated Harvest**: Field-audited baseline (`#modal-summary-val-re`, `#modal-summary-unit-re`) with subtitle `From Field Audit`. When Re-estimated data is absent or $0$, cleanly displays `-`.
      - **Forecasted Yield / Forecasted Harvest**: Remote sensing model prediction interval (`#modal-summary-val-pred`, `#modal-summary-unit-pred`) with subtitle `🌿 Powered By Cropin AI`.
    - All 3 rows adapt dynamically when switching between the `Yield Analysis` and `Harvest Analysis` tabs, using active plot display units (`yieldUnitLabel` and `harvestUnitLabel`).
+   - **Known test/implementation gap (previously undocumented)**: `extractModalSummaryValues()` exists only in `health_script.js` (exercised by regression Test 30 via `health_script.test.js`). The live modal (`renderModalTrendChart()` in `aggregate_script_backup.js`) builds these 3 summary rows with its own separate inline logic and never calls `extractModalSummaryValues()`. Test 30 therefore does not exercise the function actually driving the browser UI for this feature — treat Test 30's coverage of modal summary extraction as unverified against the live code path until reconciled.
 
 ### E. Base Yield Data Ordering & Natural Sorting
 To guarantee consistent presentation across the dashboard, all base yield records (`globalData`), API-generated plot arrays, and the base plot data table (`#base-yield-table-wrapper`) are sorted ascending by plot name (`Plot Name` / `CA Name`):
@@ -229,7 +252,7 @@ display values for both AI prediction models simultaneously:
    - While PR-enabled plots have a variety assigned, `maxAttainableYield` within the variety configuration is optional.
    - If `varietyId` is null/empty or `maxAttainableYield` is missing/empty, the system sets `maxAttainableYield` to `'NA'` without failing or halting execution.
 4. **Unit Normalization & Display**:
-   - From `data.yieldPerLocation[0]`, `maxAttainableYield`, `expectedYieldUnits` (e.g. `KILOGRAM`), and `referenceAreaUnits` / `refrenceAreaUnits` (e.g. `ACRE`) are extracted.
+   - From `data.yieldPerLocation[0]` (falling back to `data.companyYieldPerLocation[0]` if absent — previously undocumented), `maxAttainableYield`, `expectedYieldUnits` (e.g. `KILOGRAM`), and `referenceAreaUnits` / `refrenceAreaUnits` (e.g. `ACRE`) are extracted.
    - The value is dynamically converted to base standard `Tonnes/Ha`:
      $$\text{Max Attainable (Tonnes/Ha)} = \frac{\text{rawMax} \times \text{massToTon}}{\text{areaToHa}}$$
    - When rendered in `#all-plots-table` under `Max Attainable` and plotted on the multi-model trend chart as the upper boundary reference line, it converts dynamically to the user's active yield unit (`getDataYieldUnit()`).
@@ -251,7 +274,7 @@ display values for both AI prediction models simultaneously:
   3. Removed the non-functional 'View' button link from the 'Standard yield' and 'Standard harvest' section (`From Crop Configuration`).
   4. Added Test 30 to regression test suite verifying modal summary value extraction and fallback handling (30/30 tests passing: 11 existing, 19 new).
 * **2026-09-16**: Updated Plot-Level Trend Chart 'Show Biomass after Tasumi' and Added 'Tasumi generated' Indicator:
-  1. Renamed checkbox to `Show Biomass after Tasumi` (`#show-biomass-after-tasumi`), unchecked/disabled by default.
+  1. Renamed checkbox to `Show Biomass after Tasumi` (`#show-biomass-after-tasumi`), unchecked/disabled by default. *(Correction 2026-09-22: the live markup has no `disabled` attribute — the checkbox is interactive from the start, only unchecked by default. See Section 3D.7 for the current, accurate default-state description.)*
   2. Inverted default behavior: by default (unchecked), biomass data generated after Tasumi is hidden and same-day conflict defaults to Tasumi only; only upon user checking the box are all biomass points displayed.
   3. Added plot-level status label `Tasumi generated: Yes / No` (`#plot-tasumi-status`) directly next to `Audited Area` providing immediate transparency on whether the culmination point on the trend chart is Tasumi or Biomass Days.
   4. Updated Test 29 in regression test suite (29/29 tests passing: 11 existing, 18 new).
@@ -339,3 +362,4 @@ display values for both AI prediction models simultaneously:
   2. Priority 2: `modelType === "BIOMASS_DAYS"` (latest by timestamp).
   3. Fallback: First record or parameters object.
   Replaced previous naive `records[0]` indexing to guarantee accurate model selection.
+* **2026-09-22**: SOP Accuracy Audit — corrected drift between documented formulas and actual code (per the new SOP Update Constraint in `AGENTS.md`). No application code was changed; documentation only. Corrections: fixed the "Include no prediction plots" checkbox label (previously misquoted); documented the `isZero` all-zero exclusion condition and the separate `plotsNotEnabled` bucket (Rule 3 aggregation exclusion); expanded the unit alias table to its full list including the distinct `US Ton` vs `Metric Ton` units, Quintal, Gram, Square Meter, Bigha, and Gunta; documented the exact fallback conversion constants (`getFallbackFactor`) and flagged the still-present legacy/parallel unit-conversion code paths; clarified that plot-level $Y_1$/$Y_2$ are computed once at data-ingestion time, not live per render; corrected the "👍 Within range" wording — it is an inline SVG icon, not a literal emoji character; documented the `isDark`/`isModal` confidence-band color logic is keyed to embedded-card-vs-modal context, not the user's light/dark theme; documented the previously-unmentioned Maximum Attainable fallback heuristic (1.85× Standard, or 1.2× observed max) used when variety data is unavailable; documented that `extractModalSummaryValues()` (tested by Test 30) is not actually called by the live modal rendering path; corrected the "disabled by default" changelog claim for `#show-biomass-after-tasumi`; documented the actual script load order (`health_script.js` executes before `aggregate_script_backup.js`, contrary to markup order) and that `aggregate_script_backup.js`'s declarations are authoritative for shared Yield helper functions; flagged that regression Test 32 simulates the scripts in the wrong relative order and cannot detect a real collision-driven divergence.

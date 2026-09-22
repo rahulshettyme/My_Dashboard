@@ -7,6 +7,10 @@
 - BEFORE proposing or executing any code modifications to the Yield & Harvest module, you MUST read the Yield Module SOP document at [YIELD_MODULE_SOP.md](file:///c:/Users/rahul.shetty/Documents/Important/AntiGravity/My%20dashboard/YIELD_MODULE_SOP.md) to understand priority hierarchies, conversion math, and historical changes.
 
 
+## SOP Update Constraint
+- If a code change alters the math, logic, priority hierarchies, or conversion rules documented in [HEALTH_MODULE_SOP.md](file:///c:/Users/rahul.shetty/Documents/Important/AntiGravity/My%20dashboard/HEALTH_MODULE_SOP.md) or [YIELD_MODULE_SOP.md](file:///c:/Users/rahul.shetty/Documents/Important/AntiGravity/My%20dashboard/YIELD_MODULE_SOP.md), the relevant SOP MUST be updated to reflect the change as part of that same task, before the work is considered complete. This prevents the SOP from going stale and misleading future conversations that rely on it for context.
+- Any such SOP edit MUST be explicitly called out in the response, the same way other file changes are reported — do not let it pass silently as an incidental edit.
+
 ## Automation Testing Constraint
 - Do NOT perform automation testing (e.g. using browser subagents or automated browser scripts) unless explicitly requested by the USER.
 
