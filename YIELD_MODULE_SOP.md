@@ -90,6 +90,10 @@ To eliminate latency, Master Unit rules are **NEVER** fetched per plot or per ca
 They are retrieved once during application login (`Promise.all` in `handleLogin`) or initial plot loading, and cached in `tenantUnitMasterData` / `window.tenantUnitMasterCache` for the life of the session.
 
 ### B. Plot-Level Calculations
+**Source of plot harvest unit ($q$) and plot area unit ($a$) — fixed 2026-09-22**:
+- **Harvest unit ($q$)**: `caData.quantityUnit` from the CA-details API (`/services/projections/api/croppableAreas/{caId}`), i.e. genuinely crop/plot-configured.
+- **Area unit ($a$)**: `varietyData.referenceAreaUnits` from the Variety API (`refrenceAreaUnits` in the raw upstream response, normalized server-side in `extractVarietyYieldDetails()` — see Section 3G), which is the crop's configured area unit for its yield targets. **Bug fix**: prior to 2026-09-22, `plotAreaUnit` was sourced entirely from `userPrefs.areaUnits` / `companyPrefs.areaUnits` (the logged-in user's or tenant's global display preference), never from any crop-specific field — so the Plot-Level Yield Analysis unit badge (and the area-to-hectare conversion feeding aggregate totals) reflected the user's preferred unit rather than the crop's actual configured unit. `generateDataFromAPI()` now prefers `varietyData.referenceAreaUnits` and falls back to the user/company preference only when the variety has no configured reference area unit (graceful fallback, consistent with Section 3G.3). This also corrects the underlying `areaToHa` conversion factor used in aggregate calculations (Section 3C), not just the display label, since both are derived from the same `plotAreaUnit` field.
+
 For a plot with audited area $A$, expected harvest $H_1$, and re-estimated harvest $H_2$:
 - **Expected Yield ($Y_1$)**:
   $$Y_1 = \frac{H_1}{A}$$
@@ -260,6 +264,11 @@ display values for both AI prediction models simultaneously:
 ---
 
 ## 4. Change Log (Feature & Logic Audit Trail)
+* **2026-09-22**: Fixed Plot-Level Area Unit Sourced From User Preference Instead of Crop Configuration:
+  1. Root cause: `generateDataFromAPI()` in `aggregate_script_backup.js` built `plotAreaUnit` exclusively from `userPrefs.areaUnits`/`companyPrefs.areaUnits` (global display preference), with no crop-specific fallback — so the Plot-Level Yield Analysis unit badge (e.g. "kilogram/Acre") displayed the user's preferred area unit rather than the crop's actual configured area unit, and the same value fed the `areaToHa` conversion factor used in aggregate area/yield totals.
+  2. Fix: `plotAreaUnit` now sources from `varietyData.referenceAreaUnits` (Variety API, already fetched for Max Attainable Yield — Section 3G) when available, falling back to the previous user/company-preference logic only if the variety has no configured reference area unit.
+  3. See Section 3B for the corrected sourcing rule and Section 3G for how `referenceAreaUnits` is normalized server-side.
+  4. Harvest unit (`plotHarvestUnit`, sourced from `caData.quantityUnit`) was already correctly crop-configured and was not changed.
 * **2026-09-16**: Fixed Browser Global Scope Identifier Collision & Added Browser Scripts Syntax Test:
   1. Root cause: `Aggregate-Data-Testing/health_script.js` declared `const fmtYield` in the top-level scope, which collided with `const fmtYield` in `aggregate_script_backup.js` when both scripts were loaded in `aggregate_dashboard_backup.html`, throwing `Uncaught SyntaxError: Identifier 'fmtYield' has already been declared` and halting initialization of environment selection.
   2. Scoped Node-specific exports inside `if (typeof module !== 'undefined')` in `health_script.js`, ensuring zero global identifier collisions in browser environments.

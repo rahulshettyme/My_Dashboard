@@ -3300,6 +3300,13 @@ async function generateDataFromAPI() {
             let companyAreaUnit = (companyPrefs.areaUnits || 'ha').toLowerCase().includes('acre') ? 'acre' : 'ha';
             let userAreaUnit = (userPrefs.areaUnits || companyAreaUnit).toLowerCase().includes('acre') ? 'acre' : 'ha';
             let rawUnit = (caData.quantityUnit || 'kgs').toLowerCase();
+            // Area unit must reflect the crop's own configuration (Variety API's referenceAreaUnits,
+            // e.g. "ACRE"), not the logged-in user's/company's display preference. Falls back to the
+            // user/company preference only when the variety has no configured reference area unit.
+            const cropReferenceAreaUnit = varietyData?.referenceAreaUnits || null;
+            let plotAreaUnit = cropReferenceAreaUnit
+                ? (cropReferenceAreaUnit.toLowerCase().includes('acre') ? 'acre' : 'ha')
+                : userAreaUnit;
 
             return {
                 'Plot Name': plot.name || 'Unknown',
@@ -3318,7 +3325,7 @@ async function generateDataFromAPI() {
                 'Prediction Model': yieldData.modelType || 'NA',
                 'Yield Not Enabled': yieldData.notEnabled || false,
                 'plotHarvestUnit': rawUnit,
-                'plotAreaUnit': userAreaUnit,
+                'plotAreaUnit': plotAreaUnit,
                 'varietyId': caData.varietyId || null,
                 'maxAttainableYield': varietyData?.maxAttainableYield ?? 'NA',
                 'varietyExpectedYieldUnits': varietyData?.expectedYieldUnits || null,
