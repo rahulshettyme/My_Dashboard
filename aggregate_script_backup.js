@@ -456,12 +456,16 @@ function updateUnitLabels(plotData = null) {
     if (plotData) {
         // PLOT LEVEL Labels
         const hUnit = (plotData.harvestUnit || 'kgs').toLowerCase();
-        const aUnit = (plotData.areaUnit || 'acre').toLowerCase();
+        const aUnit = (plotData.areaUnit || 'acre').toLowerCase(); // user-preferred display unit (Audited Area only)
+        const yMassUnit = (plotData.yieldMassUnit || hUnit).toLowerCase();
+        const yAreaUnit = (plotData.yieldAreaUnit || 'ha').toLowerCase(); // crop-configured unit (Yield Analysis only)
         const hLabel = HARVEST_UNIT_LABELS[hUnit] || hUnit;
+        const yMassLabel = HARVEST_UNIT_LABELS[yMassUnit] || yMassUnit;
+        const yAreaLabel = yAreaUnit === 'ha' ? 'Ha' : 'Acre';
         const aLabel = aUnit === 'ha' ? 'Ha' : 'Acre';
-        
+
         harvestLabel = hLabel;
-        yieldLabel = `${hLabel}/${aLabel}`;
+        yieldLabel = `${yMassLabel}/${yAreaLabel}`;
         areaLabelLabel = aUnit === 'ha' ? 'Hectares' : 'Acres';
     } else {
         // AGGREGATE LEVEL Labels (Dynamically follow selectors)
@@ -1128,6 +1132,8 @@ function processData(rows) {
             noPrediction: !isPredictionAvailable,
             notEnabled: row['Yield Not Enabled'] || false,
             harvestUnit: qUnit,
+            yieldMassUnit: row['yieldMassUnit'] || qUnit,
+            yieldAreaUnit: row['yieldAreaUnit'] || 'ha',
             varietyId: row['varietyId'] || null,
             maxAttainableYield: (rawMaxAttainable !== undefined && rawMaxAttainable !== null) ? rawMaxAttainable : 'NA',
             maxAttainableYieldTonHa: maxAttainableTonHa,
@@ -1824,15 +1830,19 @@ function updatePlotPredictedDisplay(d) {
     }
 
     const qUnit = (d.harvestUnit || 'kgs').toLowerCase();
-    const aUnit = (d.areaUnit || 'ha').toLowerCase();
-    
+    // Yield figures target the crop's own configured unit (Variety API), not the harvest/area display
+    // unit — falls back to the harvest unit / 'ha' only if the variety has no configured yield unit.
+    const yMassUnit = (d.yieldMassUnit || qUnit).toLowerCase();
+    const yAreaUnit = (d.yieldAreaUnit || 'ha').toLowerCase();
+
     // AI Predictions are in Tonnes (mass) and Tonnes/Ha (yield)
     const massFactor = getDynamicFactor(['METRIC_TON', 'Ton (Metric)', 'MT', 'Tonnes'], qUnit, 'Mass');
-    const areaFactor = getDynamicFactor(['HECTARE', 'Hectare', 'ha'], aUnit, 'Area');
+    const yieldMassFactor = getDynamicFactor(['METRIC_TON', 'Ton (Metric)', 'MT', 'Tonnes'], yMassUnit, 'Mass');
+    const areaFactor = getDynamicFactor(['HECTARE', 'Hectare', 'ha'], yAreaUnit, 'Area');
 
-    // Convert AI Yield (Tonnes/Ha) to Plot Yield (qUnit / aUnit)
-    // 1 Tonne/Ha = massFactor / areaFactor in Plot Units
-    const yieldConversionFactor = areaFactor > 0 ? (massFactor / areaFactor) : massFactor;
+    // Convert AI Yield (Tonnes/Ha) to the variety's configured Yield unit (yMassUnit / yAreaUnit)
+    // 1 Tonne/Ha = yieldMassFactor / areaFactor in that unit
+    const yieldConversionFactor = areaFactor > 0 ? (yieldMassFactor / areaFactor) : yieldMassFactor;
     
     const predictedYieldMin = d.y3_min * yieldConversionFactor;
     const predictedYieldMax = d.y3_max * yieldConversionFactor;
@@ -3295,18 +3305,46 @@ async function generateDataFromAPI() {
                 yieldData = await yieldResponse.json();
             }
 
-            const reEstYield = caData.auditedArea > 0 ? (caData.reestimatedValue || 0) / caData.auditedArea : 0;
-
             let companyAreaUnit = (companyPrefs.areaUnits || 'ha').toLowerCase().includes('acre') ? 'acre' : 'ha';
             let userAreaUnit = (userPrefs.areaUnits || companyAreaUnit).toLowerCase().includes('acre') ? 'acre' : 'ha';
             let rawUnit = (caData.quantityUnit || 'kgs').toLowerCase();
-            // Area unit must reflect the crop's own configuration (Variety API's referenceAreaUnits,
-            // e.g. "ACRE"), not the logged-in user's/company's display preference. Falls back to the
-            // user/company preference only when the variety has no configured reference area unit.
-            const cropReferenceAreaUnit = varietyData?.referenceAreaUnits || null;
-            let plotAreaUnit = cropReferenceAreaUnit
-                ? (cropReferenceAreaUnit.toLowerCase().includes('acre') ? 'acre' : 'ha')
-                : userAreaUnit;
+
+            // 'Audited Area' as returned by the CA API is always expressed in the COMPANY's configured
+            // area unit (confirmed against /api/user-aggregate/company-info) — never the logged-in
+            // user's personal preference. plotAreaUnit stays user-preference-based: it only governs how
+            // Audited Area is CONVERTED FOR DISPLAY (see the company->user conversion below) and the
+            // aggregate Total Area / Ha conversion, both of which operate on that display-converted value.
+            let plotAreaUnit = userAreaUnit;
+
+            // Yield figures (Expected/Re-estimated/Predicted Yield) must be expressed in the crop's own
+            // configured unit (Variety API's expectedYieldUnits / referenceAreaUnits) — never the
+            // company's or user's area preference, which only exists to show plot size, not to drive
+            // yield math. Falls back to the harvest/company unit only when the variety has no configured
+            // reference values (graceful fallback, consistent with Section 3G).
+            const yieldMassUnit = varietyData?.expectedYieldUnits || rawUnit;
+            const yieldAreaUnitRaw = varietyData?.referenceAreaUnits || companyAreaUnit;
+            const yieldAreaUnit = yieldAreaUnitRaw.toLowerCase().includes('acre') ? 'acre' : 'ha';
+
+            // Expected Yield: sourced directly from the Variety API's own expectedYield (already
+            // expressed in yieldMassUnit/yieldAreaUnit) instead of recomputing Harvest/Area, which
+            // silently assumed Audited Area was in the variety's unit when it is actually always in
+            // the company's unit. Falls back to a company-unit-based Harvest/Area calc if the variety
+            // has no expectedYield.
+            const varietyExpectedYield = (varietyData?.expectedYield !== undefined && varietyData?.expectedYield !== null && varietyData?.expectedYield !== 'NA' && !isNaN(parseFloat(varietyData.expectedYield)))
+                ? parseFloat(varietyData.expectedYield)
+                : null;
+            const expectedYieldValue = (varietyExpectedYield !== null)
+                ? varietyExpectedYield
+                : (caData.auditedArea > 0 ? (caData.expectedHarvest || 0) / caData.auditedArea : 0);
+
+            // Re-estimated Yield has no equivalent pre-computed API field (it's field-audited), so it
+            // must be calculated as Harvest / Area. Area's unit for this division is the COMPANY unit
+            // (matching Audited Area's true unit), and the raw result is then converted into the
+            // variety's yield unit so it's directly comparable to Expected Yield and Predicted Yield.
+            const reEstYieldPerCompanyArea = caData.auditedArea > 0 ? (caData.reEstimatedHarvest || 0) / caData.auditedArea : 0;
+            const reEstMassFactor = getDynamicFactor(rawUnit, yieldMassUnit, 'Mass');
+            const reEstAreaFactor = getDynamicFactor(companyAreaUnit, yieldAreaUnitRaw, 'Area');
+            const reEstYield = reEstAreaFactor > 0 ? (reEstYieldPerCompanyArea * reEstMassFactor / reEstAreaFactor) : (reEstYieldPerCompanyArea * reEstMassFactor);
 
             return {
                 'Plot Name': plot.name || 'Unknown',
@@ -3314,7 +3352,7 @@ async function generateDataFromAPI() {
                 'Audited Area': caData.auditedArea || 0,
                 'Expected Harvest': caData.expectedHarvest || 0,
                 'Re-estimated Harvest': caData.reEstimatedHarvest || 0,
-                'Expected YIELD': caData.expectedYield || 0,
+                'Expected YIELD': expectedYieldValue,
                 'Re-estimated Yield': reEstYield,
                 'Harvest Min predicted': yieldData.productionMin,
                 'Harvest Max predicted': yieldData.productionMax,
@@ -3326,6 +3364,8 @@ async function generateDataFromAPI() {
                 'Yield Not Enabled': yieldData.notEnabled || false,
                 'plotHarvestUnit': rawUnit,
                 'plotAreaUnit': plotAreaUnit,
+                'yieldMassUnit': yieldMassUnit,
+                'yieldAreaUnit': yieldAreaUnit,
                 'varietyId': caData.varietyId || null,
                 'maxAttainableYield': varietyData?.maxAttainableYield ?? 'NA',
                 'varietyExpectedYieldUnits': varietyData?.expectedYieldUnits || null,
@@ -3384,18 +3424,19 @@ async function generateDataFromAPI() {
     const companyToUserAreaFactor = getDynamicFactor(companyAreaUnit, userAreaUnit, 'Area');
 
     generatedData.forEach(d => {
-        // Convert Company Unit (Source) -> User Unit (Target) using dynamic rules
+        // Convert Company Unit (Source) -> User Unit (Target) using dynamic rules.
+        // This ONLY affects the displayed Audited Area value/unit (plot card, base table, aggregate
+        // Total Area) — it is user-preference display only and must never feed Yield calculations.
+        // Expected YIELD and Re-estimated Yield are already correctly computed in fetchPlotData()
+        // (Expected from the Variety API directly, Re-estimated via Harvest/Area using the company's
+        // area unit then converted to the variety's yield unit) and must NOT be recomputed here using
+        // this user-unit-converted Audited Area, which would silently reintroduce a unit mismatch.
         let sourceVal = d['Audited Area'] || 0;
 
         if (companyToUserAreaFactor && companyToUserAreaFactor !== 1.0) {
             d['Audited Area'] = sourceVal * companyToUserAreaFactor;
         }
         // If units match, no conversion needed
-
-        if (d['Audited Area'] > 0) {
-            d['Expected YIELD'] = (d['Expected Harvest'] || 0) / d['Audited Area'];
-            d['Re-estimated Yield'] = (d['Re-estimated Harvest'] || 0) / d['Audited Area'];
-        }
     });
 
     document.getElementById('unit-config-section').classList.remove('hidden');
