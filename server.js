@@ -1457,7 +1457,9 @@ function extractVarietyYieldDetails(varietyJson) {
         return { maxAttainableYield: 'NA', expectedYieldUnits: null, referenceAreaUnits: null, expectedYield: null };
     }
 
-    const rawMax = locEntry.maxAttainableYield;
+    const rawMax = (locEntry.data && locEntry.data.maxAttainableYield !== undefined && locEntry.data.maxAttainableYield !== null && locEntry.data.maxAttainableYield !== '')
+        ? locEntry.data.maxAttainableYield
+        : locEntry.maxAttainableYield;
     const maxVal = (rawMax !== undefined && rawMax !== null && rawMax !== '' && !isNaN(parseFloat(rawMax)))
         ? parseFloat(rawMax)
         : 'NA';

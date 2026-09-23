@@ -27,7 +27,14 @@
 ## Verification Workflow (Highest Priority Rule)
 - Once code changes are completed, perform the following verification workflow:
   1. **Code Review**: Conduct a thorough review of the code edits for correctness, quality, and style.
-  2. **Regression Testing**: You MUST execute the regression test suite by running `node run_tests.js` on every code change to confirm all unit tests pass, and report the counts of existing vs. new test cases in your response.
+  2. **Regression Testing**: You MUST execute the regression test suite by running the exact command `node run_tests.js` from the project root on every code change. Running the suite any other way (e.g. manually calling `runSuite()`, invoking `health_script.test.js` directly, or running it from a subdirectory) does NOT satisfy this rule, even if it produces the same pass count — the exact command must be run. Report the counts of existing vs. new test cases in your response.
   3. **Manual Verification Request**: Inform the user of the completed work and prompt them to do manual testing to confirm.
   4. **Commit Message**: Provide a descriptive git commit/push message at the end of your response summarizing the changes made (do not run any git commands yourself).
+- **Completion Gate — no code-change response is considered done without this literal checklist, verbatim, as the closing block of that response:**
+  ```
+  ✅ Regression suite: node run_tests.js → X/X passing (Y existing, Z new)
+  📝 Suggested commit message:
+  <the actual commit message text, ready to copy-paste>
+  ```
+  This checklist is mandatory even when the user's message does not ask for it, even in short responses, and even when only documentation/SOP files changed alongside code. If the test suite was not run via `node run_tests.js`, or no commit message is included, the response is incomplete — go back and add them before replying to the user. This gate has been missed multiple times before; treat it as non-negotiable, not a nice-to-have.
 

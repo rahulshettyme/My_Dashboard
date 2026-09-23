@@ -264,7 +264,8 @@ display values for both AI prediction models simultaneously:
    - While PR-enabled plots have a variety assigned, `maxAttainableYield` within the variety configuration is optional.
    - If `varietyId` is null/empty or `maxAttainableYield` is missing/empty, the system sets `maxAttainableYield` to `'NA'` without failing or halting execution.
 4. **Unit Normalization & Display**:
-   - From `data.yieldPerLocation[0]` (falling back to `data.companyYieldPerLocation[0]` if absent — previously undocumented), `maxAttainableYield`, `expectedYieldUnits` (e.g. `KILOGRAM`), and `referenceAreaUnits` / `refrenceAreaUnits` (e.g. `ACRE`) are extracted.
+   - From `data.yieldPerLocation[0]` (falling back to `data.companyYieldPerLocation[0]` if absent — previously undocumented), `expectedYieldUnits` (e.g. `KILOGRAM`), and `referenceAreaUnits` / `refrenceAreaUnits` (e.g. `ACRE`) are extracted.
+   - **`maxAttainableYield` sourcing (corrected 2026-09-23)**: the upstream API nests this value one level deeper than the other yield fields, under the location entry's own `data` object (`yieldPerLocation[0].data.maxAttainableYield`), not directly on the location entry itself. `extractVarietyYieldDetails()` (`server.js`, and its test-backing duplicate in `health_script.js`) reads `locEntry.data.maxAttainableYield` first, falling back to a flat `locEntry.maxAttainableYield` only for older/alternate payload shapes (e.g. `companyYieldPerLocation` entries, which carry no nested `data` object in the observed sample).
    - The value is dynamically converted to base standard `Tonnes/Ha`:
      $$\text{Max Attainable (Tonnes/Ha)} = \frac{\text{rawMax} \times \text{massToTon}}{\text{areaToHa}}$$
    - When rendered in `#all-plots-table` under `Max Attainable` and plotted on the multi-model trend chart as the upper boundary reference line, it converts dynamically to the user's active yield unit (`getDataYieldUnit()`).
@@ -280,6 +281,10 @@ display values for both AI prediction models simultaneously:
 ---
 
 ## 4. Change Log (Feature & Logic Audit Trail)
+* **2026-09-23**: Fixed `maxAttainableYield` Sourcing to Match Actual Variety API Nesting:
+  1. Root cause: the upstream Variety API (`/services/farm/api/varieties/{varietyId}`) nests `maxAttainableYield` under `data.yieldPerLocation[0].data.maxAttainableYield`, one level deeper than `expectedYield`/`expectedYieldUnits`/`refrenceAreaUnits`, which sit directly on the `yieldPerLocation[0]` entry. `extractVarietyYieldDetails()` previously read `locEntry.maxAttainableYield` (flat), which no longer matched the real response shape and would have always resolved to `'NA'`.
+  2. Fixed in both `server.js` and its test-backing duplicate `Aggregate-Data-Testing/health_script.js`: `rawMax` now reads `locEntry.data.maxAttainableYield` first, falling back to the flat `locEntry.maxAttainableYield` for payload shapes without a nested `data` object (e.g. `companyYieldPerLocation` fallback entries).
+  3. Updated the `extractVarietyYieldDetails_and_maxAttainableYield_conversion` regression test fixture to nest `maxAttainableYield` under `data` per the corrected real-world sample payload (34/34 tests passing).
 * **2026-09-22**: Added Maximum Attainable Yield/Harvest to Plot-Level Cards:
   1. Added `#plot-max-attainable-yield-row` to the Yield Analysis card and `#plot-max-attainable-harvest-row` to the Harvest Analysis card in `aggregate_dashboard_backup.html`, positioned after the "Predicted" row and before "Card level".
   2. `fetchPlotData()` now computes `maxAttainableYieldPlotUnit` (raw variety value, no conversion needed) and `maxAttainableHarvestPlotUnit` (`maxAttainableYield × Audited Area`, area-converted from company unit to the yield area unit, then mass-converted to the harvest unit).

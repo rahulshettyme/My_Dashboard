@@ -756,10 +756,12 @@ const tests = [
                     yieldPerLocation: [
                         {
                             _uid: 1,
+                            data: {
+                                maxAttainableYield: 28000
+                            },
                             expectedYield: 15000,
                             refrenceAreaUnits: 'ACRE',
-                            expectedYieldUnits: 'KILOGRAM',
-                            maxAttainableYield: 28000
+                            expectedYieldUnits: 'KILOGRAM'
                         }
                     ]
                 }
