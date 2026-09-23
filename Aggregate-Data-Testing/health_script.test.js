@@ -2,7 +2,10 @@ const assert = require('assert');
 const healthScript = require('./health_script.js');
 const { selectYieldPredictionParameters, extractGrowthStageData } = require('../server.js');
 
-const baselineCount = 30;
+// Ratchets forward to tests.length after every task — represents "tests that existed
+// before the CURRENT task's changes", not a fixed historical constant. If this is not
+// bumped, "new" count keeps counting tests added in past sessions as if they were new.
+const baselineCount = 34;
 
 const tests = [
     {
