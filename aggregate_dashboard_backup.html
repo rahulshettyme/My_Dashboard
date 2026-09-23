@@ -1480,6 +1480,44 @@
                         <canvas id="growthProgressionChart"></canvas>
                     </div>
 
+                    <!-- Custom Legend: Number of Plots + Usable Area per category (replaces the default
+                         Chart.js legend so both metrics can be shown against the same Slow/Normal/Fast
+                         Growth colors used by the bars). Colors are read from the existing dataset colors,
+                         not redefined here. -->
+                    <div id="growth-prog-custom-legend"
+                        style="display: flex; flex-direction: column; gap: 0.6rem; margin-top: 1rem; padding: 0.85rem 1.25rem; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: 8px;">
+                        <div style="display: flex; align-items: center; gap: 1.75rem; flex-wrap: wrap;">
+                            <span style="font-weight: 600; font-size: 0.85rem; color: var(--text-primary); min-width: 150px;">Number of Plots</span>
+                            <span style="display: flex; align-items: center; gap: 0.45rem; font-size: 0.85rem; color: var(--text-secondary);">
+                                <span style="width: 12px; height: 12px; border-radius: 2px; background: #f6c445; display: inline-block;"></span>
+                                Slow Growth: <strong id="growth-prog-legend-slow-count" style="color: var(--text-primary);">-</strong>
+                            </span>
+                            <span style="display: flex; align-items: center; gap: 0.45rem; font-size: 0.85rem; color: var(--text-secondary);">
+                                <span style="width: 12px; height: 12px; border-radius: 2px; background: #264653; display: inline-block;"></span>
+                                Normal Growth: <strong id="growth-prog-legend-normal-count" style="color: var(--text-primary);">-</strong>
+                            </span>
+                            <span style="display: flex; align-items: center; gap: 0.45rem; font-size: 0.85rem; color: var(--text-secondary);">
+                                <span style="width: 12px; height: 12px; border-radius: 2px; background: #5cae57; display: inline-block;"></span>
+                                Fast Growth: <strong id="growth-prog-legend-fast-count" style="color: var(--text-primary);">-</strong>
+                            </span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 1.75rem; flex-wrap: wrap;">
+                            <span id="growth-prog-legend-area-title" style="font-weight: 600; font-size: 0.85rem; color: var(--text-primary); min-width: 150px;">Usable Area</span>
+                            <span style="display: flex; align-items: center; gap: 0.45rem; font-size: 0.85rem; color: var(--text-secondary);">
+                                <span style="width: 12px; height: 12px; border-radius: 2px; background: #f6c445; display: inline-block;"></span>
+                                Slow Growth: <strong id="growth-prog-legend-slow-area" style="color: var(--text-primary);">-</strong>
+                            </span>
+                            <span style="display: flex; align-items: center; gap: 0.45rem; font-size: 0.85rem; color: var(--text-secondary);">
+                                <span style="width: 12px; height: 12px; border-radius: 2px; background: #264653; display: inline-block;"></span>
+                                Normal Growth: <strong id="growth-prog-legend-normal-area" style="color: var(--text-primary);">-</strong>
+                            </span>
+                            <span style="display: flex; align-items: center; gap: 0.45rem; font-size: 0.85rem; color: var(--text-secondary);">
+                                <span style="width: 12px; height: 12px; border-radius: 2px; background: #5cae57; display: inline-block;"></span>
+                                Fast Growth: <strong id="growth-prog-legend-fast-area" style="color: var(--text-primary);">-</strong>
+                            </span>
+                        </div>
+                    </div>
+
                     <!-- Bottom Insights Banner -->
                     <div id="growth-prog-insight-banner"
                         style="margin-top: 1.25rem; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.85rem 1.25rem; font-size: 0.95rem; color: var(--text-primary);">

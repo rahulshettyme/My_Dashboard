@@ -165,7 +165,14 @@ A custom Chart.js plugin, `growthProgressionTotalsPlugin` (`afterDatasetsDraw` h
 - **Geometry**: bubble height `26px`, positioned `65px` above the top of the tallest stacked segment (`bY = topY - 65`), width = measured text width + `12px`, `4px` corner radius (falls back to a square corner if `ctx.roundRect` is unsupported), with a small downward-pointing triangle anchoring it to the bar. Text: `11px "Inter", sans-serif`, dark fill `#1e293b` on a light `#f8fafc` bubble.
 - **Chart layout**: `padding: { top: 70, bottom: 10 }` — sized specifically to give the 26px-tall bubble (drawn 65px above the bar) headroom without clipping against the canvas top.
 
-### H. Chart configuration
+### H. "Number of Plots" / "Usable Area" custom legend (added 2026-09-23)
+The native Chart.js legend is disabled (`legend: { display: false }`) and replaced by a custom two-row HTML legend block, `#growth-prog-custom-legend`, rendered directly in `aggregate_dashboard_backup.html` below the canvas (populated in `renderGrowthProgressionChart()`). It reuses the exact same 3 dataset colors as the bars (`#f6c445` Slow, `#264653` Normal, `#5cae57` Fast) — colors are **not** redefined for the legend, only referenced.
+
+- **Row 1 ("Number of Plots")**: `metrics.slowPlotsCount` / `normalPlotsCount` / `fastPlotsCount` — the same values shown in the KPI bar (Section 3E) above the chart, so the legend and KPI bar are always in agreement.
+- **Row 2 ("Usable Area ({unit})")**: `metrics.slowArea` / `normalArea` / `fastArea` — new fields returned by `computeProgressionMetrics()`, computed inside the **same** `analysisPlots.forEach` loop that produces the Row 1 counts (not from `bins[]`), so a given category's plot count and area total are guaranteed to describe the identical set of plots. Uses the same `auditedArea !== "NA"` exclusion rule as `bins[i].totalArea` (Section 3D) — an `"NA"` plot contributes `0` to its category's area, never breaks the sum. The `{unit}` in the row title uses the same binary Acre/Ha label as the bubble overlay (Section 3G) — labeled "Usable Area" per product naming, though the underlying field is `auditedArea`, the same field used everywhere else in this module (there is no separate "usable area" concept in the API or codebase — see Section 1).
+- Element ids: `growth-prog-legend-{slow,normal,fast}-count`, `growth-prog-legend-{slow,normal,fast}-area`, `growth-prog-legend-area-title`. Reset to `-` in the project-switch `simpleMetricIds` list alongside the KPI bar's own ids.
+
+### I. Chart configuration
 Stacked bar chart (`type: 'bar'`, `stack: 'growthProgressionStack'`), 3 datasets: `Slow Growth` (`#f6c445`), `Normal Growth` (`#264653`), `Fast Growth` (`#5cae57`), `barThickness: 45`. Clicking a bar drills into `showGrowthProgressionPlots(bins[index].label, bins[index].allPlots)`, whose table includes a `Daily Interpretation` column (the only one of the four drill-down tables that does).
 
 ---
@@ -312,6 +319,12 @@ Exactly two Growth-specific regression tests exist in `Aggregate-Data-Testing/he
 
 ## 10. Change Log (Feature & Logic Audit Trail)
 
+* **2026-09-23**: Added "Number of Plots" / "Usable Area" Custom Legend to the Growth Progression Chart:
+  1. Disabled the native Chart.js legend (`legend: { display: false }`) on the Growth Progression chart and replaced it with a custom two-row HTML legend (`#growth-prog-custom-legend`) showing both plot count and total area per Slow/Normal/Fast Growth category, using the exact same 3 dataset colors as the bars (no color changes, per explicit request).
+  2. Added `slowArea`/`normalArea`/`fastArea` to `computeProgressionMetrics()`'s return value, computed in the same `analysisPlots.forEach` loop (and using the same `"NA"`-exclusion rule) that already produced `slowPlotsCount`/`normalPlotsCount`/`fastPlotsCount`, guaranteeing the legend's two rows always describe the identical plot sets.
+  3. Labeled the area row "Usable Area" per the request, though the underlying field remains `auditedArea` — there is no distinct "usable area" concept anywhere in the API or codebase (Section 1); this is a display-label choice, not a new data source.
+  4. Added `slowArea`/`normalArea`/`fastArea` assertions to the existing `computeProgressionMetrics_stacked_bins_and_insights_calculation` regression test (34/34 tests passing — 0 new named test cases, extended an existing one).
+  5. Added the new legend's 6 element ids to the project-switch `simpleMetricIds` reset list so they clear to `-` alongside the existing KPI bar.
 * **2026-09-23**: Created this SOP (module previously had none) via a full audit of the live Growth Module code, and added the Growth Progression chart's area bubble overlay:
   1. Added a `"{count} Plots, {area} {unit}"` speech-bubble overlay to the Growth Progression chart's `growthProgressionTotalsPlugin`, replacing the previous bare-number-with-underline display, matching the Stage window chart's existing `stageCustomLabels` bubble geometry and NA-fallback rules exactly (Section 3G).
   2. Increased the Growth Progression chart's `layout.padding.top` from `35` to `70` to give the taller bubble headroom without clipping, matching the Stage window chart's padding.

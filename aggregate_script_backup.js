@@ -3116,8 +3116,10 @@ function clearAllDataUI() {
     const simpleMetricIds = [
         'plot-count', 'agg-total-area', 'agg-plots-count', 'agg-exp-harvest', 'agg-re-harvest', 
         'agg-ai-harvest-min', 'agg-ai-harvest-max', 'agg-exp-yield', 'agg-re-yield', 
-        'agg-ai-yield-min', 'agg-ai-yield-max', 'growth-prog-total', 'growth-prog-harvested', 
+        'agg-ai-yield-min', 'agg-ai-yield-max', 'growth-prog-total', 'growth-prog-harvested',
         'growth-prog-under-analysis', 'growth-prog-slow', 'growth-prog-normal', 'growth-prog-fast',
+        'growth-prog-legend-slow-count', 'growth-prog-legend-normal-count', 'growth-prog-legend-fast-count',
+        'growth-prog-legend-slow-area', 'growth-prog-legend-normal-area', 'growth-prog-legend-fast-area',
         'harvest-plots-covered', 'harvest-window-range', 'stat-harvest-plots-covered', 'stat-harvest-collected',
         'growth-status', 'progress-text'
     ];
@@ -4250,15 +4252,25 @@ function computeProgressionMetrics(fullResults, totalPlotsCount, plotsToBin, hid
     let slowPlotsCount = 0;
     let normalPlotsCount = 0;
     let fastPlotsCount = 0;
+    // Per-category area totals (same NA-exclusion rule as bins[i].totalArea below), computed from the
+    // exact same analysisPlots loop that produces slow/normal/fastPlotsCount, so the legend's plot-count
+    // row and area row are always describing the identical set of plots.
+    let slowArea = 0;
+    let normalArea = 0;
+    let fastArea = 0;
 
     analysisPlots.forEach(r => {
         const interp = (r.dailyInterpretation || '').toLowerCase().trim();
+        const area = r.auditedArea !== "NA" ? (parseFloat(r.auditedArea) || 0) : 0;
         if (interp.includes('slow')) {
             slowPlotsCount++;
+            slowArea += area;
         } else if (interp.includes('fast')) {
             fastPlotsCount++;
+            fastArea += area;
         } else {
             normalPlotsCount++;
+            normalArea += area;
         }
     });
 
@@ -4313,6 +4325,9 @@ function computeProgressionMetrics(fullResults, totalPlotsCount, plotsToBin, hid
         slowPlotsCount,
         normalPlotsCount,
         fastPlotsCount,
+        slowArea,
+        normalArea,
+        fastArea,
         onTrackCount,
         bins
     };
@@ -4372,6 +4387,25 @@ function renderGrowthProgressionChart(results, hideHarvestedParam) {
         // Same area-unit and NA-fallback rules as the Stage window chart's bubble
         // (renderGrowthStageChart / stageCustomLabels), so the two "Plots, Area" bubbles read identically.
         const areaUnit = (companyPrefs.areaUnits || 'ha').toLowerCase().includes('acre') ? 'Acre' : 'Ha';
+
+        // Custom two-row legend (Number of Plots / Usable Area) — reuses the existing Slow/Normal/Fast
+        // Growth dataset colors (#f6c445/#264653/#5cae57) defined below; only the counts/areas are new.
+        const legendSlowCountEl = document.getElementById('growth-prog-legend-slow-count');
+        const legendNormalCountEl = document.getElementById('growth-prog-legend-normal-count');
+        const legendFastCountEl = document.getElementById('growth-prog-legend-fast-count');
+        if (legendSlowCountEl) legendSlowCountEl.textContent = metrics.slowPlotsCount;
+        if (legendNormalCountEl) legendNormalCountEl.textContent = metrics.normalPlotsCount;
+        if (legendFastCountEl) legendFastCountEl.textContent = metrics.fastPlotsCount;
+
+        const legendAreaTitleEl = document.getElementById('growth-prog-legend-area-title');
+        if (legendAreaTitleEl) legendAreaTitleEl.textContent = `Usable Area (${areaUnit})`;
+
+        const legendSlowAreaEl = document.getElementById('growth-prog-legend-slow-area');
+        const legendNormalAreaEl = document.getElementById('growth-prog-legend-normal-area');
+        const legendFastAreaEl = document.getElementById('growth-prog-legend-fast-area');
+        if (legendSlowAreaEl) legendSlowAreaEl.textContent = metrics.slowArea.toFixed(2);
+        if (legendNormalAreaEl) legendNormalAreaEl.textContent = metrics.normalArea.toFixed(2);
+        if (legendFastAreaEl) legendFastAreaEl.textContent = metrics.fastArea.toFixed(2);
 
         const canvas = document.getElementById('growthProgressionChart');
         if (!canvas) return;
@@ -4495,8 +4529,11 @@ function renderGrowthProgressionChart(results, hideHarvestedParam) {
                     padding: { top: 70, bottom: 10 }
                 },
                 plugins: {
+                    // Replaced by the custom #growth-prog-custom-legend HTML block below the canvas
+                    // (Number of Plots / Usable Area rows), which needs two metrics per category —
+                    // something the native Chart.js legend can't show. Colors stay the same either way.
                     legend: {
-                        display: true,
+                        display: false,
                         position: 'bottom',
                         align: 'start',
                         labels: {

@@ -1460,6 +1460,13 @@ const tests = [
             const areaMetrics = computeMetrics(areaPlots, 4, null, false);
             assert.strictEqual(areaMetrics.bins[0].totalArea, 8.5, 'Bin 0 - 20% totalArea should sum auditedArea of A1 (5) + A2 (3.5)');
             assert.strictEqual(areaMetrics.bins[4].totalArea, 7.25, "Bin 80 - 100% totalArea should exclude A3's 'NA' auditedArea and only sum A4 (7.25)");
+
+            // 4. Per-category area totals (added 2026-09-23 for the "Number of Plots" / "Usable Area"
+            // custom legend): slowArea/normalArea/fastArea must sum auditedArea by dailyInterpretation
+            // category across ALL bins, using the same NA-exclusion rule as bins[i].totalArea.
+            assert.strictEqual(areaMetrics.slowArea, 3.5, 'slowArea should be A2 only (3.5)');
+            assert.strictEqual(areaMetrics.normalArea, 12.25, 'normalArea should sum A1 (5) + A4 (7.25) = 12.25');
+            assert.strictEqual(areaMetrics.fastArea, 0, "fastArea should be 0 since A3 (the only Fast plot) has 'NA' auditedArea");
         }
     },
     {
