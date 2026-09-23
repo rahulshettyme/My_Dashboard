@@ -4369,15 +4369,21 @@ function renderGrowthProgressionChart(results, hideHarvestedParam) {
 
         const bins = metrics.bins;
 
+        // Same area-unit and NA-fallback rules as the Stage window chart's bubble
+        // (renderGrowthStageChart / stageCustomLabels), so the two "Plots, Area" bubbles read identically.
+        const areaUnit = (companyPrefs.areaUnits || 'ha').toLowerCase().includes('acre') ? 'Acre' : 'Ha';
+
         const canvas = document.getElementById('growthProgressionChart');
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
-        
+
         if (growthProgressionChartInstance) {
             growthProgressionChartInstance.destroy();
         }
 
-        // Custom plugin to draw total sum above each stacked bar with underline
+        // Custom plugin to draw a "{count} Plots, {area} {unit}" speech-bubble above each stacked bar,
+        // matching the Stage window chart's bubble (renderGrowthStageChart's stageCustomLabels plugin)
+        // exactly — same bubble geometry/offsets so both charts present area consistently.
         const growthProgressionTotalsPlugin = {
             id: 'growthProgressionTotals',
             afterDatasetsDraw: (chart) => {
@@ -4406,25 +4412,37 @@ function renderGrowthProgressionChart(results, hideHarvestedParam) {
 
                     if (total === 0 || topY === null || barX === null) continue;
 
-                    cCtx.save();
-                    cCtx.font = 'bold 18px "Inter", sans-serif';
-                    cCtx.textAlign = 'center';
-                    cCtx.textBaseline = 'bottom';
-                    
-                    const textColor = '#f8fafc';
-                    cCtx.fillStyle = textColor;
-                    
-                    const textStr = String(total);
-                    const textY = topY - 10;
-                    cCtx.fillText(textStr, barX, textY);
+                    const bin = bins[i];
+                    const areaVal = (bin.totalArea === 0 && bin.allPlots.every(p => p.auditedArea === "NA"))
+                        ? "NA"
+                        : bin.totalArea.toFixed(2);
+                    const bubbleText = `${total} Plots, ${areaVal} ${areaUnit}`;
 
-                    const textWidth = cCtx.measureText(textStr).width;
+                    cCtx.save();
+                    cCtx.font = '11px "Inter", sans-serif';
+                    const textWidth = cCtx.measureText(bubbleText).width;
+                    const bW = textWidth + 12;
+                    const bH = 26;
+                    const bX = barX - (bW / 2);
+                    const bY = topY - 65;
+
+                    cCtx.fillStyle = '#f8fafc';
                     cCtx.beginPath();
-                    cCtx.moveTo(barX - textWidth / 2 - 2, textY + 5);
-                    cCtx.lineTo(barX + textWidth / 2 + 2, textY + 5);
-                    cCtx.strokeStyle = textColor;
-                    cCtx.lineWidth = 2;
-                    cCtx.stroke();
+                    if (cCtx.roundRect) cCtx.roundRect(bX, bY, bW, bH, 4);
+                    else cCtx.rect(bX, bY, bW, bH);
+                    cCtx.fill();
+
+                    cCtx.beginPath();
+                    cCtx.moveTo(barX - 4, bY + bH);
+                    cCtx.lineTo(barX + 4, bY + bH);
+                    cCtx.lineTo(barX, bY + bH + 5);
+                    cCtx.closePath();
+                    cCtx.fill();
+
+                    cCtx.fillStyle = '#1e293b';
+                    cCtx.textAlign = 'center';
+                    cCtx.textBaseline = 'middle';
+                    cCtx.fillText(bubbleText, barX, bY + (bH / 2));
                     cCtx.restore();
                 }
             }
@@ -4472,7 +4490,9 @@ function renderGrowthProgressionChart(results, hideHarvestedParam) {
                     intersect: false
                 },
                 layout: {
-                    padding: { top: 35, bottom: 10 }
+                    // 70px top padding — matches the Stage window chart's headroom, needed to fit the
+                    // "{count} Plots, {area} {unit}" bubble (26px tall, drawn 65px above the bar) without clipping.
+                    padding: { top: 70, bottom: 10 }
                 },
                 plugins: {
                     legend: {

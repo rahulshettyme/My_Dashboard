@@ -1447,6 +1447,19 @@ const tests = [
             assert.strictEqual(metricsIncluded.onTrackCount, 55, 'On track count should be 55 (49 normal + 6 fast)');
             // Bin 4 should have 23 active + 9 harvested = 32 plots
             assert.strictEqual(metricsIncluded.bins[4].allPlots.length, 32, 'Bin 4 should include the 9 harvested plots in 80 - 100%');
+
+            // 3. bins[i].totalArea: the Growth Progression chart's bubble overlay (added 2026-09-23,
+            // matching the Stage window chart's "{count} Plots, {area} {unit}" bubble) reads this field
+            // directly, so it must sum auditedArea per bin and treat 'NA' as excluded (not 0).
+            const areaPlots = [
+                { plotName: 'A1', isHarvested: 'No', progression: '10', dailyInterpretation: 'Normal Growth', auditedArea: 5 },
+                { plotName: 'A2', isHarvested: 'No', progression: '15', dailyInterpretation: 'Slow Growth', auditedArea: 3.5 },
+                { plotName: 'A3', isHarvested: 'No', progression: '90', dailyInterpretation: 'Fast Growth', auditedArea: 'NA' },
+                { plotName: 'A4', isHarvested: 'No', progression: '95', dailyInterpretation: 'Normal Growth', auditedArea: 7.25 }
+            ];
+            const areaMetrics = computeMetrics(areaPlots, 4, null, false);
+            assert.strictEqual(areaMetrics.bins[0].totalArea, 8.5, 'Bin 0 - 20% totalArea should sum auditedArea of A1 (5) + A2 (3.5)');
+            assert.strictEqual(areaMetrics.bins[4].totalArea, 7.25, "Bin 80 - 100% totalArea should exclude A3's 'NA' auditedArea and only sum A4 (7.25)");
         }
     },
     {
