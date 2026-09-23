@@ -805,6 +805,9 @@ const tests = [
             assert.strictEqual(healthScript.extractVarietyYieldDetails({}).maxAttainableYield, 'NA');
 
             // 6. Verification with extractPlotMultiModelData
+            // Maximum Attainable Yield/Harvest always share Expected Yield/Harvest's own unit basis
+            // (Section 3G.5) — so maxAttainableYieldPlotUnit/maxAttainableHarvestPlotUnit are used raw
+            // by the chart, exactly like y1/h1 (stdYield/stdHarvest), with no separate unit conversion.
             const plotWithVariety = {
                 name: 'Test Plot',
                 y1: 10,
@@ -813,7 +816,8 @@ const tests = [
                 h2: 24,
                 auditedArea: 2,
                 areaUnit: 'ha',
-                maxAttainableYieldTonHa: maxAttainableTonHa,
+                maxAttainableYieldPlotUnit: 15,
+                maxAttainableHarvestPlotUnit: 30,
                 yieldRawRecords: [
                     {
                         modelType: 'BIOMASS_DAYS',
@@ -824,8 +828,16 @@ const tests = [
                 ]
             };
             const chartData = healthScript.extractPlotMultiModelData(plotWithVariety, 'tonne_ha', 'tonnes');
-            assert.strictEqual(chartData.maxAttainableYield, 69.19, 'Chart reference line should use API maxAttainableYield');
-            assert.strictEqual(chartData.maxAttainableHarvest, parseFloat((69.189 * 2).toFixed(2)), 'Max harvest should scale by plot area');
+            assert.strictEqual(chartData.maxAttainableYield, 15, 'Chart reference line should use raw maxAttainableYieldPlotUnit, same basis as stdYield');
+            assert.strictEqual(chartData.maxAttainableHarvest, 30, 'Chart reference line should use raw maxAttainableHarvestPlotUnit, same basis as stdHarvest');
+
+            // 7. No heuristic fallback: Maximum Attainable is a non-mandatory config value and must
+            // never be calculated/estimated when absent — extractPlotMultiModelData should return null
+            // (not a 1.85x/1.2x synthesized value), so the chart's `opts.maxVal > 0` gate omits the line.
+            const plotWithoutMaxAttainable = { ...plotWithVariety, maxAttainableYieldPlotUnit: undefined, maxAttainableHarvestPlotUnit: undefined };
+            const chartDataNoMax = healthScript.extractPlotMultiModelData(plotWithoutMaxAttainable, 'tonne_ha', 'tonnes');
+            assert.strictEqual(chartDataNoMax.maxAttainableYield, null, 'Should be null (not a heuristic estimate) when variety has no configured maxAttainableYield');
+            assert.strictEqual(chartDataNoMax.maxAttainableHarvest, null, 'Should be null (not a heuristic estimate) when variety has no configured maxAttainableHarvest');
         }
     },
     {

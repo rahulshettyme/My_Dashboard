@@ -1627,31 +1627,30 @@ function extractPlotMultiModelData(d, yieldUnitOverride = null, harvestUnitOverr
 
     const stdYield = parseFloat(Number(d.y1 || 0).toFixed(2));
     const reYield = parseFloat(Number(d.y2 || 0).toFixed(2));
-    const maxYieldVal = Math.max(...unifiedYieldTrend, stdYield, reYield);
-    
-    // Use API Max Attainable Yield if present, otherwise calculate heuristic fallback
-    let maxAttainableYield;
-    const procMaxTonHa = (d.maxAttainableYieldTonHa !== undefined && d.maxAttainableYieldTonHa !== null)
-        ? d.maxAttainableYieldTonHa
-        : (d._processed && d._processed.maxAttainableYieldTonHa !== undefined ? d._processed.maxAttainableYieldTonHa : null);
-    if (procMaxTonHa !== null && !isNaN(procMaxTonHa)) {
-        maxAttainableYield = parseFloat(convertYield(procMaxTonHa, yieldUnit).toFixed(2));
-    } else {
-        maxAttainableYield = parseFloat((stdYield > 0 ? (stdYield * 1.85) : (maxYieldVal * 1.2)).toFixed(2));
+
+    // Maximum Attainable Yield/Harvest is a non-mandatory variety config value — never calculated or
+    // estimated. maxAttainableYieldPlotUnit/maxAttainableHarvestPlotUnit are already in the SAME basis
+    // as d.y1/d.h1 (Max Attainable always shares Expected Yield's unit — Section 3G.5), so they're used
+    // raw here exactly like stdYield/stdHarvest, with no unit conversion. If the variety has none
+    // configured, the reference line is simply omitted from the trend chart (see createTrendChart's
+    // `opts.maxVal > 0` gate) rather than synthesizing a substitute value.
+    let maxAttainableYield = null;
+    const rawMaxPlotUnit = (d.maxAttainableYieldPlotUnit !== undefined && d.maxAttainableYieldPlotUnit !== null)
+        ? d.maxAttainableYieldPlotUnit
+        : (d._processed && d._processed.maxAttainableYieldPlotUnit !== undefined ? d._processed.maxAttainableYieldPlotUnit : null);
+    if (rawMaxPlotUnit !== null && !isNaN(rawMaxPlotUnit)) {
+        maxAttainableYield = parseFloat(Number(rawMaxPlotUnit).toFixed(2));
     }
 
     const stdHarvest = parseFloat(Number(d.h1 || 0).toFixed(2));
     const reHarvest = parseFloat(Number(d.h2 || 0).toFixed(2));
-    const maxHarvestVal = Math.max(...unifiedHarvestTrend, stdHarvest, reHarvest);
-    
-    // For harvest: if area is available and API max attainable yield is known, calculate max harvest as maxAttainableYield * area
-    let maxAttainableHarvest;
-    const plotAreaHa = Number(d.auditedArea || (d._processed && d._processed.auditedArea) || 0) * getDynamicFactor(d.areaUnit || (d._processed && d._processed.areaUnit) || 'ha', 'ha', 'Area');
-    if (procMaxTonHa !== null && !isNaN(procMaxTonHa) && plotAreaHa > 0) {
-        const maxAttainableHarvestTon = procMaxTonHa * plotAreaHa;
-        maxAttainableHarvest = parseFloat(convertHarvest(maxAttainableHarvestTon, harvestUnit).toFixed(2));
-    } else {
-        maxAttainableHarvest = parseFloat((stdHarvest > 0 ? (stdHarvest * 1.85) : (maxHarvestVal * 1.2)).toFixed(2));
+
+    let maxAttainableHarvest = null;
+    const rawMaxHarvestPlotUnit = (d.maxAttainableHarvestPlotUnit !== undefined && d.maxAttainableHarvestPlotUnit !== null)
+        ? d.maxAttainableHarvestPlotUnit
+        : (d._processed && d._processed.maxAttainableHarvestPlotUnit !== undefined ? d._processed.maxAttainableHarvestPlotUnit : null);
+    if (rawMaxHarvestPlotUnit !== null && !isNaN(rawMaxHarvestPlotUnit)) {
+        maxAttainableHarvest = parseFloat(Number(rawMaxHarvestPlotUnit).toFixed(2));
     }
 
     return {
