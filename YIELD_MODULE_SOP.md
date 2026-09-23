@@ -268,10 +268,23 @@ display values for both AI prediction models simultaneously:
    - The value is dynamically converted to base standard `Tonnes/Ha`:
      $$\text{Max Attainable (Tonnes/Ha)} = \frac{\text{rawMax} \times \text{massToTon}}{\text{areaToHa}}$$
    - When rendered in `#all-plots-table` under `Max Attainable` and plotted on the multi-model trend chart as the upper boundary reference line, it converts dynamically to the user's active yield unit (`getDataYieldUnit()`).
+5. **Plot-Level Yield/Harvest Card Display (added 2026-09-22)**:
+   - When the variety has a configured `maxAttainableYield`, the plot's **Yield Analysis** card shows a **Maximum Attainable Yield** row and the **Harvest Analysis** card shows a **Maximum Attainable Harvest** row (`#plot-max-attainable-yield-row` / `#plot-max-attainable-harvest-row`), each labeled "(from variety config)". Both rows are hidden (via the `hidden` class) when the variety has no `maxAttainableYield`.
+   - **Maximum Attainable Yield**: the raw `maxAttainableYield` from the Variety API is used directly (`maxAttainableYieldPlotUnit`), since it already shares the same `expectedYieldUnits`/`referenceAreaUnits` basis as `expectedYield` (Section 3B) — no conversion needed, consistent with how Expected Yield is now sourced.
+   - **Maximum Attainable Harvest**: computed as
+     $$\text{maxAttainableHarvest} = \text{maxAttainableYield} \times (\text{Audited Area converted from the company unit into } a_y)$$
+     then converted from the yield mass unit ($q_y$) into the Harvest card's own unit ($q$, `plotHarvestUnit`). Reuses the same company→$a_y$ area factor already computed for Re-estimated Yield.
+   - Independent of AI prediction availability — shown/populated in both the normal (`updatePlotPredictedDisplay()`) and `noPrediction` (`updatePlotData()`'s NA branch) code paths, since Maximum Attainable comes from variety config, not the AI model.
+   - This is separate from `maxAttainableYieldTonHa` (Section 3G.4 above), which remains the universal Tonnes/Ha basis used only by the base table and trend chart.
 
 ---
 
 ## 4. Change Log (Feature & Logic Audit Trail)
+* **2026-09-22**: Added Maximum Attainable Yield/Harvest to Plot-Level Cards:
+  1. Added `#plot-max-attainable-yield-row` to the Yield Analysis card and `#plot-max-attainable-harvest-row` to the Harvest Analysis card in `aggregate_dashboard_backup.html`, positioned after the "Predicted" row and before "Card level".
+  2. `fetchPlotData()` now computes `maxAttainableYieldPlotUnit` (raw variety value, no conversion needed) and `maxAttainableHarvestPlotUnit` (`maxAttainableYield × Audited Area`, area-converted from company unit to the yield area unit, then mass-converted to the harvest unit).
+  3. Rows are hidden via the `hidden` class when the variety has no `maxAttainableYield`; shown and populated whenever it's present, regardless of AI prediction availability.
+  4. Updated `clearPlotDisplay()` to reset and re-hide both rows when switching plots.
 * **2026-09-22**: Redesigned Plot-Level Yield Unit Sourcing After Live QA2 Debug Session (Superseding the Same-Day Earlier Fix Below):
   1. A live debug trace against QA2 plots 27353 and 27355 (CA-details, Variety-details, Yield-prediction, Company-info APIs) proved `auditedArea` is always recorded in the **company's** configured area unit (`companyPrefs.areaUnits`), never the variety's or the user's — confirmed via the exact math: plot 27353's variety `expectedYield` (5680, kg/Hectare) vs. the old code's `Harvest/Area` recompute (2298.62) differ by a ratio of ~2.47105, exactly the Hectare→Acre factor, proving `auditedArea` was actually in Acre (the company's unit) the whole time.
   2. Introduced three clearly separated unit concepts per plot (see Section 3B): harvest unit (`plotHarvestUnit`, from CA API), the company unit that `auditedArea` is truly recorded in (from Company API, converted to the user's preference only for display), and the yield unit (`yieldMassUnit`/`yieldAreaUnit`, from the Variety API) that governs Expected/Re-estimated/Predicted Yield exclusively.

@@ -1137,6 +1137,8 @@ function processData(rows) {
             varietyId: row['varietyId'] || null,
             maxAttainableYield: (rawMaxAttainable !== undefined && rawMaxAttainable !== null) ? rawMaxAttainable : 'NA',
             maxAttainableYieldTonHa: maxAttainableTonHa,
+            maxAttainableYieldPlotUnit: (row['maxAttainableYieldPlotUnit'] !== undefined && row['maxAttainableYieldPlotUnit'] !== null) ? row['maxAttainableYieldPlotUnit'] : null,
+            maxAttainableHarvestPlotUnit: (row['maxAttainableHarvestPlotUnit'] !== undefined && row['maxAttainableHarvestPlotUnit'] !== null) ? row['maxAttainableHarvestPlotUnit'] : null,
             varietyExpectedYieldUnits: row['varietyExpectedYieldUnits'] || null,
             varietyReferenceAreaUnits: row['varietyReferenceAreaUnits'] || null,
             varietyName: row['varietyName'] || null,
@@ -1291,6 +1293,18 @@ function updatePlotData(selectedPlot) {
             });
             document.getElementById('plot-yield-chart-container')?.classList.add('hidden');
             document.getElementById('plot-harvest-chart-container')?.classList.add('hidden');
+
+            // Maximum Attainable Yield/Harvest comes from the variety's own configuration, independent
+            // of AI prediction availability, so it should still show even when there's no AI prediction.
+            const maxAttainableYieldRow = document.getElementById('plot-max-attainable-yield-row');
+            const maxAttainableHarvestRow = document.getElementById('plot-max-attainable-harvest-row');
+            const hasMaxAttainable = d.maxAttainableYieldPlotUnit !== null && d.maxAttainableYieldPlotUnit !== undefined && !isNaN(d.maxAttainableYieldPlotUnit);
+            if (maxAttainableYieldRow) maxAttainableYieldRow.classList.toggle('hidden', !hasMaxAttainable);
+            if (maxAttainableHarvestRow) maxAttainableHarvestRow.classList.toggle('hidden', !hasMaxAttainable);
+            if (hasMaxAttainable) {
+                updateElement('plot-max-attainable-yield', fmtYield(d.maxAttainableYieldPlotUnit));
+                updateElement('plot-max-attainable-harvest', fmtHarvest(d.maxAttainableHarvestPlotUnit));
+            }
         } else {
             updatePlotPredictedDisplay(d);
         }
@@ -1876,6 +1890,17 @@ function updatePlotPredictedDisplay(d) {
     renderClosestDiffElement('plot-harvest-card-level', predictedHarvestMin, predictedHarvestMax, harvestPrimaryBaseline);
     renderClosestDiffElement('plot-harvest-card-level-exp', predictedHarvestMin, predictedHarvestMax, d.h1);
     renderClosestDiffElement('plot-harvest-card-level-re', predictedHarvestMin, predictedHarvestMax, d.h2);
+
+    // Maximum Attainable Yield/Harvest: shown only when the variety has a configured maxAttainableYield.
+    const maxAttainableYieldRow = document.getElementById('plot-max-attainable-yield-row');
+    const maxAttainableHarvestRow = document.getElementById('plot-max-attainable-harvest-row');
+    const hasMaxAttainable = d.maxAttainableYieldPlotUnit !== null && d.maxAttainableYieldPlotUnit !== undefined && !isNaN(d.maxAttainableYieldPlotUnit);
+    if (maxAttainableYieldRow) maxAttainableYieldRow.classList.toggle('hidden', !hasMaxAttainable);
+    if (maxAttainableHarvestRow) maxAttainableHarvestRow.classList.toggle('hidden', !hasMaxAttainable);
+    if (hasMaxAttainable) {
+        updateElement('plot-max-attainable-yield', fmtYield(d.maxAttainableYieldPlotUnit));
+        updateElement('plot-max-attainable-harvest', fmtHarvest(d.maxAttainableHarvestPlotUnit));
+    }
 
     renderPlotTrendCharts(d);
 }
@@ -3346,6 +3371,23 @@ async function generateDataFromAPI() {
             const reEstAreaFactor = getDynamicFactor(companyAreaUnit, yieldAreaUnitRaw, 'Area');
             const reEstYield = reEstAreaFactor > 0 ? (reEstYieldPerCompanyArea * reEstMassFactor / reEstAreaFactor) : (reEstYieldPerCompanyArea * reEstMassFactor);
 
+            // Maximum Attainable Yield/Harvest, shown on the plot's Yield/Harvest cards only when the
+            // variety has a configured maxAttainableYield. It shares the same yieldMassUnit/yieldAreaUnit
+            // basis as expectedYield/maxAttainableYield in the Variety API response, so the raw value is
+            // used directly for the Yield card. Max Attainable Harvest = maxAttainableYield x Audited Area
+            // (Area converted from the company unit into yieldAreaUnit, reusing reEstAreaFactor), then
+            // converted from yieldMassUnit into the Harvest card's own unit (plotHarvestUnit).
+            const maxAttainableYieldRaw = (varietyData?.maxAttainableYield !== undefined && varietyData?.maxAttainableYield !== null && varietyData?.maxAttainableYield !== 'NA' && !isNaN(parseFloat(varietyData.maxAttainableYield)))
+                ? parseFloat(varietyData.maxAttainableYield)
+                : null;
+            let maxAttainableHarvestValue = null;
+            if (maxAttainableYieldRaw !== null) {
+                const areaInYieldUnit = caData.auditedArea * reEstAreaFactor;
+                const maxAttainableHarvestInYieldMassUnit = maxAttainableYieldRaw * areaInYieldUnit;
+                const harvestMassFactor = getDynamicFactor(yieldMassUnit, rawUnit, 'Mass');
+                maxAttainableHarvestValue = maxAttainableHarvestInYieldMassUnit * harvestMassFactor;
+            }
+
             return {
                 'Plot Name': plot.name || 'Unknown',
                 'caId': plot.caId,
@@ -3366,6 +3408,8 @@ async function generateDataFromAPI() {
                 'plotAreaUnit': plotAreaUnit,
                 'yieldMassUnit': yieldMassUnit,
                 'yieldAreaUnit': yieldAreaUnit,
+                'maxAttainableYieldPlotUnit': maxAttainableYieldRaw,
+                'maxAttainableHarvestPlotUnit': maxAttainableHarvestValue,
                 'varietyId': caData.varietyId || null,
                 'maxAttainableYield': varietyData?.maxAttainableYield ?? 'NA',
                 'varietyExpectedYieldUnits': varietyData?.expectedYieldUnits || null,
@@ -5056,12 +5100,17 @@ function clearPlotDisplay() {
         'plot-app-harvest-min', 'plot-app-harvest-max',
         'plot-card-level', 'plot-card-level-exp', 'plot-card-level-re',
         'plot-harvest-card-level', 'plot-harvest-card-level-exp', 'plot-harvest-card-level-re',
+        'plot-max-attainable-yield', 'plot-max-attainable-harvest',
         'modal-summary-val-std', 'modal-summary-val-re', 'modal-summary-val-pred'
     ];
     plotElements.forEach(id => {
         const el = document.getElementById(id);
         if (el) el.textContent = '-';
     });
+    const maxAttainableYieldRow = document.getElementById('plot-max-attainable-yield-row');
+    const maxAttainableHarvestRow = document.getElementById('plot-max-attainable-harvest-row');
+    if (maxAttainableYieldRow) maxAttainableYieldRow.classList.add('hidden');
+    if (maxAttainableHarvestRow) maxAttainableHarvestRow.classList.add('hidden');
     const tasumiStatusEl = document.getElementById('plot-tasumi-status');
     if (tasumiStatusEl) tasumiStatusEl.innerHTML = '';
 
