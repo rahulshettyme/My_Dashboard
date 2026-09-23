@@ -838,6 +838,44 @@ const tests = [
             const chartDataNoMax = healthScript.extractPlotMultiModelData(plotWithoutMaxAttainable, 'tonne_ha', 'tonnes');
             assert.strictEqual(chartDataNoMax.maxAttainableYield, null, 'Should be null (not a heuristic estimate) when variety has no configured maxAttainableYield');
             assert.strictEqual(chartDataNoMax.maxAttainableHarvest, null, 'Should be null (not a heuristic estimate) when variety has no configured maxAttainableHarvest');
+
+            // 8. Trend chart must default to the plot's own crop-configured unit (yieldMassUnit/
+            // yieldAreaUnit), matching the card, NOT the global active-display-unit selector — verified
+            // here by omitting the yieldUnitOverride/harvestUnitOverride args entirely.
+            const plotWithOwnUnits = {
+                name: 'Plot Own Units',
+                y1: 10,
+                y2: 12,
+                h1: 20,
+                h2: 24,
+                auditedArea: 2,
+                areaUnit: 'ha',
+                yieldMassUnit: 'ton',
+                yieldAreaUnit: 'hectare',
+                harvestUnit: 'ton',
+                maxAttainableYieldPlotUnit: 15,
+                maxAttainableHarvestPlotUnit: 30,
+                yieldRawRecords: [
+                    {
+                        modelType: 'TASUMI',
+                        predictionDate: '2026-08-20',
+                        parameters: { yieldAvg: 8, yieldMin: 7, yieldMax: 9, productionAvg: 16, productionMin: 14, productionMax: 18 }
+                    },
+                    {
+                        modelType: 'BIOMASS_DAYS',
+                        gddPredictions: [
+                            { cutoff_date: '2026-08-01', yieldAvg: 6, yieldMin: 5, yieldMax: 7, productionAvg: 12, productionMin: 10, productionMax: 14 }
+                        ]
+                    }
+                ]
+            };
+            const ownUnitData = healthScript.extractPlotMultiModelData(plotWithOwnUnits);
+            const expectedMassFactor = healthScript.getDynamicFactor(['METRIC_TON', 'Ton (Metric)', 'MT', 'Tonnes'], 'ton', 'Mass');
+            const expectedTasumiYieldAvg = parseFloat((8 * expectedMassFactor).toFixed(2));
+            assert.strictEqual(ownUnitData.tasumi.yieldAvg, expectedTasumiYieldAvg, 'Forecasted/Tasumi trend must convert using the plot yieldMassUnit/yieldAreaUnit, not a global display unit');
+            // Same-order-of-magnitude check: Forecasted and Standard/Max Attainable must land in the SAME
+            // unit scale (both ~single/double digits here), never a ~1000x mismatch as with kgs_acre.
+            assert.ok(Math.abs(ownUnitData.tasumi.yieldAvg - ownUnitData.stdYield) < ownUnitData.stdYield, 'Forecasted trend and Standard Yield should be in a comparable unit scale');
         }
     },
     {

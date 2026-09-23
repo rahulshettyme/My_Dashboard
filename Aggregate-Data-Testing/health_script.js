@@ -1517,8 +1517,24 @@ function extractPlotMultiModelData(d, yieldUnitOverride = null, harvestUnitOverr
         return null;
     }
 
-    const yieldUnit = yieldUnitOverride || (typeof getDataYieldUnit === 'function' ? getDataYieldUnit() : 'kgs_acre');
-    const harvestUnit = harvestUnitOverride || (typeof getDataHarvestUnit === 'function' ? getDataHarvestUnit() : 'kgs');
+    // Trend chart must match the plot card exactly (Section 3B): defaults to the crop's own configured
+    // unit (d.yieldMassUnit/d.yieldAreaUnit/d.harvestUnit from the Variety API), never the global
+    // "active display unit" (getDataYieldUnit()/getDataHarvestUnit()) — see aggregate_script_backup.js's
+    // copy of this function for the live behavior. yieldUnitOverride/harvestUnitOverride remain as a
+    // test-only escape hatch for deterministic unit assertions.
+    const yMassUnit = yieldUnitOverride
+        ? (yieldUnitOverride.split('_')[0] || 'kilogram').toLowerCase()
+        : (d.yieldMassUnit || d.harvestUnit || 'kilogram').toLowerCase();
+    const yAreaUnit = yieldUnitOverride
+        ? (yieldUnitOverride.split('_')[1] || 'ha').toLowerCase()
+        : (d.yieldAreaUnit || 'ha').toLowerCase();
+    const harvestUnit = harvestUnitOverride || (d.harvestUnit || 'kilogram').toLowerCase();
+
+    const convertYieldToPlotUnit = (valueInTonnePerHa) => {
+        const massFactor = getDynamicFactor(['METRIC_TON', 'Ton (Metric)', 'MT', 'Tonnes'], yMassUnit, 'Mass');
+        const areaFactor = getDynamicFactor(['HECTARE', 'Hectare', 'ha'], yAreaUnit, 'Area');
+        return areaFactor > 0 ? (valueInTonnePerHa * massFactor / areaFactor) : valueInTonnePerHa;
+    };
 
     let tasumiYieldAvg = null;
     let tasumiYieldMin = null;
@@ -1539,9 +1555,9 @@ function extractPlotMultiModelData(d, yieldUnitOverride = null, harvestUnitOverr
         const rawHMin = parseFloat(p.productionMin !== undefined ? p.productionMin : rawHAvg);
         const rawHMax = parseFloat(p.productionMax !== undefined ? p.productionMax : rawHAvg);
 
-        tasumiYieldAvg = parseFloat(convertYield(rawYAvg, yieldUnit).toFixed(2));
-        tasumiYieldMin = parseFloat(convertYield(Math.min(rawYMin, rawYMax), yieldUnit).toFixed(2));
-        tasumiYieldMax = parseFloat(convertYield(Math.max(rawYMin, rawYMax), yieldUnit).toFixed(2));
+        tasumiYieldAvg = parseFloat(convertYieldToPlotUnit(rawYAvg).toFixed(2));
+        tasumiYieldMin = parseFloat(convertYieldToPlotUnit(Math.min(rawYMin, rawYMax)).toFixed(2));
+        tasumiYieldMax = parseFloat(convertYieldToPlotUnit(Math.max(rawYMin, rawYMax)).toFixed(2));
 
         tasumiHarvestAvg = parseFloat(convertHarvest(rawHAvg, harvestUnit).toFixed(2));
         tasumiHarvestMin = parseFloat(convertHarvest(Math.min(rawHMin, rawHMax), harvestUnit).toFixed(2));
@@ -1595,9 +1611,9 @@ function extractPlotMultiModelData(d, yieldUnitOverride = null, harvestUnitOverr
         const rawHMin = parseFloat(p.productionMin !== undefined ? p.productionMin : rawHAvg);
         const rawHMax = parseFloat(p.productionMax !== undefined ? p.productionMax : rawHAvg);
 
-        yieldBiomassData.push(parseFloat(convertYield(rawYAvg, yieldUnit).toFixed(2)));
-        yieldBiomassMin.push(parseFloat(convertYield(Math.min(rawYMin, rawYMax), yieldUnit).toFixed(2)));
-        yieldBiomassMax.push(parseFloat(convertYield(Math.max(rawYMin, rawYMax), yieldUnit).toFixed(2)));
+        yieldBiomassData.push(parseFloat(convertYieldToPlotUnit(rawYAvg).toFixed(2)));
+        yieldBiomassMin.push(parseFloat(convertYieldToPlotUnit(Math.min(rawYMin, rawYMax)).toFixed(2)));
+        yieldBiomassMax.push(parseFloat(convertYieldToPlotUnit(Math.max(rawYMin, rawYMax)).toFixed(2)));
 
         harvestBiomassData.push(parseFloat(convertHarvest(rawHAvg, harvestUnit).toFixed(2)));
         harvestBiomassMin.push(parseFloat(convertHarvest(Math.min(rawHMin, rawHMax), harvestUnit).toFixed(2)));

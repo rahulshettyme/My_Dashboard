@@ -1938,8 +1938,25 @@ function extractPlotMultiModelData(d, showBiomassAfterTasumi = null) {
     // Checked (isShowChecked === true): reveal all biomass points after tasumi
     const shouldHide = !isShowChecked;
 
-    const yieldUnit = getDataYieldUnit();
-    const harvestUnit = getDataHarvestUnit();
+    // Trend chart must match the plot card exactly (Section 3B): the card's Expected/Re-estimated/
+    // Predicted Yield and Maximum Attainable Yield are all expressed in the crop's own configured unit
+    // (yieldMassUnit/yieldAreaUnit from the Variety API), never the global "active display unit"
+    // selector (getDataYieldUnit()/getDataHarvestUnit()). Using the global selector here previously put
+    // the Forecasted/Predicted trend and its tooltip in a different unit scale than the Standard/
+    // Re-estimated/Maximum Attainable reference lines on the very same chart, and than the card itself.
+    const yMassUnit = (d.yieldMassUnit || d.harvestUnit || 'kilogram').toLowerCase();
+    const yAreaUnit = (d.yieldAreaUnit || 'ha').toLowerCase();
+    const harvestUnit = (d.harvestUnit || 'kilogram').toLowerCase();
+
+    // convertYield()'s generic (value, "mass_area") API isn't used here: yMassUnit/yAreaUnit come
+    // straight from the Variety API and could themselves contain an underscore, which would corrupt
+    // convertYield's naive string split. This mirrors convertYield's own math with mass/area passed
+    // as separate arguments instead.
+    const convertYieldToPlotUnit = (valueInTonnePerHa) => {
+        const massFactor = getDynamicFactor(['METRIC_TON', 'Ton (Metric)', 'MT', 'Tonnes'], yMassUnit, 'Mass');
+        const areaFactor = getDynamicFactor(['HECTARE', 'Hectare', 'ha'], yAreaUnit, 'Area');
+        return areaFactor > 0 ? (valueInTonnePerHa * massFactor / areaFactor) : valueInTonnePerHa;
+    };
 
     // Extract authoritative TASUMI point first so we have its date for filtering
     let tasumiYieldAvg = null;
@@ -1961,9 +1978,9 @@ function extractPlotMultiModelData(d, showBiomassAfterTasumi = null) {
         const rawHMin = parseFloat(p.productionMin !== undefined ? p.productionMin : rawHAvg);
         const rawHMax = parseFloat(p.productionMax !== undefined ? p.productionMax : rawHAvg);
 
-        tasumiYieldAvg = parseFloat(convertYield(rawYAvg, yieldUnit).toFixed(2));
-        tasumiYieldMin = parseFloat(convertYield(Math.min(rawYMin, rawYMax), yieldUnit).toFixed(2));
-        tasumiYieldMax = parseFloat(convertYield(Math.max(rawYMin, rawYMax), yieldUnit).toFixed(2));
+        tasumiYieldAvg = parseFloat(convertYieldToPlotUnit(rawYAvg).toFixed(2));
+        tasumiYieldMin = parseFloat(convertYieldToPlotUnit(Math.min(rawYMin, rawYMax)).toFixed(2));
+        tasumiYieldMax = parseFloat(convertYieldToPlotUnit(Math.max(rawYMin, rawYMax)).toFixed(2));
 
         tasumiHarvestAvg = parseFloat(convertHarvest(rawHAvg, harvestUnit).toFixed(2));
         tasumiHarvestMin = parseFloat(convertHarvest(Math.min(rawHMin, rawHMax), harvestUnit).toFixed(2));
@@ -2017,9 +2034,9 @@ function extractPlotMultiModelData(d, showBiomassAfterTasumi = null) {
         const rawHMin = parseFloat(p.productionMin !== undefined ? p.productionMin : rawHAvg);
         const rawHMax = parseFloat(p.productionMax !== undefined ? p.productionMax : rawHAvg);
 
-        yieldBiomassData.push(parseFloat(convertYield(rawYAvg, yieldUnit).toFixed(2)));
-        yieldBiomassMin.push(parseFloat(convertYield(Math.min(rawYMin, rawYMax), yieldUnit).toFixed(2)));
-        yieldBiomassMax.push(parseFloat(convertYield(Math.max(rawYMin, rawYMax), yieldUnit).toFixed(2)));
+        yieldBiomassData.push(parseFloat(convertYieldToPlotUnit(rawYAvg).toFixed(2)));
+        yieldBiomassMin.push(parseFloat(convertYieldToPlotUnit(Math.min(rawYMin, rawYMax)).toFixed(2)));
+        yieldBiomassMax.push(parseFloat(convertYieldToPlotUnit(Math.max(rawYMin, rawYMax)).toFixed(2)));
 
         harvestBiomassData.push(parseFloat(convertHarvest(rawHAvg, harvestUnit).toFixed(2)));
         harvestBiomassMin.push(parseFloat(convertHarvest(Math.min(rawHMin, rawHMax), harvestUnit).toFixed(2)));
@@ -2087,7 +2104,7 @@ function extractPlotMultiModelData(d, showBiomassAfterTasumi = null) {
         harvestTrend: unifiedHarvestTrend,
         harvestMinTrend: unifiedHarvestMin,
         harvestMaxTrend: unifiedHarvestMax,
-        yieldUnitLabel: YIELD_UNIT_LABELS[yieldUnit] || yieldUnit,
+        yieldUnitLabel: `${HARVEST_UNIT_LABELS[yMassUnit] || yMassUnit}/${yAreaUnit === 'ha' ? 'Ha' : 'Acre'}`,
         harvestUnitLabel: HARVEST_UNIT_LABELS[harvestUnit] || harvestUnit,
         stdYield, reYield, maxAttainableYield,
         stdHarvest, reHarvest, maxAttainableHarvest,
