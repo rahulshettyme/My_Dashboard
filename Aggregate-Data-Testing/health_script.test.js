@@ -751,7 +751,10 @@ const tests = [
     {
         name: 'extractVarietyYieldDetails_and_maxAttainableYield_conversion',
         fn: () => {
-            // 1. Standard variety payload (user sample)
+            // 1. Standard variety payload (user sample) — maxAttainableYield is read flat, directly on
+            // the yieldPerLocation entry, matching the corrected/current upstream API shape (a nested
+            // locEntry.data.maxAttainableYield briefly appeared 2026-09-22/23 due to an upstream API bug
+            // that has since been rolled back — see case 1b below and YIELD_MODULE_SOP.md Section 3G).
             const sampleVarietyPayload = {
                 id: 23454,
                 name: 'RS EY after 35% Potato',
@@ -759,12 +762,10 @@ const tests = [
                     yieldPerLocation: [
                         {
                             _uid: 1,
-                            data: {
-                                maxAttainableYield: 28000
-                            },
                             expectedYield: 15000,
                             refrenceAreaUnits: 'ACRE',
-                            expectedYieldUnits: 'KILOGRAM'
+                            expectedYieldUnits: 'KILOGRAM',
+                            maxAttainableYield: 28000
                         }
                     ]
                 }
@@ -775,6 +776,28 @@ const tests = [
             assert.strictEqual(extracted.expectedYieldUnits, 'KILOGRAM');
             assert.strictEqual(extracted.referenceAreaUnits, 'ACRE');
             assert.strictEqual(extracted.expectedYield, 15000);
+
+            // 1b. Rolled back 2026-09-24: a nested locEntry.data.maxAttainableYield (an upstream API bug
+            // present 2026-09-22/23, now being corrected at the source) must be IGNORED — only the flat
+            // locEntry.maxAttainableYield is read. A payload with ONLY the nested form (no flat sibling)
+            // must resolve to 'NA', proving the nested path is no longer consulted.
+            const varietyWithOnlyNestedMax = {
+                id: 23455,
+                data: {
+                    yieldPerLocation: [
+                        {
+                            _uid: 1,
+                            data: { maxAttainableYield: 10 },
+                            expectedYield: 5.68,
+                            refrenceAreaUnits: 'HECTARE',
+                            expectedYieldUnits: 'METRIC_TON'
+                        }
+                    ]
+                }
+            };
+            const extractedNestedOnly = healthScript.extractVarietyYieldDetails(varietyWithOnlyNestedMax);
+            assert.strictEqual(extractedNestedOnly.maxAttainableYield, 'NA', 'A nested-only locEntry.data.maxAttainableYield (no flat sibling) must resolve to NA, not be read as the corrupted-data fallback');
+            assert.strictEqual(extractedNestedOnly.expectedYield, 5.68, 'expectedYield (flat, unaffected by the nesting bug) should still extract correctly');
 
             // 2. Unit conversion to standard Tonnes/Ha
             const massToTon = healthScript.getDynamicFactor('KILOGRAM', ['METRIC_TON', 'Ton (Metric)', 'MT', 'Tonnes'], 'Mass');
@@ -1450,23 +1473,26 @@ const tests = [
 
             // 3. bins[i].totalArea: the Growth Progression chart's bubble overlay (added 2026-09-23,
             // matching the Stage window chart's "{count} Plots, {area} {unit}" bubble) reads this field
-            // directly, so it must sum auditedArea per bin and treat 'NA' as excluded (not 0).
+            // directly, so it must sum usableArea per bin and treat 'NA' as excluded (not 0).
+            // Sourced from usableArea (the real Croppable Area API field), NOT auditedArea — switched
+            // 2026-09-23 per explicit request; auditedArea is intentionally absent from this fixture to
+            // prove the function no longer reads it (a stray auditedArea would be silently ignored).
             const areaPlots = [
-                { plotName: 'A1', isHarvested: 'No', progression: '10', dailyInterpretation: 'Normal Growth', auditedArea: 5 },
-                { plotName: 'A2', isHarvested: 'No', progression: '15', dailyInterpretation: 'Slow Growth', auditedArea: 3.5 },
-                { plotName: 'A3', isHarvested: 'No', progression: '90', dailyInterpretation: 'Fast Growth', auditedArea: 'NA' },
-                { plotName: 'A4', isHarvested: 'No', progression: '95', dailyInterpretation: 'Normal Growth', auditedArea: 7.25 }
+                { plotName: 'A1', isHarvested: 'No', progression: '10', dailyInterpretation: 'Normal Growth', usableArea: 5 },
+                { plotName: 'A2', isHarvested: 'No', progression: '15', dailyInterpretation: 'Slow Growth', usableArea: 3.5 },
+                { plotName: 'A3', isHarvested: 'No', progression: '90', dailyInterpretation: 'Fast Growth', usableArea: 'NA' },
+                { plotName: 'A4', isHarvested: 'No', progression: '95', dailyInterpretation: 'Normal Growth', usableArea: 7.25 }
             ];
             const areaMetrics = computeMetrics(areaPlots, 4, null, false);
-            assert.strictEqual(areaMetrics.bins[0].totalArea, 8.5, 'Bin 0 - 20% totalArea should sum auditedArea of A1 (5) + A2 (3.5)');
-            assert.strictEqual(areaMetrics.bins[4].totalArea, 7.25, "Bin 80 - 100% totalArea should exclude A3's 'NA' auditedArea and only sum A4 (7.25)");
+            assert.strictEqual(areaMetrics.bins[0].totalArea, 8.5, 'Bin 0 - 20% totalArea should sum usableArea of A1 (5) + A2 (3.5)');
+            assert.strictEqual(areaMetrics.bins[4].totalArea, 7.25, "Bin 80 - 100% totalArea should exclude A3's 'NA' usableArea and only sum A4 (7.25)");
 
             // 4. Per-category area totals (added 2026-09-23 for the "Number of Plots" / "Usable Area"
-            // custom legend): slowArea/normalArea/fastArea must sum auditedArea by dailyInterpretation
+            // custom legend): slowArea/normalArea/fastArea must sum usableArea by dailyInterpretation
             // category across ALL bins, using the same NA-exclusion rule as bins[i].totalArea.
             assert.strictEqual(areaMetrics.slowArea, 3.5, 'slowArea should be A2 only (3.5)');
             assert.strictEqual(areaMetrics.normalArea, 12.25, 'normalArea should sum A1 (5) + A4 (7.25) = 12.25');
-            assert.strictEqual(areaMetrics.fastArea, 0, "fastArea should be 0 since A3 (the only Fast plot) has 'NA' auditedArea");
+            assert.strictEqual(areaMetrics.fastArea, 0, "fastArea should be 0 since A3 (the only Fast plot) has 'NA' usableArea");
         }
     },
     {

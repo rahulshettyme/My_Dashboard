@@ -1402,12 +1402,19 @@ app.get('/api/user-aggregate/ca-details', (req, res) => {
             try {
                 const jsonData = JSON.parse(data);
                 if (caRes.statusCode >= 200 && caRes.statusCode < 300) {
-                    // auditedArea is an object with count property
+                    // auditedArea/usableArea are objects with a count property (same shape, per the
+                    // Croppable Area API schema — see area_unit_testing/api_config.json's "Croppable Area"
+                    // and "EXT Croppable Area" entries, both listing auditedArea.count and usableArea.count
+                    // as sibling fields).
                     const auditedAreaValue = jsonData.auditedArea?.count || jsonData.auditedArea || 0;
+                    const usableAreaValue = (jsonData.usableArea?.count !== undefined && jsonData.usableArea?.count !== null)
+                        ? jsonData.usableArea.count
+                        : (jsonData.usableArea !== undefined && jsonData.usableArea !== null ? jsonData.usableArea : null);
                     const varietyIdValue = jsonData.varietyId !== undefined ? jsonData.varietyId : (jsonData.data?.varietyId !== undefined ? jsonData.data.varietyId : (jsonData.variety?.id || null));
                     res.json({
                         caId: caId,
                         auditedArea: auditedAreaValue,
+                        usableArea: usableAreaValue,
                         expectedHarvest: jsonData.expectedHarvest,
                         reEstimatedHarvest: jsonData.reEstimatedHarvest,
                         expectedYield: jsonData.data?.expectedYield,
@@ -1457,9 +1464,11 @@ function extractVarietyYieldDetails(varietyJson) {
         return { maxAttainableYield: 'NA', expectedYieldUnits: null, referenceAreaUnits: null, expectedYield: null };
     }
 
-    const rawMax = (locEntry.data && locEntry.data.maxAttainableYield !== undefined && locEntry.data.maxAttainableYield !== null && locEntry.data.maxAttainableYield !== '')
-        ? locEntry.data.maxAttainableYield
-        : locEntry.maxAttainableYield;
+    // Reads the flat locEntry.maxAttainableYield only. A nested locEntry.data.maxAttainableYield
+    // briefly appeared on some payloads (2026-09-22/23) due to an upstream API bug that duplicated
+    // the value one level deeper — that nesting is being removed as the source data is corrected, so
+    // this intentionally does NOT read locEntry.data.maxAttainableYield. See YIELD_MODULE_SOP.md Section 3G.
+    const rawMax = locEntry.maxAttainableYield;
     const maxVal = (rawMax !== undefined && rawMax !== null && rawMax !== '' && !isNaN(parseFloat(rawMax)))
         ? parseFloat(rawMax)
         : 'NA';

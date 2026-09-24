@@ -2014,9 +2014,11 @@ function extractVarietyYieldDetails(varietyJson) {
         return { maxAttainableYield: 'NA', expectedYieldUnits: null, referenceAreaUnits: null, expectedYield: null };
     }
 
-    const rawMax = (locEntry.data && locEntry.data.maxAttainableYield !== undefined && locEntry.data.maxAttainableYield !== null && locEntry.data.maxAttainableYield !== '')
-        ? locEntry.data.maxAttainableYield
-        : locEntry.maxAttainableYield;
+    // Reads the flat locEntry.maxAttainableYield only. A nested locEntry.data.maxAttainableYield
+    // briefly appeared on some payloads (2026-09-22/23) due to an upstream API bug that duplicated
+    // the value one level deeper — that nesting is being removed as the source data is corrected, so
+    // this intentionally does NOT read locEntry.data.maxAttainableYield. See YIELD_MODULE_SOP.md Section 3G.
+    const rawMax = locEntry.maxAttainableYield;
     const maxVal = (rawMax !== undefined && rawMax !== null && rawMax !== '' && !isNaN(parseFloat(rawMax)))
         ? parseFloat(rawMax)
         : 'NA';

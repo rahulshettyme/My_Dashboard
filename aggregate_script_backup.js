@@ -3409,6 +3409,7 @@ async function generateDataFromAPI() {
                 'Plot Name': plot.name || 'Unknown',
                 'caId': plot.caId,
                 'Audited Area': caData.auditedArea || 0,
+                'Usable Area': (caData.usableArea !== undefined && caData.usableArea !== null) ? caData.usableArea : 'NA',
                 'Expected Harvest': caData.expectedHarvest || 0,
                 'Re-estimated Harvest': caData.reEstimatedHarvest || 0,
                 'Expected YIELD': expectedYieldValue,
@@ -3906,6 +3907,9 @@ async function handleLoadGrowthData() {
 
             const rawExpHarvest = yieldInfo ? (yieldInfo['Expected Harvest'] !== undefined ? yieldInfo['Expected Harvest'] : getVal(yieldInfo, ['expected harvest', 'exp_harvest'])) : "NA";
             const auditedArea = yieldInfo ? (yieldInfo['Audited Area'] !== undefined ? yieldInfo['Audited Area'] : (parseFloat(getTextVal(yieldInfo, ['audited area', 'area'])) || 0)) : "NA";
+            // usableArea comes from the Croppable Area API's own usableArea.count field (Section 2F of
+            // GROWTH_MODULE_SOP.md) — a genuinely distinct field from auditedArea, not a relabeling of it.
+            const usableArea = yieldInfo ? (yieldInfo['Usable Area'] !== undefined && yieldInfo['Usable Area'] !== null ? yieldInfo['Usable Area'] : "NA") : "NA";
             const harvestUnit = yieldInfo ? (yieldInfo['plotHarvestUnit'] || getTextVal(yieldInfo, ['plotharvestunit', 'unit']) || '').toLowerCase() : '';
 
             // Unit Logic: Use dynamic conversion for Expected Harvest (assumed in plot units)
@@ -3949,6 +3953,7 @@ async function handleLoadGrowthData() {
                 plotName: plot.name,
                 caId: plot.caId,
                 auditedArea: auditedArea,
+                usableArea: usableArea,
                 expectedHarvestTon: expectedHarvestTon,
                 predictedHarvestTon: predictedHarvestTon,
                 isHarvested: isHarvested ? "Yes" : "No",
@@ -4062,9 +4067,11 @@ function syncGrowthWithYield() {
         if (yieldInfo) {
             const rawExpHarvest = yieldInfo['Expected Harvest'] !== undefined ? yieldInfo['Expected Harvest'] : getVal(yieldInfo, ['expected harvest', 'exp_harvest']);
             const auditedArea = yieldInfo['Audited Area'] !== undefined ? yieldInfo['Audited Area'] : (parseFloat(getTextVal(yieldInfo, ['audited area', 'area'])) || 0);
+            const usableArea = (yieldInfo['Usable Area'] !== undefined && yieldInfo['Usable Area'] !== null) ? yieldInfo['Usable Area'] : "NA";
             const harvestUnit = (yieldInfo['plotHarvestUnit'] || getTextVal(yieldInfo, ['plotharvestunit', 'unit']) || '').toLowerCase();
 
             res.auditedArea = auditedArea;
+            res.usableArea = usableArea;
             if (rawExpHarvest !== "NA") {
                 res.expectedHarvestTon = convertValueToMetricTon(rawExpHarvest, harvestUnit);
             } else {
@@ -4135,6 +4142,7 @@ function renderGrowthTable(results) {
                         <tr style="background: rgba(16, 185, 129, 0.1); text-align: left;">
                             <th style="${headerStyle}" ${hoverEffect} onclick="handleGrowthTableSort('plotName')">Plot Name ${getSortIcon('plotName')}</th>
                             <th style="${headerStyle}" ${hoverEffect} onclick="handleGrowthTableSort('auditedArea')">Audited Area ${getSortIcon('auditedArea')}</th>
+                            <th style="${headerStyle}" ${hoverEffect} onclick="handleGrowthTableSort('usableArea')">Usable Area ${getSortIcon('usableArea')}</th>
                             <th style="${headerStyle}" ${hoverEffect} onclick="handleGrowthTableSort('expectedHarvestTon')">Expected Harvest ${getSortIcon('expectedHarvestTon')}</th>
                             <th style="${headerStyle}" ${hoverEffect} onclick="handleGrowthTableSort('isHarvested')">Is Harvested ${getSortIcon('isHarvested')}</th>
                             <th style="${headerStyle}" ${hoverEffect} onclick="handleGrowthTableSort('harvestedDate')">Harvested Date ${getSortIcon('harvestedDate')}</th>
@@ -4149,13 +4157,14 @@ function renderGrowthTable(results) {
     `;
 
     if (results.length === 0) {
-        html += `<tr><td colspan="10" style="padding: 2rem; text-align: center; color: var(--text-secondary);">No growth data available for the selected plots.</td></tr>`;
+        html += `<tr><td colspan="11" style="padding: 2rem; text-align: center; color: var(--text-secondary);">No growth data available for the selected plots.</td></tr>`;
     } else {
         results.forEach(res => {
             html += `
                 <tr style="border-bottom: 1px solid var(--border-color);">
                     <td style="padding: 1rem; font-weight: 600;">${res.plotName}</td>
                     <td style="padding: 1rem;">${res.auditedArea === "NA" ? "NA" : (parseFloat(res.auditedArea) || 0).toFixed(2)}</td>
+                    <td style="padding: 1rem;">${res.usableArea === "NA" || res.usableArea === undefined ? "NA" : (parseFloat(res.usableArea) || 0).toFixed(2)}</td>
                     <td style="padding: 1rem;">${res.expectedHarvestTon === "NA" ? "NA" : (parseFloat(res.expectedHarvestTon) || 0).toFixed(2)}</td>
                     <td style="padding: 1rem; color: ${res.isHarvested === 'Yes' ? '#10b981' : '#f59e0b'}; font-weight: 500;">${res.isHarvested}</td>
                     <td style="padding: 1rem;">${res.harvestedDate || '-'}</td>
@@ -4254,14 +4263,16 @@ function computeProgressionMetrics(fullResults, totalPlotsCount, plotsToBin, hid
     let fastPlotsCount = 0;
     // Per-category area totals (same NA-exclusion rule as bins[i].totalArea below), computed from the
     // exact same analysisPlots loop that produces slow/normal/fastPlotsCount, so the legend's plot-count
-    // row and area row are always describing the identical set of plots.
+    // row and area row are always describing the identical set of plots. Sourced from usableArea (the
+    // Croppable Area API's own usableArea.count field), NOT auditedArea — see GROWTH_MODULE_SOP.md
+    // Section 2G/8.14 for why these are two distinct fields.
     let slowArea = 0;
     let normalArea = 0;
     let fastArea = 0;
 
     analysisPlots.forEach(r => {
         const interp = (r.dailyInterpretation || '').toLowerCase().trim();
-        const area = r.auditedArea !== "NA" ? (parseFloat(r.auditedArea) || 0) : 0;
+        const area = r.usableArea !== "NA" ? (parseFloat(r.usableArea) || 0) : 0;
         if (interp.includes('slow')) {
             slowPlotsCount++;
             slowArea += area;
@@ -4313,8 +4324,9 @@ function computeProgressionMetrics(fullResults, totalPlotsCount, plotsToBin, hid
         }
         bins[binIdx].allPlots.push(res);
 
-        if (res.auditedArea !== "NA") {
-            bins[binIdx].totalArea += (parseFloat(res.auditedArea) || 0);
+        // Sourced from usableArea, not auditedArea — see GROWTH_MODULE_SOP.md Section 2G/8.14.
+        if (res.usableArea !== "NA") {
+            bins[binIdx].totalArea += (parseFloat(res.usableArea) || 0);
         }
     });
 
@@ -4447,7 +4459,8 @@ function renderGrowthProgressionChart(results, hideHarvestedParam) {
                     if (total === 0 || topY === null || barX === null) continue;
 
                     const bin = bins[i];
-                    const areaVal = (bin.totalArea === 0 && bin.allPlots.every(p => p.auditedArea === "NA"))
+                    // Sourced from usableArea, not auditedArea — see GROWTH_MODULE_SOP.md Section 2G/8.14.
+                    const areaVal = (bin.totalArea === 0 && bin.allPlots.every(p => p.usableArea === "NA"))
                         ? "NA"
                         : bin.totalArea.toFixed(2);
                     const bubbleText = `${total} Plots, ${areaVal} ${areaUnit}`;
