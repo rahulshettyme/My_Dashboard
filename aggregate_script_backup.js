@@ -4351,9 +4351,15 @@ if (typeof window !== 'undefined') {
 function renderGrowthProgressionChart(results, hideHarvestedParam) {
     try {
         console.log(`[DEBUG] Rendering Progression Chart with ${results.length} plots`);
-        // Stats should always reflect the global data, not just filtered results
+        // Stats should always reflect the global data, not just filtered results.
+        // totalPlotsCount is the PR-enabled (Plot Risk) plot count — the same window.verifiedHealthPlots
+        // list handleLoadGrowthData() actually fetches Growth data for — NOT the project's full plot
+        // count (plotsData.length), which includes plots Growth never even attempts to fetch and so can
+        // never appear in "Plots under Analysis" / "Harvested Plots" numerators.
         const fullResults = window.currentGrowthResults || results;
-        const totalPlotsCount = (typeof plotsData !== 'undefined' && plotsData && plotsData.length) ? plotsData.length : fullResults.length;
+        const totalPlotsCount = (typeof window.verifiedHealthPlots !== 'undefined' && window.verifiedHealthPlots && window.verifiedHealthPlots.length)
+            ? window.verifiedHealthPlots.length
+            : fullResults.length;
         
         let hideHarvested = false;
         if (typeof hideHarvestedParam === 'boolean') {
