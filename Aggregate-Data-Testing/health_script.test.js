@@ -5,7 +5,7 @@ const { selectYieldPredictionParameters, extractGrowthStageData } = require('../
 // Ratchets forward to tests.length after every task — represents "tests that existed
 // before the CURRENT task's changes", not a fixed historical constant. If this is not
 // bumped, "new" count keeps counting tests added in past sessions as if they were new.
-const baselineCount = 34;
+const baselineCount = 35;
 
 const tests = [
     {
@@ -1493,6 +1493,124 @@ const tests = [
             assert.strictEqual(areaMetrics.slowArea, 3.5, 'slowArea should be A2 only (3.5)');
             assert.strictEqual(areaMetrics.normalArea, 12.25, 'normalArea should sum A1 (5) + A4 (7.25) = 12.25');
             assert.strictEqual(areaMetrics.fastArea, 0, "fastArea should be 0 since A3 (the only Fast plot) has 'NA' usableArea");
+        }
+    },
+    {
+        name: 'buildGrowthProgressionReportInsight_report_testing_message',
+        fn: () => {
+            const fs = require('fs');
+            const vm = require('vm');
+            const path = require('path');
+
+            const dummyEl = {
+                addEventListener: () => {},
+                appendChild: () => {},
+                style: {},
+                classList: { add: () => {}, remove: () => {}, contains: () => false },
+                setAttribute: () => {},
+                getAttribute: () => null,
+                innerHTML: '',
+                textContent: ''
+            };
+            const dom = {
+                addEventListener: () => {},
+                getElementById: () => dummyEl,
+                querySelector: () => dummyEl,
+                querySelectorAll: () => [],
+                createElement: () => ({ ...dummyEl })
+            };
+            const contextObj = {
+                console: { log: () => {}, warn: () => {}, error: () => {} },
+                document: dom,
+                location: { href: '', search: '', pathname: '' },
+                sessionStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+                localStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+                setTimeout: () => {},
+                clearTimeout: () => {},
+                setInterval: () => {},
+                clearInterval: () => {},
+                navigator: { userAgent: 'node' },
+                Chart: function() { this.destroy = () => {}; },
+                XLSX: {},
+                api: { getEnvironments: () => Promise.resolve([]), getDb: () => Promise.resolve({}) }
+            };
+            contextObj.window = contextObj;
+            contextObj.global = contextObj;
+            const context = vm.createContext(contextObj);
+
+            const exportManagerPath = path.join(__dirname, '../components/export_manager.js');
+            vm.runInContext(fs.readFileSync(exportManagerPath, 'utf8'), context, { filename: 'components/export_manager.js' });
+            const aggScriptPath = path.join(__dirname, '../aggregate_script_backup.js');
+            vm.runInContext(fs.readFileSync(aggScriptPath, 'utf8'), context, { filename: 'aggregate_script_backup.js' });
+
+            const buildInsight = context.buildGrowthProgressionReportInsight;
+            assert.strictEqual(typeof buildInsight, 'function', 'buildGrowthProgressionReportInsight must be defined');
+
+            const mkBin = (label, slow, normal, fast) => ({
+                label,
+                slowPlots: new Array(slow).fill({}),
+                normalPlots: new Array(normal).fill({}),
+                fastPlots: new Array(fast).fill({}),
+                allPlots: new Array(slow + normal + fast).fill({})
+            });
+
+            // 1. Slow peaks alone in one bin; normal and fast peak TOGETHER in a different bin (matches
+            // the reference report style: "...while normal and fast growth peak in the X range").
+            // Totals decline from bin 0 (32) to bin 4 (10), with the true minimum at bin 4 (10).
+            const decliningBins = [
+                mkBin('0 - 20%', 10, 12, 10),   // total 32
+                mkBin('20 - 40%', 12, 20, 16),  // total 48 (slow peak: 12)
+                mkBin('40 - 60%', 8, 28, 20),   // total 56 (normal peak: 28, fast peak: 20 - same bin)
+                mkBin('60 - 80%', 6, 14, 15),   // total 35
+                mkBin('80 - 100%', 2, 4, 4)     // total 10 (true min)
+            ];
+            const declining = buildInsight(decliningBins);
+            assert.ok(declining.includes('Slow growth is highest in the 20 - 40% range'), `Expected slow peak at 20-40%, got: ${declining}`);
+            assert.ok(declining.includes('normal and fast growth peak in the 40 - 60% range'), `Expected normal+fast peak at 40-60%, got: ${declining}`);
+            assert.ok(declining.includes('tend to decline as the percentage range increases'), `Expected declining trend, got: ${declining}`);
+            assert.ok(declining.includes('lowest levels at 80 - 100%'), `Expected lowest levels at 80-100% (true min, not just last bin), got: ${declining}`);
+
+            // 2. Normal and fast peak in DIFFERENT bins -> two separate clauses, not "normal and fast...".
+            const splitPeakBins = [
+                mkBin('0 - 20%', 5, 10, 2),    // total 17
+                mkBin('20 - 40%', 9, 6, 3),    // total 18 (slow peak: 9)
+                mkBin('40 - 60%', 4, 15, 4),   // total 23 (normal peak: 15)
+                mkBin('60 - 80%', 3, 5, 12),   // total 20 (fast peak: 12)
+                mkBin('80 - 100%', 8, 14, 11)  // total 33 (true max; none of its own category values peak)
+            ];
+            const splitPeak = buildInsight(splitPeakBins);
+            assert.ok(splitPeak.includes('Slow growth is highest in the 20 - 40% range'), `Expected slow peak at 20-40%, got: ${splitPeak}`);
+            assert.ok(splitPeak.includes('normal growth peaks in the 40 - 60% range'), `Expected normal peak clause, got: ${splitPeak}`);
+            assert.ok(splitPeak.includes('fast growth peaks in the 60 - 80% range'), `Expected fast peak clause, got: ${splitPeak}`);
+            assert.ok(!splitPeak.includes('normal and fast growth peak'), `Should not use the combined phrasing when peaks differ, got: ${splitPeak}`);
+            assert.ok(splitPeak.includes('tend to increase as the percentage range increases'), `Expected increasing trend, got: ${splitPeak}`);
+            assert.ok(splitPeak.includes('highest levels at 80 - 100%'), `Expected highest levels at 80-100% (true max), got: ${splitPeak}`);
+
+            // 3. No slow growth at all -> dedicated branch, no "Slow growth is highest" clause.
+            const noSlowBins = [
+                mkBin('0 - 20%', 0, 5, 5),
+                mkBin('20 - 40%', 0, 5, 5),
+                mkBin('40 - 60%', 0, 5, 5),
+                mkBin('60 - 80%', 0, 5, 5),
+                mkBin('80 - 100%', 0, 5, 5)
+            ];
+            const noSlow = buildInsight(noSlowBins);
+            assert.ok(noSlow.includes('No plots show slow growth'), `Expected no-slow-growth branch, got: ${noSlow}`);
+            assert.ok(noSlow.includes('remain relatively consistent'), `Expected steady trend (equal first/last totals), got: ${noSlow}`);
+
+            // 4. No data at all across every bin -> dedicated "no plots" message, not a crash or 'NaN'.
+            const emptyBins = [
+                mkBin('0 - 20%', 0, 0, 0),
+                mkBin('20 - 40%', 0, 0, 0),
+                mkBin('40 - 60%', 0, 0, 0),
+                mkBin('60 - 80%', 0, 0, 0),
+                mkBin('80 - 100%', 0, 0, 0)
+            ];
+            assert.strictEqual(buildInsight(emptyBins), 'No plots currently under active growth analysis.');
+
+            // 5. Defensive: non-array / empty input must not throw.
+            assert.strictEqual(buildInsight(null), '-');
+            assert.strictEqual(buildInsight([]), '-');
         }
     },
     {

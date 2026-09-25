@@ -1458,7 +1458,7 @@
                                 style="font-size: 1.35rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.25rem;">
                                 -</div>
                             <div style="font-size: 0.85rem; color: var(--text-secondary); display: flex; align-items: center; gap: 0.35rem;">
-                                <i class="far fa-check-circle" style="color: #264653; font-size: 0.85rem;"></i>
+                                <i class="far fa-check-circle" style="color: #5cae57; font-size: 0.85rem;"></i>
                                 <span>Normal Growth Plots</span>
                             </div>
                         </div>
@@ -1467,7 +1467,7 @@
                                 style="font-size: 1.35rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.25rem;">
                                 -</div>
                             <div style="font-size: 0.85rem; color: var(--text-secondary); display: flex; align-items: center; gap: 0.35rem;">
-                                <i class="fas fa-history" style="color: #5cae57; font-size: 0.85rem;"></i>
+                                <i class="fas fa-history" style="color: #264653; font-size: 0.85rem;"></i>
                                 <span>Fast Growth Plots</span>
                             </div>
                         </div>
@@ -1493,11 +1493,11 @@
                                 Slow Growth: <strong id="growth-prog-legend-slow-count" style="color: var(--text-primary);">-</strong>
                             </span>
                             <span style="display: flex; align-items: center; gap: 0.45rem; font-size: 0.85rem; color: var(--text-secondary);">
-                                <span style="width: 12px; height: 12px; border-radius: 2px; background: #264653; display: inline-block;"></span>
+                                <span style="width: 12px; height: 12px; border-radius: 2px; background: #5cae57; display: inline-block;"></span>
                                 Normal Growth: <strong id="growth-prog-legend-normal-count" style="color: var(--text-primary);">-</strong>
                             </span>
                             <span style="display: flex; align-items: center; gap: 0.45rem; font-size: 0.85rem; color: var(--text-secondary);">
-                                <span style="width: 12px; height: 12px; border-radius: 2px; background: #5cae57; display: inline-block;"></span>
+                                <span style="width: 12px; height: 12px; border-radius: 2px; background: #264653; display: inline-block;"></span>
                                 Fast Growth: <strong id="growth-prog-legend-fast-count" style="color: var(--text-primary);">-</strong>
                             </span>
                         </div>
@@ -1508,22 +1508,30 @@
                                 Slow Growth: <strong id="growth-prog-legend-slow-area" style="color: var(--text-primary);">-</strong>
                             </span>
                             <span style="display: flex; align-items: center; gap: 0.45rem; font-size: 0.85rem; color: var(--text-secondary);">
-                                <span style="width: 12px; height: 12px; border-radius: 2px; background: #264653; display: inline-block;"></span>
+                                <span style="width: 12px; height: 12px; border-radius: 2px; background: #5cae57; display: inline-block;"></span>
                                 Normal Growth: <strong id="growth-prog-legend-normal-area" style="color: var(--text-primary);">-</strong>
                             </span>
                             <span style="display: flex; align-items: center; gap: 0.45rem; font-size: 0.85rem; color: var(--text-secondary);">
-                                <span style="width: 12px; height: 12px; border-radius: 2px; background: #5cae57; display: inline-block;"></span>
+                                <span style="width: 12px; height: 12px; border-radius: 2px; background: #264653; display: inline-block;"></span>
                                 Fast Growth: <strong id="growth-prog-legend-fast-area" style="color: var(--text-primary);">-</strong>
                             </span>
                         </div>
                     </div>
 
-                    <!-- Bottom Insights Banner -->
+                    <!-- Bottom Insights Banner: two labeled lines so UI-testing and report-testing can be
+                         compared side by side on the same screen without losing either message. -->
                     <div id="growth-prog-insight-banner"
-                        style="margin-top: 1.25rem; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.85rem 1.25rem; font-size: 0.95rem; color: var(--text-primary);">
-                        <span id="growth-prog-insight-text">
-                            <strong>- plots</strong> are progressing <strong>on track</strong>, while <strong>- plots</strong> show <strong>slow growth and require attention</strong>
-                        </span>
+                        style="margin-top: 1.25rem; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.85rem 1.25rem; font-size: 0.95rem; color: var(--text-primary); display: flex; flex-direction: column; gap: 0.5rem;">
+                        <div>
+                            <strong style="color: var(--text-secondary);">UI:</strong>
+                            <span id="growth-prog-insight-text">
+                                <strong>- plots</strong> are progressing <strong>on track</strong>, while <strong>- plots</strong> show <strong>slow growth and require attention</strong>
+                            </span>
+                        </div>
+                        <div>
+                            <strong style="color: var(--text-secondary);">Report:</strong>
+                            <span id="growth-prog-insight-report-text">-</span>
+                        </div>
                     </div>
                 </div>
 

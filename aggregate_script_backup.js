@@ -3131,7 +3131,9 @@ function clearAllDataUI() {
     if (insightBannerEl) {
         insightBannerEl.innerHTML = '<strong>- plots</strong> are progressing <strong>on track</strong>, while <strong>- plots</strong> show <strong>slow growth and require attention</strong>';
     }
-    
+    const reportInsightBannerEl = document.getElementById('growth-prog-insight-report-text');
+    if (reportInsightBannerEl) reportInsightBannerEl.textContent = '-';
+
     // Extra resets for module status spans
     ['yield-status', 'growth-status', 'health-status'].forEach(id => {
         const el = document.getElementById(id);
@@ -4248,6 +4250,82 @@ const drawValuesPlugin = {
     }
 };
 
+/**
+ * Builds the "Report:" insight sentence shown alongside the existing "UI:" insight banner on the
+ * Growth Progression chart. This is a SEPARATE, additional message — added for report-testing (i.e.
+ * comparing this app's own generated summary against what an exported report states) — and does not
+ * replace or alter the existing "UI:" message's own logic in any way.
+ *
+ * Style is modeled on a reference report summary of the form:
+ *   "Slow growth is highest in the {range} range, while normal and fast growth peak in the {range}
+ *   range. Overall, growth levels tend to {decline/increase} as the percentage range increases,
+ *   reaching their {lowest/highest} levels at {range}."
+ *
+ * Computed entirely from metrics.bins (the same per-bin slow/normal/fast/allPlots arrays the chart
+ * itself renders), so it automatically respects whatever filter (e.g. Hide Harvested Plots) is
+ * currently applied to the chart — exactly like the existing "UI:" insight already does.
+ */
+function buildGrowthProgressionReportInsight(bins) {
+    if (!Array.isArray(bins) || bins.length === 0) return '-';
+
+    const totals = bins.map(b => b.allPlots.length);
+    const grandTotal = totals.reduce((sum, n) => sum + n, 0);
+    if (grandTotal === 0) {
+        return 'No plots currently under active growth analysis.';
+    }
+
+    // Index (first occurrence on ties) of the bin with the highest count for a given category array.
+    const peakOf = (key) => {
+        let bestIdx = -1, bestVal = -1;
+        bins.forEach((b, i) => {
+            const v = b[key].length;
+            if (v > bestVal) { bestVal = v; bestIdx = i; }
+        });
+        return { idx: bestIdx, val: bestVal };
+    };
+
+    const slowPeak = peakOf('slowPlots');
+    const normalPeak = peakOf('normalPlots');
+    const fastPeak = peakOf('fastPlots');
+
+    let sentence1;
+    if (slowPeak.val === 0) {
+        sentence1 = 'No plots show slow growth across any progression range.';
+    } else {
+        const slowRange = bins[slowPeak.idx].label;
+        if (normalPeak.val === 0 && fastPeak.val === 0) {
+            sentence1 = `Slow growth is highest in the ${slowRange} range.`;
+        } else if (normalPeak.val > 0 && fastPeak.val > 0 && normalPeak.idx === fastPeak.idx) {
+            sentence1 = `Slow growth is highest in the ${slowRange} range, while normal and fast growth peak in the ${bins[normalPeak.idx].label} range.`;
+        } else {
+            const parts = [];
+            if (normalPeak.val > 0) parts.push(`normal growth peaks in the ${bins[normalPeak.idx].label} range`);
+            if (fastPeak.val > 0) parts.push(`fast growth peaks in the ${bins[fastPeak.idx].label} range`);
+            sentence1 = `Slow growth is highest in the ${slowRange} range, while ${parts.join(' and ')}.`;
+        }
+    }
+
+    // Overall trend: compares the first and last bins' totals (0-20% vs 80-100%) to decide the
+    // headline direction, then names whichever bin holds the true min (declining) or max (increasing).
+    const firstTotal = totals[0];
+    const lastTotal = totals[totals.length - 1];
+    let sentence2;
+    if (firstTotal === lastTotal) {
+        sentence2 = 'Overall, growth levels remain relatively consistent across all progression ranges.';
+    } else if (lastTotal < firstTotal) {
+        const minIdx = totals.indexOf(Math.min(...totals));
+        sentence2 = `Overall, growth levels tend to decline as the percentage range increases, reaching their lowest levels at ${bins[minIdx].label}.`;
+    } else {
+        const maxIdx = totals.indexOf(Math.max(...totals));
+        sentence2 = `Overall, growth levels tend to increase as the percentage range increases, reaching their highest levels at ${bins[maxIdx].label}.`;
+    }
+
+    return `${sentence1} ${sentence2}`;
+}
+if (typeof window !== 'undefined') {
+    window.buildGrowthProgressionReportInsight = buildGrowthProgressionReportInsight;
+}
+
 function computeProgressionMetrics(fullResults, totalPlotsCount, plotsToBin, hideHarvested = false) {
     const allPlots = fullResults || [];
     const totalCount = totalPlotsCount || allPlots.length;
@@ -4402,12 +4480,18 @@ function renderGrowthProgressionChart(results, hideHarvestedParam) {
 
         const bins = metrics.bins;
 
+        // "Report:" insight — a separate, additional message alongside "UI:" above (added for
+        // report-testing), not a replacement. See buildGrowthProgressionReportInsight()'s docblock.
+        const reportInsightEl = document.getElementById('growth-prog-insight-report-text');
+        if (reportInsightEl) reportInsightEl.textContent = buildGrowthProgressionReportInsight(bins);
+
         // Same area-unit and NA-fallback rules as the Stage window chart's bubble
         // (renderGrowthStageChart / stageCustomLabels), so the two "Plots, Area" bubbles read identically.
         const areaUnit = (companyPrefs.areaUnits || 'ha').toLowerCase().includes('acre') ? 'Acre' : 'Ha';
 
         // Custom two-row legend (Number of Plots / Usable Area) — reuses the existing Slow/Normal/Fast
-        // Growth dataset colors (#f6c445/#264653/#5cae57) defined below; only the counts/areas are new.
+        // Growth dataset colors (#f6c445 Slow / #5cae57 Normal / #264653 Fast) defined below; only the
+        // counts/areas are new. Normal and Fast were interchanged 2026-09-25 so Normal Growth is green.
         const legendSlowCountEl = document.getElementById('growth-prog-legend-slow-count');
         const legendNormalCountEl = document.getElementById('growth-prog-legend-normal-count');
         const legendFastCountEl = document.getElementById('growth-prog-legend-fast-count');
@@ -4518,7 +4602,7 @@ function renderGrowthProgressionChart(results, hideHarvestedParam) {
                     {
                         label: 'Normal Growth',
                         data: bins.map(b => b.normalPlots.length),
-                        backgroundColor: '#264653',
+                        backgroundColor: '#5cae57',
                         stack: 'growthProgressionStack',
                         barThickness: 45,
                         borderRadius: 0,
@@ -4527,7 +4611,7 @@ function renderGrowthProgressionChart(results, hideHarvestedParam) {
                     {
                         label: 'Fast Growth',
                         data: bins.map(b => b.fastPlots.length),
-                        backgroundColor: '#5cae57',
+                        backgroundColor: '#264653',
                         stack: 'growthProgressionStack',
                         barThickness: 45,
                         borderRadius: 0,
