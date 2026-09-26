@@ -4261,9 +4261,10 @@ const drawValuesPlugin = {
  *   range. Overall, growth levels tend to {decline/increase} as the percentage range increases,
  *   reaching their {lowest/highest} levels at {range}."
  *
- * Computed entirely from metrics.bins (the same per-bin slow/normal/fast/allPlots arrays the chart
- * itself renders), so it automatically respects whatever filter (e.g. Hide Harvested Plots) is
- * currently applied to the chart — exactly like the existing "UI:" insight already does.
+ * IMPORTANT: unlike the "UI:" insight, this function's CALLER (renderGrowthProgressionChart) must pass
+ * bins computed from the full, unfiltered plot set — this message is required to always include
+ * harvested plots regardless of the Hide Harvested Plots checkbox. This function itself has no opinion
+ * on filtering; it just describes whatever bins it's given.
  */
 function buildGrowthProgressionReportInsight(bins) {
     if (!Array.isArray(bins) || bins.length === 0) return '-';
@@ -4292,17 +4293,45 @@ function buildGrowthProgressionReportInsight(bins) {
     if (slowPeak.val === 0) {
         sentence1 = 'No plots show slow growth across any progression range.';
     } else {
-        const slowRange = bins[slowPeak.idx].label;
-        if (normalPeak.val === 0 && fastPeak.val === 0) {
-            sentence1 = `Slow growth is highest in the ${slowRange} range.`;
-        } else if (normalPeak.val > 0 && fastPeak.val > 0 && normalPeak.idx === fastPeak.idx) {
-            sentence1 = `Slow growth is highest in the ${slowRange} range, while normal and fast growth peak in the ${bins[normalPeak.idx].label} range.`;
+        // Group active categories (val > 0) by their peak bin index, preserving slow/normal/fast
+        // priority order within each group, so that categories sharing the SAME peak bin are described
+        // in ONE combined clause instead of separately repeating the same range (e.g. all three peaking
+        // in 80-100% must read as one clause, not "Slow... 80-100%... while normal and fast... 80-100%").
+        const active = [];
+        if (slowPeak.val > 0) active.push({ name: 'slow', idx: slowPeak.idx });
+        if (normalPeak.val > 0) active.push({ name: 'normal', idx: normalPeak.idx });
+        if (fastPeak.val > 0) active.push({ name: 'fast', idx: fastPeak.idx });
+
+        const groups = [];
+        active.forEach(c => {
+            let g = groups.find(g => g.idx === c.idx);
+            if (!g) { g = { idx: c.idx, names: [] }; groups.push(g); }
+            g.names.push(c.name);
+        });
+
+        const joinWithAnd = (names) => {
+            if (names.length === 1) return names[0];
+            if (names.length === 2) return `${names[0]} and ${names[1]}`;
+            return `${names.slice(0, -1).join(', ')}, and ${names[names.length - 1]}`;
+        };
+
+        const clauses = groups.map(g => {
+            const range = bins[g.idx].label;
+            if (g.names.length === 1) {
+                return g.names[0] === 'slow'
+                    ? `slow growth is highest in the ${range} range`
+                    : `${g.names[0]} growth peaks in the ${range} range`;
+            }
+            return `${joinWithAnd(g.names)} growth peak in the ${range} range`;
+        });
+
+        let joined;
+        if (clauses.length <= 2) {
+            joined = clauses.join(', while ');
         } else {
-            const parts = [];
-            if (normalPeak.val > 0) parts.push(`normal growth peaks in the ${bins[normalPeak.idx].label} range`);
-            if (fastPeak.val > 0) parts.push(`fast growth peaks in the ${bins[fastPeak.idx].label} range`);
-            sentence1 = `Slow growth is highest in the ${slowRange} range, while ${parts.join(' and ')}.`;
+            joined = `${clauses.slice(0, -1).join(', ')}, and ${clauses[clauses.length - 1]}`;
         }
+        sentence1 = joined.charAt(0).toUpperCase() + joined.slice(1) + '.';
     }
 
     // Overall trend: compares the first and last bins' totals (0-20% vs 80-100%) to decide the
@@ -4482,8 +4511,12 @@ function renderGrowthProgressionChart(results, hideHarvestedParam) {
 
         // "Report:" insight — a separate, additional message alongside "UI:" above (added for
         // report-testing), not a replacement. See buildGrowthProgressionReportInsight()'s docblock.
+        // Deliberately recomputed from fullResults with hideHarvested forced to false (ignoring the
+        // Hide Harvested Plots checkbox and the filtered `bins` above) — this message must always
+        // include harvested plots, unlike the chart/bubbles/"UI:" line, which do respect that filter.
+        const reportMetrics = computeProgressionMetrics(fullResults, totalPlotsCount, fullResults, false);
         const reportInsightEl = document.getElementById('growth-prog-insight-report-text');
-        if (reportInsightEl) reportInsightEl.textContent = buildGrowthProgressionReportInsight(bins);
+        if (reportInsightEl) reportInsightEl.textContent = buildGrowthProgressionReportInsight(reportMetrics.bins);
 
         // Same area-unit and NA-fallback rules as the Stage window chart's bubble
         // (renderGrowthStageChart / stageCustomLabels), so the two "Plots, Area" bubbles read identically.

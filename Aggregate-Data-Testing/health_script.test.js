@@ -1611,6 +1611,39 @@ const tests = [
             // 5. Defensive: non-array / empty input must not throw.
             assert.strictEqual(buildInsight(null), '-');
             assert.strictEqual(buildInsight([]), '-');
+
+            // 6. Fixed 2026-09-25 (real-data bug report): when slow, normal, AND fast all peak in the
+            // SAME bin (e.g. a heavily skewed dataset where nearly every plot sits in one progression
+            // range), the message must combine them into ONE clause, not repeat that same range twice
+            // ("Slow growth is highest in the 80-100% range, while normal and fast growth peak in the
+            // 80-100% range" was the exact reported bug — the range was correct but stated redundantly).
+            const allSamePeakBins = [
+                mkBin('0 - 20%', 0, 0, 0),
+                mkBin('20 - 40%', 0, 1, 0),
+                mkBin('40 - 60%', 1, 2, 0),
+                mkBin('60 - 80%', 0, 0, 0),
+                mkBin('80 - 100%', 37, 29, 7)   // slow, normal, and fast all peak here
+            ];
+            const allSamePeak = buildInsight(allSamePeakBins);
+            const allSamePeakSentence1 = allSamePeak.split('Overall,')[0];
+            assert.strictEqual(
+                (allSamePeakSentence1.match(/80 - 100%/g) || []).length, 1,
+                `The peak range should appear exactly once in the peak-range sentence (sentence 2's own, separate mention of it as the overall trend max is expected and unrelated), got: ${allSamePeak}`
+            );
+            assert.ok(allSamePeak.includes('Slow, normal, and fast growth peak in the 80 - 100% range'), `Expected a single combined clause naming all three categories, got: ${allSamePeak}`);
+
+            // 7. Two categories share a peak bin, the third peaks elsewhere (slow+normal merged, fast
+            // separate) -> combined clause for slow+normal, separate clause for fast.
+            const slowNormalMergeBins = [
+                mkBin('0 - 20%', 5, 8, 1),
+                mkBin('20 - 40%', 2, 3, 1),
+                mkBin('40 - 60%', 1, 2, 9),   // fast peak, separate bin
+                mkBin('60 - 80%', 1, 1, 1),
+                mkBin('80 - 100%', 1, 1, 1)
+            ];
+            const slowNormalMerge = buildInsight(slowNormalMergeBins);
+            assert.ok(slowNormalMerge.includes('Slow and normal growth peak in the 0 - 20% range'), `Expected combined slow+normal clause, got: ${slowNormalMerge}`);
+            assert.ok(slowNormalMerge.includes('fast growth peaks in the 40 - 60% range'), `Expected separate fast clause, got: ${slowNormalMerge}`);
         }
     },
     {
