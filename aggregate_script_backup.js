@@ -1565,8 +1565,17 @@ function renderPaginatedTable() {
         const h1Ton = d.h1 * massToTon;
         const h2Ton = d.h2 * massToTon;
         const areaHa = d.auditedArea * areaToHa;
-        const y1TonHa = areaHa > 0 ? h1Ton / areaHa : 0;
-        const y2TonHa = areaHa > 0 ? h2Ton / areaHa : 0;
+
+        // Expected/Re-estimated Yield (d.y1/d.y2) are already correctly sourced/computed (Section 3B) —
+        // never recompute them here as Harvest/Area, which reintroduces the exact bug fixed 2026-09-22
+        // for the plot card (Harvest/Area silently assumes Audited Area is already in the variety's
+        // unit, and d.areaUnit here is the user-preference DISPLAY unit, never a valid calculation
+        // input — see Section 3B item 2). Instead convert d.y1/d.y2 (already in d.yieldMassUnit/
+        // d.yieldAreaUnit) into the universal Tonnes/Ha basis this table standardizes on.
+        const yMassToTon = getDynamicFactor(d.yieldMassUnit || qUnit, ['METRIC_TON', 'Ton (Metric)', 'MT', 'Tonnes'], 'Mass');
+        const yAreaToHa = getDynamicFactor(d.yieldAreaUnit || 'ha', ['HECTARE', 'Hectare', 'ha'], 'Area');
+        const y1TonHa = yAreaToHa > 0 ? (d.y1 * yMassToTon) / yAreaToHa : (d.y1 * yMassToTon);
+        const y2TonHa = yAreaToHa > 0 ? (d.y2 * yMassToTon) / yAreaToHa : (d.y2 * yMassToTon);
 
         // Convert to target units for display
         const targetAreaFactor = getDynamicFactor(['HECTARE', 'Hectare', 'ha'], getDataAreaUnit(), 'Area');

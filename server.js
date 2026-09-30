@@ -1411,19 +1411,31 @@ app.get('/api/user-aggregate/ca-details', (req, res) => {
                         ? jsonData.usableArea.count
                         : (jsonData.usableArea !== undefined && jsonData.usableArea !== null ? jsonData.usableArea : null);
                     const varietyIdValue = jsonData.varietyId !== undefined ? jsonData.varietyId : (jsonData.data?.varietyId !== undefined ? jsonData.data.varietyId : (jsonData.variety?.id || null));
-                    // expectedHarvest/reEstimatedHarvest previously read jsonData.expectedHarvest and
-                    // jsonData.reEstimatedHarvest — fields that do not exist on the real Croppable Area
-                    // API response (confirmed 2026-09-29 against a live payload). The actual fields are
-                    // top-level expectedQuantity and reestimatedValue; expectedYield (nested under data)
-                    // was already correct. See YIELD_MODULE_SOP.md Section 3B/3G for the full mapping.
+                    // Confirmed 2026-09-30 against two different real CAs that the Croppable Area API
+                    // returns TWO DIFFERENT shapes for these fields depending on the plot (cause unknown —
+                    // possibly a version/tenant difference, not yet explained): some responses have flat
+                    // `expectedHarvest`/`reEstimatedHarvest` fields directly (e.g. CA 5973351: expectedHarvest
+                    // 3020, reEstimatedHarvest 3322 — the ORIGINAL field names this code used before
+                    // 2026-09-29); others have those values under `expectedQuantity`/`reestimatedValue`
+                    // instead, with NO `expectedHarvest`/`reEstimatedHarvest` field at all (e.g. CA 24301,
+                    // reported by the user). Both are checked defensively, preferring the flat/original
+                    // names first since that's what was most recently confirmed live. Do not "simplify" this
+                    // back to a single field name without re-confirming against a live payload — see
+                    // YIELD_MODULE_SOP.md Section 3B/3G for the full incident history.
+                    const expectedHarvestValue = (jsonData.expectedHarvest !== undefined && jsonData.expectedHarvest !== null)
+                        ? jsonData.expectedHarvest
+                        : jsonData.expectedQuantity;
+                    const reEstimatedHarvestValue = (jsonData.reEstimatedHarvest !== undefined && jsonData.reEstimatedHarvest !== null)
+                        ? jsonData.reEstimatedHarvest
+                        : jsonData.reestimatedValue;
                     res.json({
                         caId: caId,
                         auditedArea: auditedAreaValue,
                         usableArea: usableAreaValue,
-                        expectedHarvest: jsonData.expectedQuantity,
-                        reEstimatedHarvest: jsonData.reestimatedValue,
+                        expectedHarvest: expectedHarvestValue,
+                        reEstimatedHarvest: reEstimatedHarvestValue,
                         expectedYield: jsonData.data?.expectedYield,
-                        reestimatedValue: jsonData.reestimatedValue, // used for yield formula: reestimatedValue / auditedArea
+                        reestimatedValue: reEstimatedHarvestValue, // used for yield formula: reestimatedValue / auditedArea
                         quantityUnit: jsonData.quantityUnit,
                         varietyId: varietyIdValue
                     });
