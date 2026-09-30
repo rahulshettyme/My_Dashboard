@@ -3369,16 +3369,17 @@ async function generateDataFromAPI() {
             const yieldAreaUnitRaw = varietyData?.referenceAreaUnits || companyAreaUnit;
             const yieldAreaUnit = yieldAreaUnitRaw.toLowerCase().includes('acre') ? 'acre' : 'ha';
 
-            // Expected Yield: sourced directly from the Variety API's own expectedYield (already
-            // expressed in yieldMassUnit/yieldAreaUnit) instead of recomputing Harvest/Area, which
-            // silently assumed Audited Area was in the variety's unit when it is actually always in
-            // the company's unit. Falls back to a company-unit-based Harvest/Area calc if the variety
-            // has no expectedYield.
-            const varietyExpectedYield = (varietyData?.expectedYield !== undefined && varietyData?.expectedYield !== null && varietyData?.expectedYield !== 'NA' && !isNaN(parseFloat(varietyData.expectedYield)))
-                ? parseFloat(varietyData.expectedYield)
+            // Expected Yield: sourced directly from the Croppable Area API's own data.expectedYield
+            // (corrected 2026-09-29) — NOT the Variety API's expectedYield. The variety assigned to a CA
+            // can be edited at any time after assignment, so re-fetching the variety's CURRENT config no
+            // longer reflects what was actually configured on this specific CA — the CA's own snapshot
+            // value is authoritative, not the (possibly since-changed) variety. Falls back to a
+            // company-unit-based Harvest/Area calc only if the CA has no expectedYield of its own.
+            const caExpectedYield = (caData?.expectedYield !== undefined && caData?.expectedYield !== null && caData?.expectedYield !== 'NA' && !isNaN(parseFloat(caData.expectedYield)))
+                ? parseFloat(caData.expectedYield)
                 : null;
-            const expectedYieldValue = (varietyExpectedYield !== null)
-                ? varietyExpectedYield
+            const expectedYieldValue = (caExpectedYield !== null)
+                ? caExpectedYield
                 : (caData.auditedArea > 0 ? (caData.expectedHarvest || 0) / caData.auditedArea : 0);
 
             // Re-estimated Yield has no equivalent pre-computed API field (it's field-audited), so it

@@ -1411,14 +1411,19 @@ app.get('/api/user-aggregate/ca-details', (req, res) => {
                         ? jsonData.usableArea.count
                         : (jsonData.usableArea !== undefined && jsonData.usableArea !== null ? jsonData.usableArea : null);
                     const varietyIdValue = jsonData.varietyId !== undefined ? jsonData.varietyId : (jsonData.data?.varietyId !== undefined ? jsonData.data.varietyId : (jsonData.variety?.id || null));
+                    // expectedHarvest/reEstimatedHarvest previously read jsonData.expectedHarvest and
+                    // jsonData.reEstimatedHarvest — fields that do not exist on the real Croppable Area
+                    // API response (confirmed 2026-09-29 against a live payload). The actual fields are
+                    // top-level expectedQuantity and reestimatedValue; expectedYield (nested under data)
+                    // was already correct. See YIELD_MODULE_SOP.md Section 3B/3G for the full mapping.
                     res.json({
                         caId: caId,
                         auditedArea: auditedAreaValue,
                         usableArea: usableAreaValue,
-                        expectedHarvest: jsonData.expectedHarvest,
-                        reEstimatedHarvest: jsonData.reEstimatedHarvest,
+                        expectedHarvest: jsonData.expectedQuantity,
+                        reEstimatedHarvest: jsonData.reestimatedValue,
                         expectedYield: jsonData.data?.expectedYield,
-                        reestimatedValue: jsonData.reEstimatedHarvest, // used for yield formula: reestimatedValue / auditedArea
+                        reestimatedValue: jsonData.reestimatedValue, // used for yield formula: reestimatedValue / auditedArea
                         quantityUnit: jsonData.quantityUnit,
                         varietyId: varietyIdValue
                     });
