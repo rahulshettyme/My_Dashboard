@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Legacy Emails - Jira Ticket Metrics & Weekly Summary</title>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect x='10' y='50' width='15' height='40' rx='2' fill='%236366f1'/%3E%3Crect x='35' y='30' width='15' height='60' rx='2' fill='%23818cf8'/%3E%3Crect x='60' y='10' width='15' height='80' rx='2' fill='%23c084fc'/%3E%3Cpath d='M75 10 Q90 10 90 25 Q90 40 75 40 Q60 40 60 25 Q60 10 75 10 Z' fill='%2310b981'/%3E%3C/svg%3E">
+
+    <!-- Chart.js & Datalabels Plugin -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+
+    <!-- Shared Styles -->
+    <link rel="stylesheet" href="../style.css">
+
+    <style>
+        :root {
+            --email-bg: #f8fafc;
+            --email-card-bg: #ffffff;
+            --email-text-main: #1e293b;
+            --email-text-muted: #64748b;
+            --email-blue: #1e40af;
+            --email-blue-btn: #1d4ed8;
+            --email-blue-btn-hover: #1e40af;
+            --email-red: #dc2626;
+            --email-red-bg: #fef2f2;
+            --email-amber: #d97706;
+            --email-amber-bg: #fffbeb;
+            --email-border: #e2e8f0;
+        }
+
+        body {
+            display: block;
+            min-height: 100vh;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            overflow-x: hidden;
+            padding: 0;
+            margin: 0;
+        }
+
+        .page-container {
+            width: 100%;
+            max-width: 1160px;
+            margin: 1.5rem auto;
+            padding: 0 1.5rem 3rem 1.5rem;
+            box-sizing: border-box;
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        .top-nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.95rem;
+            font-weight: 500;
+            transition: all var(--transition-speed);
+        }
+
+        .back-link:hover {
+            color: var(--primary-color);
+            transform: translateX(-4px);
+        }
+
+        .top-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .action-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.55rem 1rem;
+            font-size: 0.875rem;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            border: 1px solid var(--border-color);
+            background: var(--card-bg);
+            color: var(--text-primary);
+            transition: all 0.2s ease;
+        }
+
+        .action-btn:hover {
+            border-color: var(--primary-color);
+            transform: translateY(-1px);
+        }
+
+        .action-btn.btn-accent {
+            background: linear-gradient(135deg, #4f46e5, #6366f1);
+            color: #ffffff;
+            border: none;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
+        }
+
+        .action-btn.btn-accent:hover {
+            background: linear-gradient(135deg, #4338ca, #4f46e5);
+            box-shadow: 0 6px 16px rgba(99, 102, 241, 0.35);
+        }
+
+        .action-btn.btn-success {
+            background: #059669;
+            color: #ffffff;
+            border: none;
+        }
+
+        .action-btn.btn-success:hover {
+            background: #047857;
+        }
+
+        /* Email digest preview: content is email-safe HTML from email_template.js (inline styles) */
+        .email-preview-wrapper {
+            background: #f1f5f9;
+            border-radius: 16px;
+            padding: 0.5rem;
+            margin-bottom: 2rem;
+            overflow-x: auto;
+        }
+
+        /* Shown only when the page falls back to saved local data (not part of the email) */
+        .stale-banner {
+            display: none;
+            background: #fffbeb;
+            color: #92400e;
+            border: 1px solid #fcd34d;
+            border-left: 5px solid #f59e0b;
+            border-radius: 10px;
+            padding: 0.85rem 1.1rem;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        /* Off-screen canvas host for rendering trend charts into <img> */
+        .chart-render-area {
+            position: absolute;
+            left: -10000px;
+            top: 0;
+        }
+
+        /* Modals & Drawers */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(4px);
+            z-index: 999;
+            justify-content: center;
+            align-items: center;
+            padding: 1rem;
+            box-sizing: border-box;
+        }
+
+        .modal-box {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            width: 100%;
+            max-width: 650px;
+            max-height: 90vh;
+            overflow-y: auto;
+            padding: 2rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            position: relative;
+            color: var(--text-primary);
+        }
+
+        .modal-box h2 {
+            margin-top: 0;
+            font-size: 1.4rem;
+            color: #f8fafc;
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 0.75rem;
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 1.25rem;
+            right: 1.5rem;
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            color: var(--text-secondary);
+            cursor: pointer;
+        }
+
+        .modal-close:hover {
+            color: #ffffff;
+        }
+
+        .form-row {
+            margin-bottom: 1.25rem;
+        }
+
+        .form-row label {
+            display: block;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-bottom: 0.4rem;
+            color: var(--text-secondary);
+        }
+
+        .form-row input,
+        .form-row textarea,
+        .form-row select {
+            width: 100%;
+            background: #0f172a;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 0.65rem 0.85rem;
+            color: #ffffff;
+            font-family: inherit;
+            box-sizing: border-box;
+            font-size: 0.9rem;
+        }
+
+        .form-row input:focus,
+        .form-row textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+        }
+
+        /* History Table in Modal */
+        .history-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+            margin-top: 1rem;
+        }
+
+        .history-table th,
+        .history-table td {
+            padding: 0.5rem 0.75rem;
+            border: 1px solid var(--border-color);
+            text-align: left;
+        }
+
+        .history-table th {
+            background: #0f172a;
+            color: var(--text-secondary);
+        }
+
+        .history-table td input {
+            background: transparent;
+            border: none;
+            color: #ffffff;
+            width: 100%;
+            font-family: inherit;
+        }
+
+        .history-table td input:focus {
+            background: #1e293b;
+            outline: 1px solid var(--primary-color);
+        }
+
+        /* Date pickers: dark calendar + visible icon; whole field opens the calendar (script.js) */
+        input[type="date"] {
+            color-scheme: dark;
+            cursor: pointer;
+        }
+
+        /* Loading indicator overlay */
+        .loading-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(2px);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .spinner {
+            width: 45px;
+            height: 45px;
+            border: 4px solid rgba(255, 255, 255, 0.2);
+            border-top-color: #6366f1;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Toast notification */
+        .toast {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            padding: 0.85rem 1.35rem;
+            background: #1e293b;
+            color: #ffffff;
+            border-radius: 8px;
+            border-left: 4px solid #6366f1;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+            font-size: 0.9rem;
+            z-index: 1001;
+            display: none;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+            }
+            to {
+                transform: translateX(0);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="spinner"></div>
+        <div id="loadingText" style="color: #ffffff; font-weight: 600;">Fetching live counts from Jira...</div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="toast"></div>
+
+    <div class="page-container">
+        <!-- Top Navigation & Toolbar -->
+        <div class="top-nav">
+            <a href="../index.html" class="back-link">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 12H5M12 19l-7-7 7-7" />
+                </svg>
+                Back to Dashboard
+            </a>
+
+            <div class="top-toolbar">
+                <span id="lastUpdatedBadge" style="font-size: 0.825rem; color: var(--text-secondary); margin-right: 0.5rem;">
+                    Loading…
+                </span>
+                <button class="action-btn btn-accent" id="fetchJiraBtn">
+                    <span>⚡</span> Refresh from Jira
+                </button>
+                <button class="action-btn" id="manualEditBtn">
+                    <span>✏️</span> Edit / Trend Data
+                </button>
+                <button class="action-btn" id="settingsBtn">
+                    <span>⚙️</span> Jira Settings
+                </button>
+                <button class="action-btn" id="emailBtn">
+                    <span>📧</span> Email
+                </button>
+            </div>
+        </div>
+
+        <!-- Email Digest Preview: generated by email_template.js, the same HTML the weekly email will send -->
+        <div class="stale-banner" id="staleBanner"></div>
+        <div class="email-preview-wrapper" id="emailDigest"></div>
+        <div class="chart-render-area" id="chartRenderArea" aria-hidden="true"></div>
+    </div>
+
+    <!-- MODAL: Edit Counts & Trend Data (this week's entry + full weekly history) -->
+    <div id="manualEditModal" class="modal-overlay">
+        <div class="modal-box" style="max-width: 820px;">
+            <button class="modal-close" id="closeManualEditModal">&times;</button>
+            <h2>Edit / Trend Data</h2>
+            <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1.25rem;">
+                Check or adjust this week's numbers and date, then <strong>Save Snapshot</strong> to store them in the trend history
+                (same date replaces that week).
+            </p>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+                <div>
+                    <h3 style="font-size: 1rem; color: #60a5fa; margin-top: 0;">Older Than 30 Days</h3>
+                    <div class="form-row">
+                        <label>Highest Priority</label>
+                        <input type="number" id="editOlderHighest" min="0" value="0">
+                    </div>
+                    <div class="form-row">
+                        <label>High Priority</label>
+                        <input type="number" id="editOlderHigh" min="0" value="0">
+                    </div>
+                </div>
+
+                <div>
+                    <h3 style="font-size: 1rem; color: #60a5fa; margin-top: 0;">Last 30 Days</h3>
+                    <div class="form-row">
+                        <label>Highest Priority</label>
+                        <input type="number" id="editRecentHighest" min="0" value="0">
+                    </div>
+                    <div class="form-row">
+                        <label>High Priority</label>
+                        <input type="number" id="editRecentHigh" min="0" value="0">
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-row" style="margin-top: 1rem;">
+                <label>Week Date</label>
+                <input type="date" id="editSnapshotDate">
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.25rem;">
+                <button class="action-btn" id="cancelManualEditBtn">Cancel</button>
+                <button class="action-btn btn-accent" id="saveSnapshotBtn"><span>💾</span> Save Snapshot</button>
+            </div>
+
+            <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 1.75rem 0 1.25rem;">
+
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+                <h3 style="font-size: 1rem; margin: 0;">All Weeks (Trend History)</h3>
+                <button class="action-btn btn-accent" id="saveAllHistoryBtn">Save Table Changes</button>
+            </div>
+
+            <div style="max-height: 340px; overflow-y: auto;">
+                <table class="history-table" id="historyTable">
+                    <thead>
+                        <tr>
+                            <th>Week Date</th>
+                            <th>Older: Highest</th>
+                            <th>Older: High</th>
+                            <th>Recent: Highest</th>
+                            <th>Recent: High</th>
+                            <th style="width: 50px;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="historyTableBody">
+                        <!-- Populated by JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Settings & JQLs -->
+    <div id="settingsModal" class="modal-overlay">
+        <div class="modal-box" style="max-width: 750px;">
+            <button class="modal-close" id="closeSettingsModal">&times;</button>
+            <h2>Jira Configuration & JQLs</h2>
+
+            <div class="form-row">
+                <label>Jira Domain</label>
+                <input type="text" id="cfgJiraDomain" value="cropin.atlassian.net">
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                <div class="form-row">
+                    <label>Jira Email (for API Token auth)</label>
+                    <input type="email" id="cfgJiraEmail" placeholder="e.g. rahul.shetty@cropin.com">
+                </div>
+                <div class="form-row">
+                    <label>Atlassian API Token</label>
+                    <input type="password" id="cfgJiraApiToken" placeholder="Generated from id.atlassian.com">
+                </div>
+            </div>
+
+            <h3 style="font-size: 1rem; color: #818cf8; margin: 1.5rem 0 0.75rem 0;">JQL Filters (Internal 4 Queries + 2 Combined)</h3>
+
+            <div class="form-row">
+                <label>1. Older than 30 Days — Combined (High & Highest)</label>
+                <textarea id="cfgQueryOlderCombined" rows="2"></textarea>
+            </div>
+
+            <div class="form-row">
+                <label>2. Older than 30 Days — Highest</label>
+                <textarea id="cfgQueryOlderHighest" rows="2"></textarea>
+            </div>
+
+            <div class="form-row">
+                <label>3. Older than 30 Days — High</label>
+                <textarea id="cfgQueryOlderHigh" rows="2"></textarea>
+            </div>
+
+            <div class="form-row">
+                <label>4. Last 30 Days — Combined (High & Highest)</label>
+                <textarea id="cfgQueryRecentCombined" rows="2"></textarea>
+            </div>
+
+            <div class="form-row">
+                <label>5. Last 30 Days — Highest</label>
+                <textarea id="cfgQueryRecentHighest" rows="2"></textarea>
+            </div>
+
+            <div class="form-row">
+                <label>6. Last 30 Days — High</label>
+                <textarea id="cfgQueryRecentHigh" rows="2"></textarea>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem;">
+                <button class="action-btn" id="cancelSettingsBtn">Cancel</button>
+                <button class="action-btn btn-accent" id="saveSettingsBtn">Save Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Email settings + send -->
+    <div id="emailModal" class="modal-overlay">
+        <div class="modal-box" style="max-width: 720px;">
+            <button class="modal-close" id="closeEmailModal">&times;</button>
+            <h2>Email</h2>
+            <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1.25rem;">
+                Send Email always refreshes counts from Jira first, so the email never carries old numbers.
+                Separate multiple addresses with commas.
+            </p>
+
+            <div class="form-row">
+                <label>Send Method</label>
+                <select id="cfgEmailMode">
+                    <option value="compose">Open Gmail compose — I review and click Send (default)</option>
+                    <option value="auto">Send automatically via Gmail (app password)</option>
+                </select>
+            </div>
+
+            <div class="form-row">
+                <label>To</label>
+                <textarea id="cfgEmailTo" rows="2" placeholder="team-lead@cropin.com, dev1@cropin.com"></textarea>
+            </div>
+            <div class="form-row">
+                <label>CC</label>
+                <textarea id="cfgEmailCc" rows="2" placeholder="manager@cropin.com"></textarea>
+            </div>
+            <div class="form-row">
+                <label>Subject</label>
+                <input type="text" id="cfgEmailSubject" placeholder="Legacy Highest/High Issues – Web Application Weekly Jira Summary">
+            </div>
+            <div class="form-row">
+                <label>Sender Name <span style="font-weight: 400;">(sign-off in the email)</span></label>
+                <input type="text" id="cfgSenderName" placeholder="Rahul">
+            </div>
+
+            <!-- Only for Send Method = auto -->
+            <div id="autoSendSection">
+                <h3 style="font-size: 1rem; margin: 1.5rem 0 0.75rem;">Automatic Sending (Gmail)</h3>
+                <div class="form-row">
+                    <label>Gmail Address</label>
+                    <input type="email" id="cfgGmailUser" placeholder="you@cropin.com">
+                </div>
+                <div class="form-row">
+                    <label>Google App Password <span style="font-weight: 400;">(not your normal password)</span></label>
+                    <input type="password" id="cfgGmailAppPassword" placeholder="16-character app password">
+                </div>
+            </div>
+
+            <p id="composeHint" style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 1rem;">
+                Send Email copies the digest (cards + charts) and opens Gmail with To, CC and Subject filled in.
+                Click in the message body and press <strong>Ctrl+V</strong>, review, then Send.
+            </p>
+
+            <div style="display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 0.75rem; margin-top: 1.5rem;">
+                <button class="action-btn" id="cancelEmailBtn">Cancel</button>
+                <button class="action-btn" id="saveEmailSettingsBtn">Save Settings</button>
+                <button class="action-btn" id="sendTestEmailBtn">Send Test to Me</button>
+                <button class="action-btn btn-accent" id="sendEmailBtn"><span>📧</span> Send Email</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Shared digest builder (also used by the email sender) -->
+    <script src="email_template.js"></script>
+
+    <!-- Main Logic Script -->
+    <script type="module" src="script.js"></script>
+</body>
+
+</html>

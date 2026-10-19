@@ -10,6 +10,10 @@ mkdirp
 mime
 browsers
 
+# Secrets (Jira email + API token, Gmail app password) — ignored in any folder, never commit
+jira_credentials.json
+email_credentials.json
+
 # Logs
 npm-debug.log*
 

@@ -1,0 +1,16 @@
+{
+  "jiraDomain": "cropin.atlassian.net",
+  "recipients": "rahul.shetty@cropin.com",
+  "cc": "",
+  "subject": "Legacy Highest/High Issues – Web Application Weekly Jira Summary",
+  "queries": {
+    "older_combined": "project = \"SMFP\" and issuetype in (Bug) and status NOT IN (Closed,\"Ready For Testing\") and priority in (High, Highest) AND (component = Web OR assignee in (62c6f19b1bb561c337964efb,607d1be52ad11c00727ab796, 62bc056ed752af0e54ec7040, 619491c52278e7006b59881e, 712020:e2c51a33-b8f3-4004-b31a-d90d402b9691, 62ea48dde50f2f2a3954dd56)) and created < -30d order by priority DESC, created DESC",
+    "older_highest": "project = \"SMFP\" and issuetype in (Bug) and status NOT IN (Closed,\"Ready For Testing\") AND (component = Web OR assignee in (62c6f19b1bb561c337964efb,607d1be52ad11c00727ab796, 62bc056ed752af0e54ec7040, 619491c52278e7006b59881e, 712020:e2c51a33-b8f3-4004-b31a-d90d402b9691, 62ea48dde50f2f2a3954dd56)) and created < -30d and priority = Highest order by created DESC",
+    "older_high": "project = \"SMFP\" and issuetype in (Bug) and status NOT IN (Closed,\"Ready For Testing\") AND (component = Web OR assignee in (62c6f19b1bb561c337964efb,607d1be52ad11c00727ab796, 62bc056ed752af0e54ec7040, 619491c52278e7006b59881e, 712020:e2c51a33-b8f3-4004-b31a-d90d402b9691, 62ea48dde50f2f2a3954dd56)) and created < -30d and priority = High order by created DESC",
+    "recent_combined": "project = \"SMFP\" and issuetype in (Bug) and status NOT IN (Closed,\"Ready For Testing\") and priority in (High, Highest) AND (component = Web OR assignee in (62c6f19b1bb561c337964efb,607d1be52ad11c00727ab796, 62bc056ed752af0e54ec7040, 619491c52278e7006b59881e, 712020:e2c51a33-b8f3-4004-b31a-d90d402b9691, 62ea48dde50f2f2a3954dd56)) and created >= -30d order by priority DESC, created DESC",
+    "recent_highest": "project = \"SMFP\" and issuetype in (Bug) and status NOT IN (Closed,\"Ready For Testing\") AND (component = Web OR assignee in (62c6f19b1bb561c337964efb,607d1be52ad11c00727ab796, 62bc056ed752af0e54ec7040, 619491c52278e7006b59881e, 712020:e2c51a33-b8f3-4004-b31a-d90d402b9691, 62ea48dde50f2f2a3954dd56)) and created >= -30d and priority = Highest order by created DESC",
+    "recent_high": "project = \"SMFP\" and issuetype in (Bug) and status NOT IN (Closed,\"Ready For Testing\") AND (component = Web OR assignee in (62c6f19b1bb561c337964efb,607d1be52ad11c00727ab796, 62bc056ed752af0e54ec7040, 619491c52278e7006b59881e, 712020:e2c51a33-b8f3-4004-b31a-d90d402b9691, 62ea48dde50f2f2a3954dd56)) and created >= -30d and priority = High order by created DESC"
+  },
+  "emailMode": "compose",
+  "senderName": ""
+}

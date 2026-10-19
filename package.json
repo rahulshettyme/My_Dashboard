@@ -9,6 +9,7 @@
     "cors": "^2.8.5",
     "express": "^4.19.2",
     "multer": "^2.0.2",
+    "nodemailer": "10.0.9",
     "puppeteer-core": "^19.11.1"
   }
 }

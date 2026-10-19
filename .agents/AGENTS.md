@@ -9,6 +9,11 @@
 ## Growth Module SOP Constraint
 - BEFORE proposing or executing any code modifications to the Growth module (Growth Progression, Stage window, Harvest window Weekly/Daily charts, base growth table), you MUST read the Growth Module SOP document at [GROWTH_MODULE_SOP.md](file:///c:/Users/rahul.shetty/Documents/Important/AntiGravity/My%20dashboard/GROWTH_MODULE_SOP.md) to understand binning rules, the backend extraction layer, and known caveats/bugs.
 
+## Web Legacy Emails — Independent Project Isolation
+- `web_legacy_emails/` is an **independent project** (weekly Jira digest of Web Highest/High bugs). Its SOP is [web_legacy_emails/WEB_LEGACY_EMAILS_SOP.md](file:///c:/Users/rahul.shetty/Documents/Important/AntiGravity/My%20dashboard/web_legacy_emails/WEB_LEGACY_EMAILS_SOP.md).
+- **When working on Web Legacy Emails**: BEFORE proposing or executing any change, read that SOP. Read/edit only files inside `web_legacy_emails/`, plus the shared touchpoints listed in SOP Section 0: the `// --- Web Legacy Emails / Jira Metrics API ---` and `// --- Web Legacy Emails / Gmail sending ---` blocks in `server.js` (locate by search, do not read the whole file), the single `web_legacy_emails/index.html` dropdown option in root `index.html`, the `nodemailer` entry in root `package.json`, and the credentials lines in root `.gitignore`. Do NOT read the Health/Yield/Growth SOPs, `Aggregate-Data-Testing/`, `aggregate_*` files, or other parts of `server.js`.
+- **When working on any other feature** (Health, Yield, Growth, Sisense, Area Unit Testing, etc.): do NOT read `web_legacy_emails/` or its SOP, and do NOT add Web Legacy Emails tests to the root `run_tests.js`.
+- The SOP-First Lookup, SOP Update, and change-log rules below apply to this module's SOP exactly as they do to the other SOPs.
 
 ## SOP-First Lookup & Backfill Rule
 - Whenever you need to look up a formula, logic rule, threshold, default value, field name, or behavior for the Health, Yield, or Growth module (e.g. to answer a question, or to understand existing behavior before making a change), **check the relevant SOP first** ([HEALTH_MODULE_SOP.md](file:///c:/Users/rahul.shetty/Documents/Important/AntiGravity/My%20dashboard/HEALTH_MODULE_SOP.md) / [YIELD_MODULE_SOP.md](file:///c:/Users/rahul.shetty/Documents/Important/AntiGravity/My%20dashboard/YIELD_MODULE_SOP.md) / [GROWTH_MODULE_SOP.md](file:///c:/Users/rahul.shetty/Documents/Important/AntiGravity/My%20dashboard/GROWTH_MODULE_SOP.md)) rather than immediately searching or re-deriving it from the codebase. If the SOP already documents it, use that as the answer.
@@ -40,5 +45,12 @@
   📝 Suggested commit message:
   <the actual commit message text, ready to copy-paste>
   ```
+- **Web Legacy Emails exception**: for changes confined to `web_legacy_emails/` (and its two shared touchpoints), step 2 uses the module's own suite instead: run the exact command `node web_legacy_emails/tests/run_tests.js` from the project root, apply the same `baselineCount` ratchet to `web_legacy_emails/tests/run_tests.js`, and do NOT run the root `node run_tests.js`. The closing checklist then reads:
+  ```
+  ✅ Regression suite: node web_legacy_emails/tests/run_tests.js → X/X passing (Y existing, Z new)
+  📝 Suggested commit message:
+  <the actual commit message text, ready to copy-paste>
+  ```
+  If a change touches both this module and other features, run both suites and report both.
   This checklist is mandatory even when the user's message does not ask for it, even in short responses, and even when only documentation/SOP files changed alongside code. If the test suite was not run via `node run_tests.js`, or no commit message is included, the response is incomplete — go back and add them before replying to the user. This gate has been missed multiple times before; treat it as non-negotiable, not a nice-to-have.
 

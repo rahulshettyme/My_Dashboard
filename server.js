@@ -2195,6 +2195,451 @@ app.get('/api/user-aggregate/harvest-tasks', (req, res) => {
     hReq.end();
 });
 
+// ==========================================
+// --- Web Legacy Emails / Jira Metrics API ---
+// ==========================================
+const JIRA_DIR = path.join(__dirname, 'web_legacy_emails');
+const JIRA_HISTORY_FILE = path.join(JIRA_DIR, 'jira_weekly_history.json');
+const JIRA_CONFIG_FILE = path.join(JIRA_DIR, 'jira_config.json');
+const JIRA_CREDENTIALS_FILE = path.join(JIRA_DIR, 'jira_credentials.json');
+
+const readJiraHistory = () => {
+    try {
+        if (!fs.existsSync(JIRA_HISTORY_FILE)) return [];
+        return JSON.parse(fs.readFileSync(JIRA_HISTORY_FILE, 'utf8'));
+    } catch (e) {
+        console.error('[Jira] Error reading history:', e.message);
+        return [];
+    }
+};
+
+// Keeps history chronological so back-dated weeks land in place (charts and "latest" rely on order)
+const sortJiraHistory = (data) => {
+    const time = (h) => {
+        const t = new Date(h.date).getTime();
+        return isNaN(t) ? Infinity : t;
+    };
+    return [...data].sort((a, b) => time(a) - time(b));
+};
+
+const writeJiraHistory = (data) => {
+    fs.writeFileSync(JIRA_HISTORY_FILE, JSON.stringify(data, null, 2), 'utf8');
+};
+
+const readJiraConfig = () => {
+    try {
+        if (!fs.existsSync(JIRA_CONFIG_FILE)) return {};
+        return JSON.parse(fs.readFileSync(JIRA_CONFIG_FILE, 'utf8'));
+    } catch (e) {
+        console.error('[Jira] Error reading config:', e.message);
+        return {};
+    }
+};
+
+const writeJiraConfig = (data) => {
+    fs.writeFileSync(JIRA_CONFIG_FILE, JSON.stringify(data, null, 2), 'utf8');
+};
+
+// Credentials live in a separate gitignored file and are never sent back to the browser
+const readJiraCredentials = () => {
+    try {
+        if (!fs.existsSync(JIRA_CREDENTIALS_FILE)) return {};
+        return JSON.parse(fs.readFileSync(JIRA_CREDENTIALS_FILE, 'utf8'));
+    } catch (e) {
+        console.error('[Jira] Error reading credentials:', e.message);
+        return {};
+    }
+};
+
+const writeJiraCredentials = (data) => {
+    fs.writeFileSync(JIRA_CREDENTIALS_FILE, JSON.stringify(data, null, 2), 'utf8');
+};
+
+// One-time move of credentials that older versions stored inside jira_config.json
+(() => {
+    const config = readJiraConfig();
+    if (config.jiraApiToken === undefined && config.jiraEmail === undefined) return;
+    const creds = readJiraCredentials();
+    if (config.jiraEmail && !creds.jiraEmail) creds.jiraEmail = config.jiraEmail;
+    if (config.jiraApiToken && !creds.jiraApiToken) creds.jiraApiToken = config.jiraApiToken;
+    delete config.jiraEmail;
+    delete config.jiraApiToken;
+    writeJiraCredentials(creds);
+    writeJiraConfig(config);
+})();
+
+// base = { host, prefix }: the Jira site itself, or the api.atlassian.com gateway (see resolveJiraBase)
+function jiraRequest(base, method, apiPath, authHeader, body) {
+    return new Promise((resolve, reject) => {
+        const payload = body ? JSON.stringify(body) : null;
+        const options = {
+            hostname: base.host,
+            port: 443,
+            path: base.prefix + apiPath,
+            method,
+            headers: {
+                'Accept': 'application/json',
+                'User-Agent': 'MyDashboard-JiraMetrics/1.0',
+                'Authorization': authHeader,
+                ...(payload ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) } : {})
+            }
+        };
+
+        const req = https.request(options, (res) => {
+            let data = '';
+            res.on('data', chunk => data += chunk);
+            res.on('end', () => {
+                if (res.statusCode >= 200 && res.statusCode < 300) {
+                    try {
+                        resolve(JSON.parse(data));
+                    } catch (e) {
+                        reject(new Error(`Failed to parse Jira response: ${e.message}`));
+                    }
+                } else {
+                    const err = new Error(`Jira API HTTP ${res.statusCode}: ${data.slice(0, 250)}`);
+                    err.statusCode = res.statusCode;
+                    reject(err);
+                }
+            });
+        });
+
+        req.on('error', err => reject(err));
+        req.setTimeout(15000, () => {
+            req.destroy();
+            reject(new Error('Jira API request timed out after 15s'));
+        });
+        if (payload) req.write(payload);
+        req.end();
+    });
+}
+
+// Exact count: pages through the enhanced JQL search (ids only). The legacy
+// /rest/api/3/search endpoint returns 410 Gone, and /search/approximate-count is not exact.
+async function fetchJiraCount(base, jql, authHeader) {
+    let count = 0;
+    let nextPageToken;
+    do {
+        const page = await jiraRequest(base, 'POST', '/rest/api/3/search/jql', authHeader, {
+            jql,
+            fields: ['id'],
+            maxResults: 100,
+            ...(nextPageToken ? { nextPageToken } : {})
+        });
+        count += (page.issues || []).length;
+        nextPageToken = page.isLast === false ? page.nextPageToken : undefined;
+    } while (nextPageToken);
+    return count;
+}
+
+const buildJiraAuth = () => {
+    const { jiraEmail, jiraApiToken } = readJiraCredentials();
+    if (!jiraEmail || !jiraApiToken) return null;
+    return 'Basic ' + Buffer.from(`${jiraEmail}:${jiraApiToken}`).toString('base64');
+};
+
+const isJiraAuthError = (e) => e.statusCode === 401 || e.statusCode === 403;
+
+// Classic API tokens work on the site URL; scoped tokens ("Create API token with scopes")
+// are rejected there (401) and only work via api.atlassian.com/ex/jira/<cloudId>.
+// Tries the site first, then the gateway. Returns { base, account }; rethrows the auth error if both fail.
+async function resolveJiraBase(domain, authHeader) {
+    const host = domain.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+    const siteBase = { host, prefix: '' };
+    try {
+        return { base: siteBase, account: await jiraRequest(siteBase, 'GET', '/rest/api/3/myself', authHeader) };
+    } catch (siteErr) {
+        if (!isJiraAuthError(siteErr)) throw siteErr;
+
+        const tenantRes = await fetch(`https://${host}/_edge/tenant_info`);
+        const { cloudId } = tenantRes.ok ? await tenantRes.json() : {};
+        if (!cloudId) throw siteErr;
+
+        const gatewayBase = { host: 'api.atlassian.com', prefix: `/ex/jira/${cloudId}` };
+        return { base: gatewayBase, account: await jiraRequest(gatewayBase, 'GET', '/rest/api/3/myself', authHeader) };
+    }
+}
+
+// Get Config (credentials replaced by flags)
+app.get('/api/jira/config', (req, res) => {
+    const creds = readJiraCredentials();
+    res.json({
+        ...readJiraConfig(),
+        jiraEmail: creds.jiraEmail || '',
+        hasApiToken: !!creds.jiraApiToken
+    });
+});
+
+// Update Config — a blank token keeps the saved one
+app.post('/api/jira/config', (req, res) => {
+    try {
+        const { jiraEmail, jiraApiToken, hasApiToken, ...rest } = req.body;
+
+        const creds = readJiraCredentials();
+        if (jiraEmail !== undefined) creds.jiraEmail = String(jiraEmail).trim();
+        if (jiraApiToken) creds.jiraApiToken = String(jiraApiToken).trim();
+        writeJiraCredentials(creds);
+
+        const updated = { ...readJiraConfig(), ...rest };
+        writeJiraConfig(updated);
+        res.json({ success: true, config: { ...updated, jiraEmail: creds.jiraEmail || '', hasApiToken: !!creds.jiraApiToken } });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// Get History
+app.get('/api/jira/history', (req, res) => {
+    res.json(readJiraHistory());
+});
+
+// Append / Update Snapshot in History
+app.post('/api/jira/history', (req, res) => {
+    try {
+        const { date, olderHighest, olderHigh, recentHighest, recentHigh } = req.body;
+        if (!date) return res.status(400).json({ error: 'Date is required' });
+
+        let history = readJiraHistory();
+        const existingIdx = history.findIndex(h => h.date.toLowerCase() === date.toLowerCase());
+        const entry = {
+            date,
+            olderHighest: Number(olderHighest) || 0,
+            olderHigh: Number(olderHigh) || 0,
+            recentHighest: Number(recentHighest) || 0,
+            recentHigh: Number(recentHigh) || 0
+        };
+
+        if (existingIdx >= 0) {
+            history[existingIdx] = entry;
+        } else {
+            history.push(entry);
+        }
+
+        history = sortJiraHistory(history);
+        writeJiraHistory(history);
+        res.json({ success: true, history });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// Replace Full History
+app.put('/api/jira/history', (req, res) => {
+    try {
+        if (!Array.isArray(req.body)) return res.status(400).json({ error: 'Expected an array' });
+        const history = sortJiraHistory(req.body);
+        writeJiraHistory(history);
+        res.json({ success: true, history });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// Fetch Counts from Jira
+app.post('/api/jira/fetch-counts', async (req, res) => {
+    const config = readJiraConfig();
+    const domain = config.jiraDomain || 'cropin.atlassian.net';
+
+    // Anonymous Jira searches return 200 with zero results, so never query without credentials
+    const authHeader = buildJiraAuth();
+    if (!authHeader) {
+        return res.status(400).json({ success: false, error: 'Jira email and API token are not configured. Add them in Jira Settings.' });
+    }
+
+    const queries = config.queries || {};
+    const { older_highest, older_high, recent_highest, recent_high } = queries;
+    if (!older_highest || !older_high || !recent_highest || !recent_high) {
+        return res.status(400).json({ success: false, error: 'One or more required JQL queries are missing' });
+    }
+
+    try {
+        // Verify credentials first so a bad token is reported clearly instead of as zero counts
+        let base, account;
+        try {
+            ({ base, account } = await resolveJiraBase(domain, authHeader));
+        } catch (e) {
+            if (isJiraAuthError(e)) {
+                return res.status(401).json({ success: false, error: 'Jira rejected the email/API token. Check them in Jira Settings.' });
+            }
+            throw e;
+        }
+
+        const [olderHighest, olderHigh, recentHighest, recentHigh] = await Promise.all([
+            fetchJiraCount(base, older_highest, authHeader),
+            fetchJiraCount(base, older_high, authHeader),
+            fetchJiraCount(base, recent_highest, authHeader),
+            fetchJiraCount(base, recent_high, authHeader)
+        ]);
+
+        res.json({
+            success: true,
+            fetchedAt: new Date().toISOString(),
+            fetchedAs: account.displayName || account.emailAddress || '',
+            counts: {
+                older: {
+                    total: olderHighest + olderHigh,
+                    highest: olderHighest,
+                    high: olderHigh
+                },
+                recent: {
+                    total: recentHighest + recentHigh,
+                    highest: recentHighest,
+                    high: recentHigh
+                }
+            }
+        });
+    } catch (e) {
+        console.error('[Jira] Error fetching counts:', e.message);
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// --- Web Legacy Emails / Gmail sending ---
+// Recipients/subject/sender name live in jira_config.json; Gmail login + app password in the
+// gitignored email_credentials.json (never returned to the browser).
+const nodemailer = require('nodemailer');
+const EMAIL_CREDENTIALS_FILE = path.join(JIRA_DIR, 'email_credentials.json');
+// Custom content type so the app-wide 100kb JSON parser skips it (body carries 2 chart PNGs)
+const EMAIL_SEND_CONTENT_TYPE = 'application/vnd.web-legacy-email+json';
+
+const readEmailCredentials = () => {
+    try {
+        if (!fs.existsSync(EMAIL_CREDENTIALS_FILE)) return {};
+        return JSON.parse(fs.readFileSync(EMAIL_CREDENTIALS_FILE, 'utf8'));
+    } catch (e) {
+        console.error('[Email] Error reading credentials:', e.message);
+        return {};
+    }
+};
+
+// "a@x.com, b@x.com; c@x.com" -> ['a@x.com', 'b@x.com', 'c@x.com']
+const parseEmailList = (value) => String(value || '').split(/[,;\n]/).map(s => s.trim()).filter(Boolean);
+const isValidEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+
+// 'compose' (default): page opens Gmail compose, user sends manually. 'auto': server sends via SMTP.
+const EMAIL_MODES = ['compose', 'auto'];
+const DEFAULT_EMAIL_SUBJECT = 'Legacy Highest/High Issues – Web Application Weekly Jira Summary';
+
+const emailConfigResponse = () => {
+    const config = readJiraConfig();
+    const creds = readEmailCredentials();
+    return {
+        emailMode: EMAIL_MODES.includes(config.emailMode) ? config.emailMode : 'compose',
+        recipients: config.recipients || '',
+        cc: config.cc || '',
+        subject: config.subject || '',
+        senderName: config.senderName || '',
+        gmailUser: creds.gmailUser || '',
+        hasAppPassword: !!creds.gmailAppPassword
+    };
+};
+
+// Get Email Config (app password replaced by a flag)
+app.get('/api/email/config', (req, res) => {
+    res.json(emailConfigResponse());
+});
+
+// Update Email Config — a blank app password keeps the saved one
+app.post('/api/email/config', (req, res) => {
+    try {
+        const { emailMode, recipients, cc, subject, senderName, gmailUser, gmailAppPassword } = req.body;
+        if (emailMode !== undefined && !EMAIL_MODES.includes(emailMode)) {
+            return res.status(400).json({ success: false, error: `Invalid send method: ${emailMode}` });
+        }
+
+        const invalid = [...parseEmailList(recipients), ...parseEmailList(cc), ...(gmailUser ? [gmailUser.trim()] : [])]
+            .filter(e => !isValidEmail(e));
+        if (invalid.length) {
+            return res.status(400).json({ success: false, error: `Invalid email address: ${invalid.join(', ')}` });
+        }
+
+        const current = readJiraConfig();
+        writeJiraConfig({
+            ...current,
+            emailMode: emailMode || current.emailMode || 'compose',
+            recipients: String(recipients || '').trim(),
+            cc: String(cc || '').trim(),
+            subject: String(subject || '').trim(),
+            senderName: String(senderName || '').trim()
+        });
+
+        const creds = readEmailCredentials();
+        creds.gmailUser = String(gmailUser || '').trim();
+        // Google shows app passwords as "abcd efgh ijkl mnop"; spaces are not part of it
+        if (gmailAppPassword) creds.gmailAppPassword = String(gmailAppPassword).replace(/\s+/g, '');
+        fs.writeFileSync(EMAIL_CREDENTIALS_FILE, JSON.stringify(creds, null, 2), 'utf8');
+
+        res.json({ success: true, config: emailConfigResponse() });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// Send the digest. Body: { html, date, charts: { older, recent } (PNG data URLs), test }
+// The page fetches fresh Jira counts immediately before calling this; html references the
+// charts as cid:older-trend / cid:recent-trend. test=true sends only to the Gmail account itself.
+app.post('/api/email/send', bodyParser.json({ type: EMAIL_SEND_CONTENT_TYPE, limit: '10mb' }), async (req, res) => {
+    try {
+        const { html, date, charts = {}, test } = req.body || {};
+        if (!html) return res.status(400).json({ success: false, error: 'Email content is missing' });
+
+        const config = readJiraConfig();
+        // Automatic sending is opt-in: refuse unless Send method is explicitly 'auto'
+        if (config.emailMode !== 'auto') {
+            return res.status(403).json({ success: false, error: 'Automatic sending is turned off (Send method = Gmail compose). Change it in Email settings to enable.' });
+        }
+
+        const { gmailUser, gmailAppPassword } = readEmailCredentials();
+        if (!gmailUser || !gmailAppPassword) {
+            return res.status(400).json({ success: false, error: 'Gmail address and app password are not configured. Add them in Email settings.' });
+        }
+
+        const to = test ? [gmailUser] : parseEmailList(config.recipients);
+        const cc = test ? [] : parseEmailList(config.cc);
+        if (to.length === 0) {
+            return res.status(400).json({ success: false, error: 'No "To" recipients configured. Add them in Email settings.' });
+        }
+
+        const baseSubject = (config.subject || DEFAULT_EMAIL_SUBJECT).replace(/\{date\}/g, date || '');
+        const subject = test ? `[TEST] ${baseSubject}` : baseSubject;
+
+        const attachments = Object.entries({ 'older-trend': charts.older, 'recent-trend': charts.recent })
+            .filter(([, dataUrl]) => typeof dataUrl === 'string' && dataUrl.startsWith('data:image/png;base64,'))
+            .map(([cid, dataUrl]) => ({
+                filename: `${cid}.png`,
+                content: Buffer.from(dataUrl.split(',')[1], 'base64'),
+                contentType: 'image/png',
+                cid
+            }));
+
+        const transporter = nodemailer.createTransport({
+            host: 'smtp.gmail.com',
+            port: 465,
+            secure: true,
+            auth: { user: gmailUser, pass: gmailAppPassword }
+        });
+
+        const info = await transporter.sendMail({
+            from: config.senderName ? `"${config.senderName}" <${gmailUser}>` : gmailUser,
+            to,
+            cc,
+            subject,
+            html: `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="margin:0;padding:0;">${html}</body></html>`,
+            attachments
+        });
+
+        res.json({ success: true, messageId: info.messageId, to, cc, subject, accepted: info.accepted, rejected: info.rejected });
+    } catch (e) {
+        console.error('[Email] Send failed:', e.message);
+        const authFailed = e.code === 'EAUTH' || /Username and Password not accepted|Invalid login/i.test(e.message);
+        res.status(authFailed ? 401 : 500).json({
+            success: false,
+            error: authFailed
+                ? 'Gmail rejected the login. Use a Google App Password (not your normal password) in Email settings.'
+                : e.message
+        });
+    }
+});
+
 if (require.main === module) {
     app.listen(PORT, '0.0.0.0', () => {
         console.log(`Server running on http://0.0.0.0:${PORT}`);
