@@ -704,6 +704,36 @@ function isWithinAnalysisWindow(dateStr, windowDays) {
 }
 
 /**
+ * Resolves default analysis window days per KPI from the tenant's Health-Aggregation config data.
+ * Missing/invalid values fall back to 15; germination is not configurable and is always 30.
+ */
+function resolveHealthWindowDefaults(configData) {
+    const pick = (val) => {
+        const n = Number(val);
+        return (val !== null && val !== undefined && val !== '' && Number.isInteger(n) && n > 0) ? n : 15;
+    };
+    const data = configData || {};
+    return {
+        greenness: pick(data.ndvi),
+        nitrogen: pick(data.ndre),
+        water: pick(data.lswi),
+        germination: 30
+    };
+}
+
+/**
+ * Writes resolved window defaults into the per-KPI Analysis Window inputs.
+ */
+function applyHealthWindowDefaults(configData) {
+    const defaults = resolveHealthWindowDefaults(configData);
+    Object.keys(defaults).forEach(type => {
+        const input = document.getElementById(`health-${type}-window`);
+        if (input) input.value = defaults[type];
+    });
+    return defaults;
+}
+
+/**
  * Handle apply filter action for individual KPI modules
  */
 function handleHealthApplyFilter(type) {
@@ -720,7 +750,7 @@ function renderHealthCategoryKPI(type, results) {
     // Read the window input for this type:
     const windowInputId = `health-${type}-window`;
     const windowInput = document.getElementById(windowInputId);
-    const windowDays = windowInput ? parseInt(windowInput.value, 10) : 15;
+    const windowDays = windowInput ? parseInt(windowInput.value, 10) : (type === 'germination' ? 30 : 15);
 
     // Display the date window range
     const dateWindowEl = document.getElementById(`health-${type}-date-window`);
@@ -983,7 +1013,7 @@ function renderHealthSatelliteTable(results) {
 
         const { type, status } = activeHealthFilter;
         const windowInput = document.getElementById(`health-${type}-window`);
-        const windowDays = windowInput ? parseInt(windowInput.value, 10) : 15;
+        const windowDays = windowInput ? parseInt(windowInput.value, 10) : (type === 'germination' ? 30 : 15);
 
         filteredResults = filteredResults.filter(res => {
             let val = "-", date = "-";
@@ -2235,6 +2265,7 @@ if (typeof module !== 'undefined') {
 
     module.exports = {
         isWithinAnalysisWindow,
+        resolveHealthWindowDefaults,
         formatDateToDMY,
         classifyValueToStatus,
         formatHealthStatus,

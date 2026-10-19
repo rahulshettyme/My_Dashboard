@@ -2928,7 +2928,7 @@ async function handleLogin() {
         document.getElementById('project-container').classList.remove('hidden');
         document.getElementById('session-info').textContent = `${environment} | ${tenant} | ${username} | Loading Prefs...`;
 
-        await Promise.all([loadProjects(), fetchUserInfo(), fetchHealthIndicatorsConfig(), fetchTenantUnitMaster()]);
+        await Promise.all([loadProjects(), fetchUserInfo(), fetchHealthIndicatorsConfig(), fetchHealthAggregationConfig(), fetchTenantUnitMaster()]);
 
     } catch (error) {
         loginError.textContent = error.message;
@@ -2968,6 +2968,30 @@ async function fetchHealthIndicatorsConfig() {
         console.warn('Failed to fetch HEALTH_INDICATORS_DISABLE config, default to False', e);
     }
     updateGerminationCheckboxVisibility();
+}
+
+async function fetchHealthAggregationConfig() {
+    const baseUrl = getServerUrl();
+    let configData = null; // No config -> current defaults (15 days, germination 30)
+    try {
+        const response = await fetch(`${baseUrl}/api/user-aggregate/tenant-config?environment=${encodeURIComponent(currentEnvironment)}&name=Health-Aggregation`, {
+            headers: {
+                'Authorization': `Bearer ${authToken}`,
+                'ngrok-skip-browser-warning': 'true'
+            }
+        });
+
+        if (response.ok && response.status !== 204) {
+            const result = await response.json();
+            if (result && result.data) {
+                configData = result.data;
+            }
+        }
+    } catch (e) {
+        console.warn('Failed to fetch Health-Aggregation config, using default analysis windows', e);
+    }
+    const defaults = applyHealthWindowDefaults(configData);
+    console.log('Health analysis window defaults:', defaults);
 }
 
 function updateGerminationCheckboxVisibility() {

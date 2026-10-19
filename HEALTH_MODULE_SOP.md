@@ -38,7 +38,12 @@ When `HEALTH_INDICATORS_DISABLED` is `true`, fractional values for NDVI, NDRE, a
 * **Sentinel-only LSWI**: LSWI (Water Stress) is exclusively supported by Sentinel-2. Planet has no LSWI data.
 
 ### C. Analysis Window Logic
-* **Window Duration**: Configured via **four independent** UI input fields — one per KPI category (`health-greenness-window`, `health-nitrogen-window`, `health-water-window`, `health-germination-window`), **each defaulting to 15 days**. There is no single global window and no `30`-day default anywhere in code or markup; the previous "or 30 days as requested" note was not implemented.
+* **Window Duration**: Configured via **four independent** UI input fields — one per KPI category (`health-greenness-window`, `health-nitrogen-window`, `health-water-window`, `health-germination-window`). There is no single global window.
+* **Window Defaults (tenant-configurable)**: On login, `fetchHealthAggregationConfig()` (`aggregate_script_backup.js`) calls tenant-config `name=Health-Aggregation` (`/services/farm/api/tenant-config?name=Health-Aggregation`) and `resolveHealthWindowDefaults()` / `applyHealthWindowDefaults()` (`health_script.js`) set the inputs:
+  * Greenness ← `data.ndvi`, Nutrient Uptake ← `data.ndre`, Water Stress ← `data.lswi`.
+  * Germination is **not configurable** and always defaults to **30 days**.
+  * If the tenant has no config (204 / error / no `data`) or a value is null, missing, non-numeric or ≤ 0, that KPI falls back to **15 days**.
+  * Users can still override any window manually and click **Apply Filter**; only the initial default changes.
 * **Date Range Bounds**: Started from today (inclusive) going back $N$ days.
   * Range: `[today - windowDays + 1, today]` (`isWithinAnalysisWindow()`).
   * Today's capture records are fully included.
@@ -88,6 +93,7 @@ To provide a comparison timeline:
 * **2026-08-10**: Injected inline date metadata directly into PL status displays.
 * **2026-08-11**: Updated analysis window bounds to start from today (inclusive) instead of yesterday.
 * **2026-08-12**: Updated PL and PL LSWI calculations to filter out same-day captures, resolving overlap issues by forcing PL to always refer to a strictly previous calendar day.
+* **2026-10-19**: Analysis window defaults now sourced from tenant-config `Health-Aggregation` (NDVI→Greenness, NDRE→Nutrient Uptake, LSWI→Water Stress; fallback 15). Germination default changed to a fixed 30 days.
 * **2026-08-12**: Refined details table formatting to display formatted capture dates inline for all Planet and Sentinel status cells.
 * **2026-08-12**: Added a compact inline `L` (Latest) badge next to the newest provider in Greenness and Nutrient cells, omitting it from Sentinel-only Water Stress.
 * **2026-08-12**: Removed the redundant Capture Date column from the base details table to optimize screen layout space.

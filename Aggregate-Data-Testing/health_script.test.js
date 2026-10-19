@@ -5,7 +5,7 @@ const { selectYieldPredictionParameters, extractGrowthStageData } = require('../
 // Ratchets forward to tests.length after every task — represents "tests that existed
 // before the CURRENT task's changes", not a fixed historical constant. If this is not
 // bumped, "new" count keeps counting tests added in past sessions as if they were new.
-const baselineCount = 35;
+const baselineCount = 37;
 
 const tests = [
     {
@@ -35,6 +35,33 @@ const tests = [
             oldDate.setDate(today.getDate() - 15);
             const oldDateStr = oldDate.toISOString();
             assert.strictEqual(healthScript.isWithinAnalysisWindow(oldDateStr, 15), false, '15 days ago must be outside 15-day window');
+        }
+    },
+    {
+        name: 'resolveHealthWindowDefaults (Health-Aggregation config present)',
+        fn: () => {
+            const d = healthScript.resolveHealthWindowDefaults({ ndre: 20, ndvi: 10, lswi: 5 });
+            assert.deepStrictEqual(d, { greenness: 10, nitrogen: 20, water: 5, germination: 30 }, 'NDVI->greenness, NDRE->nitrogen, LSWI->water, germination fixed 30');
+        }
+    },
+    {
+        name: 'resolveHealthWindowDefaults (no config / invalid values fall back to current defaults)',
+        fn: () => {
+            const fallback = { greenness: 15, nitrogen: 15, water: 15, germination: 30 };
+            assert.deepStrictEqual(healthScript.resolveHealthWindowDefaults(null), fallback, 'null config -> 15/15/15/30');
+            assert.deepStrictEqual(healthScript.resolveHealthWindowDefaults(undefined), fallback, 'undefined config -> 15/15/15/30');
+            assert.deepStrictEqual(healthScript.resolveHealthWindowDefaults({}), fallback, 'empty data -> 15/15/15/30');
+            assert.deepStrictEqual(
+                healthScript.resolveHealthWindowDefaults({ ndvi: null, ndre: 0, lswi: 'abc' }),
+                fallback,
+                'null / zero / non-numeric values fall back to 15'
+            );
+            assert.deepStrictEqual(
+                healthScript.resolveHealthWindowDefaults({ ndvi: 7 }),
+                { greenness: 7, nitrogen: 15, water: 15, germination: 30 },
+                'Partially configured tenant: only the present key overrides'
+            );
+            assert.strictEqual(healthScript.resolveHealthWindowDefaults({ germination: 5 }).germination, 30, 'Germination is not configurable');
         }
     },
     {
