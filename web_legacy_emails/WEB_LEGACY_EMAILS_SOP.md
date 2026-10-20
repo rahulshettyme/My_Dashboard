@@ -15,10 +15,13 @@ This is an **independent project** that lives inside the dashboard repo. It shar
   ```
   The root `node run_tests.js` is **not** required for changes confined to this module (see `.agents/AGENTS.md`).
 * **Shared touchpoints outside the folder** (the only places outside `web_legacy_emails/` that may be read/edited for this module):
-  1. `server.js` → only the two consecutive blocks starting at the comments `// --- Web Legacy Emails / Jira Metrics API ---` (Jira helpers + `/api/jira/*`) and `// --- Web Legacy Emails / Gmail sending ---` (`/api/email/*`), both ending before `if (require.main === module)`. Locate them by searching for those comments rather than reading the whole file.
+  1. `server.js` → only **two lines**: `app.use(require('./web_legacy_emails/routes.js').blockPrivateFiles);` directly **before** `app.use(express.static(__dirname))`, and the `// --- Web Legacy Emails ---` block (`require('./web_legacy_emails/routes.js').register(app, { startScheduler: require.main === module })`) just before `if (require.main === module)`. All routes live in `web_legacy_emails/routes.js`. Find them by searching for `web_legacy_emails` rather than reading the whole file.
   2. Root `index.html` → the single dropdown option `<option value="web_legacy_emails/index.html">Web legacy emails</option>`.
-  3. Root `package.json` → the `nodemailer` dependency (pinned exactly to `10.0.9`).
-  4. Root `.gitignore` → the `jira_credentials.json` / `email_credentials.json` lines.
+  3. Root `package.json` → dependencies pinned exactly: `nodemailer` `10.0.9`, `chart.js` `4.5.1`, `chartjs-plugin-datalabels` `2.2.0`, `@napi-rs/canvas` `1.0.10` (server-side chart PNGs; prebuilt binaries, no compiler needed on Windows/Linux).
+  4. Root `.gitignore` → the `jira_credentials.json` / `email_credentials.json` lines and the `web_legacy_emails/schedule_runs.json` / `last_scheduled_preview.html` lines.
+  5. `.github/workflows/web-legacy-emails-weekly.yml` → the GitHub Actions workflow (Section 6d).
+  6. Root `.gitignore` → `!web_legacy_emails/deploy/sync_push.bat` (re-includes the launcher; the main repo ignores `*.bat`).
+* **Deploy folder** `../web_legacy_emails_deploy` (standalone repo) is **generated** by `web_legacy_emails/deploy/sync_deploy.js` — never edit it directly (Section 6e).
 
 ---
 
@@ -27,13 +30,21 @@ This is an **independent project** that lives inside the dashboard repo. It shar
 | :--- | :--- |
 | `web_legacy_emails/index.html` | Standalone page: page CSS, toolbar, an empty `#emailDigest` container (filled by the template), off-screen `#chartRenderArea`, and the 2 modals (Edit / Trend Data, Jira Settings). Loads Chart.js + `chartjs-plugin-datalabels@2` from jsDelivr, then `email_template.js` (classic script), then `script.js` (module). |
 | `web_legacy_emails/email_template.js` | **Shared digest builder** (browser global `WebLegacyEmail` / Node `module.exports`): `filterHistoryForChart()`, `previousWeek()`, `buildChartConfig()`, `buildEmailHtml()`, `COLORS`. The page preview and the future email sender both use it, so the preview is exactly the email. |
-| `web_legacy_emails/script.js` | Page state and logic: loading config/history, `renderDigest()` (chart PNGs + template → preview), Jira URL building, date helpers, modal handlers. |
+| `web_legacy_emails/script.js` | Page state and logic: loading config/history, `renderDigest()` (chart PNGs + template → preview), date helpers, modal handlers, schedule UI. |
+| `web_legacy_emails/core.js` | **Node-side core** (no Express/browser): config/history/credential file I/O (env vars override credentials), Jira counts (`fetchCounts`), server-side chart PNGs (`renderChartPng`), Gmail sending (`sendDigestMail`), the unattended **`runWeeklyJob()`**, and the in-server **scheduler** (`startScheduler`). Errors are `JobError` with an HTTP `status`. |
+| `web_legacy_emails/send_weekly.js` | **CLI** for Windows Task Scheduler / GitHub Actions: `node web_legacy_emails/send_weekly.js [--test] [--dry-run] [--no-save]`. Exit 0/1. |
+| `web_legacy_emails/last_scheduled_send.json` | GitHub Actions "already sent today" marker `{ date, mode, at }` (Section 6d). Exists only in the deploy repo (committed by the workflow); never synced over. |
+| `web_legacy_emails/schedule_runs.json` | Run log (newest first, last 50): `{ at, trigger, slot, test, dryRun, ok, date, counts, to, cc, subject, savedSnapshot, error }`. **Gitignored**. |
+| `web_legacy_emails/last_scheduled_preview.html` | Written by `--dry-run`: the exact email with charts inlined. **Gitignored**. |
 | `web_legacy_emails/jira_config.json` | Jira domain, email metadata (`recipients`, `cc`, `subject`) and the 6 JQL queries. No secrets. Read/written by the server. |
 | `web_legacy_emails/email_credentials.json` | `{ gmailUser, gmailAppPassword }`. **Gitignored**, server-only, never returned to the browser (`hasAppPassword` flag instead). Created on first Email settings save. |
 | `web_legacy_emails/jira_credentials.json` | `{ jiraEmail, jiraApiToken }`. **Gitignored** (`.gitignore` pattern `jira_credentials.json`, any folder), server-only, never returned to the browser. Created automatically. Never commit, paste or share it. |
 | `web_legacy_emails/jira_weekly_history.json` | Ordered array of weekly snapshots (oldest → newest). Read/written by the server. |
 | `web_legacy_emails/tests/run_tests.js` | Module-scoped regression suite. |
-| `server.js` (Jira block only) | `/api/jira/*` endpoints; file paths resolve to `web_legacy_emails/`. |
+| `web_legacy_emails/GO_LIVE_GUIDE.html` | Human-readable, step-by-step GitHub go-live guide (10 steps with tick-boxes saved in the browser, copy buttons, everyday changes, cron/IST table, troubleshooting). Static, no data; synced to the deploy repo. Keep in line with Section 6d when the workflow or settings change. |
+| `web_legacy_emails/routes.js` | **All HTTP routes** (`register(app, { startScheduler })`) for `/api/jira/*` and `/api/email/*`, plus `blockPrivateFiles` middleware. Shared by the main `server.js` and the deploy repo's standalone `server.js`. |
+| `web_legacy_emails/deploy/` | Deploy tooling (not deployed itself): `sync_deploy.js` (sync script), `sync_push.bat` (double-click launcher), templates `server.js`, `index.html`, `README.md`, `gitignore.txt` for the standalone repo. |
+| `server.js` (2 lines) | `blockPrivateFiles` before static serving; `routes.register(...)`. |
 | Root `index.html` | Feature dropdown entry → navigates to `web_legacy_emails/index.html` on **Proceed**. |
 
 **Access**: start the server (`npm start` / `node server.js`), open `http://localhost:3000`, pick **Web legacy emails**, click **Proceed** (or open `http://localhost:3000/web_legacy_emails/index.html` directly).
@@ -130,7 +141,7 @@ Both charts show the same filtered set of history points.
 ---
 
 ## 6. Backend Endpoints (`server.js`, Jira block)
-Constants: `JIRA_DIR = web_legacy_emails/`, `JIRA_HISTORY_FILE`, `JIRA_CONFIG_FILE`. Read helpers return `[]` / `{}` on missing file or parse error (logged as `[Jira] ...`).
+All logic is in `core.js` (`FILES` = module-folder paths); `routes.js` only translates HTTP. Read helpers return `[]` / `{}` on missing file or parse error (logged as `[WebLegacyEmails] ...`). Credential files are only modified via `read*CredentialsFile()` so environment-variable secrets are never written to disk.
 
 | Method & Path | Behaviour |
 | :--- | :--- |
@@ -169,6 +180,85 @@ Constants: `JIRA_DIR = web_legacy_emails/`, `JIRA_HISTORY_FILE`, `JIRA_CONFIG_FI
 
 **How to get a Google App Password**: myaccount.google.com → Security → 2-Step Verification (must be on) → App passwords → create (name e.g. "Jira digest") → copy the 16 characters → paste in 📧 Email → Save Settings → Send Test to Me.
 
+## 6c. Scheduled / Unattended Sending (`core.js`, `send_weekly.js`)
+**The job** — `runWeeklyJob({ test, dryRun, saveSnapshot, trigger, slot })`: `fetchCounts()` (live Jira; **throws → nothing sent**) → date = today (`formatDateLabel`) → charts from `withCurrentWeek(history, today)` rendered by `renderChartPng()` (chart.js + datalabels on `@napi-rs/canvas`, 820×320 @2x) → `buildEmailHtml()` (same template as the page; ▲/▼ vs `previousWeek(history, today)`, links via `buildJiraLinks`) → `sendDigestMail()` with charts as `cid:older-trend` / `cid:recent-trend` → if `saveSnapshot && !test`, `upsertHistory(today)`. Every run (ok or failed) is appended to `schedule_runs.json`.
+* `test`: To = Gmail account only, no CC, subject `[TEST] …`, never saves history.
+* `dryRun`: writes `last_scheduled_preview.html` (charts inlined), sends nothing, saves nothing.
+* Independent of Send Method: the schedule has its own `enabled` flag; the 403 guard only applies to the button route `/api/email/send`.
+
+**Schedule config** (`jira_config.json` → `schedule`, default `{ enabled: false, days: [5], time: "10:00", saveSnapshot: true }`; days 0=Sun…6=Sat; time 24-hour local). `writeSchedule()` rejects a bad time (`HH:MM`) and enabling with no days (400) **before writing**.
+
+**In-server scheduler** (`startScheduler()`, started only when `server.js` is the main process): checks every 30 s; when enabled and today/time match, runs the job once per slot (`"YYYY-MM-DD HH:MM"`), guarded in memory and by the run log (survives restarts within the minute); never overlaps runs. The job is injectable (`startScheduler({ job })`) for testing; returns `stopScheduler`. Console logs `[WebLegacyEmails] Scheduled send …`.
+
+**Endpoints**: `GET /api/email/schedule` → `{ schedule, nextRun, runs (last 10) }`; `POST /api/email/schedule` (save, 400 on invalid); `POST /api/email/schedule/run-now` `{ test }` (default `test: true`) runs the full server-side job immediately.
+
+**UI** (📧 Email → *📅 Scheduled Sending*): enable checkbox, Mon–Sun checkboxes, time, "save the week to trend history" checkbox, status (`● Enabled — next send: …` / `○ Off`), last 5 runs (✅/❌), *Save Schedule* (also saves the Email settings first), *Run Now (test to me)*. The Gmail Login section is always visible now (scheduled sending needs it in either Send Method).
+
+**CLI** (`send_weekly.js`): same job without the server. Credentials from files or env vars `JIRA_EMAIL`, `JIRA_API_TOKEN`, `GMAIL_USER`, `GMAIL_APP_PASSWORD` (env wins). To/CC from `jira_config.json` unless `EMAIL_TO` / `EMAIL_CC` are set and non-empty (`readRecipients()`; prints `Recipients from: To = EMAIL_TO|config, …`). Recipients are validated before sending (400 on a bad address).
+
+**GitHub Actions**: built — see Section 6d.
+
+## 6d. GitHub Actions (`.github/workflows/web-legacy-emails-weekly.yml`)
+Runs `send_weekly.js` on a fresh `ubuntu-latest` machine — **no dashboard server**. Steps: checkout → setup-node 24 (npm cache) → `npm ci` (lockfile includes `@napi-rs/canvas-linux-x64-gnu`) → send step → upload `last_scheduled_preview.html` as artifact `email-preview` (dry-run only, 14 days) → commit `jira_weekly_history.json` back if it changed (`github-actions[bot]`, message `chore(web-legacy-emails): weekly snapshot YYYY-MM-DD`; `permissions: contents: write`). `TZ: Asia/Kolkata` so dates match the dashboard. `concurrency` prevents overlapping runs; 15-minute timeout.
+
+**Triggers**
+* `schedule`: cron `0,30 10-18 * * *` = every 30 min **15:30–00:00 IST** — a **wake-up window, not the send time** (GitHub cron is UTC, fixed — it cannot read variables — and often starts 5–20 min late). Each wake-up first runs **`send_weekly.js --check-due`** (no `npm ci`, a few seconds; `core.isSendDue()`): **due** when today (IST, `TZ=Asia/Kolkata`) is in `SEND_DAYS`, the time is at/after `SEND_TIME`, and `last_scheduled_send.json` doesn't already say today **for the same mode**. Not due → remaining steps skipped. Due → setup-node, `npm ci`, send with `--mark-sent` (mode from `SCHEDULE_MODE`, default `send`; `test` sends `[TEST]` to `GMAIL_USER` only and keeps history unchanged). The first wake-up after SEND_TIME sends; later ones say "Already sent today". SEND_TIME before 15:30 sends at the first wake-up (~15:30). Whole job **skipped (no cost) unless `WEEKLY_EMAIL_ENABLED` = `true`**.
+* **Day/time are variables only — never edit the cron line for them.** Changing the cron makes GitHub re-register the schedule, which is slow and unreliable (observed 2026-10-20). Quick scheduled test: `SCHEDULE_MODE=test`, `SEND_DAYS` = today, `SEND_TIME` = **now or earlier** → the next wake-up sends.
+* `workflow_dispatch` (Actions tab → *Run workflow*): always runs (no due check). Input `mode` = `test` (default; only to the Gmail account, nothing committed) / `dry-run` (build only; preview artifact) / `send` (real send + save history + marker).
+* Checkout uses `ref: github.ref_name` (latest branch tip, not the triggering commit) so a queued run sees a marker committed minutes earlier.
+* Marker `web_legacy_emails/last_scheduled_send.json` = `{ date: "Oct 23, 2026", mode: "send"|"test", at: ISO }`; written by `--mark-sent`, committed with the history (`chore(web-legacy-emails): weekly summary sent YYYY-MM-DD`). A `test` marker does not block a real `send` the same day. To re-test the same day, delete the file in the repo. The deploy sync never overwrites or deletes it (`DEPLOY_OWNED`).
+* Cost (private repo): ~18 wake-ups/day, each billed ≥ 1 min ≈ 540 Actions minutes/month (free plan: 2,000).
+* History of this design: variable-driven (B) → briefly a single fixed cron edited on GitHub (A) → **back to B** the same evening because cron edits need GitHub to re-register the schedule and could not be tested quickly.
+
+**Repository settings** (Settings → Secrets and variables → Actions)
+| Name | Kind | Purpose |
+| :--- | :--- | :--- |
+| `JIRA_API_TOKEN` | **Secret only** | Jira token (encrypted, masked in logs) |
+| `GMAIL_APP_PASSWORD` | **Secret only** | Google App Password |
+| `JIRA_EMAIL` | Variable (or Secret) | Atlassian login email — workflow uses `vars.X \|\| secrets.X` |
+| `GMAIL_USER` | Variable (or Secret) | Gmail sender address — `vars.X \|\| secrets.X` |
+| `EMAIL_TO` | Variable | To list (comma/semicolon separated); overrides `jira_config.json` `recipients` when non-empty |
+| `EMAIL_CC` | Variable | CC list; overrides `jira_config.json` `cc` when non-empty |
+| `WEEKLY_EMAIL_ENABLED` | Variable | `true` = scheduled send on; anything else / missing = off |
+| `SEND_DAYS` | Variable | Days, e.g. `Fri`, `Mon,Fri`, `monday; friday`, or numbers 0–6 (0 = Sun). Default `Fri`. Unknown names fail the check step |
+| `SEND_TIME` | Variable | IST `HH:MM` 24-hour (`9:05` accepted). Default `17:30`. Effective range 15:30–23:59 |
+| `SCHEDULE_MODE` | Variable | `send` (default) or `test` for scheduled runs (safe test of the scheduled path) |
+Token/password are deliberately **not** read from Variables: Variables are plain text, readable by anyone with repo access and not masked in logs (user asked for variables "if possible"; decision 2026-10-20).
+
+**Changing To/CC**: edit `EMAIL_TO` / `EMAIL_CC` on GitHub (no commit needed; next run uses them). If unset, the committed `jira_config.json` values (edited via the local dashboard + push) are used. The dashboard UI cannot run on GitHub.
+
+**History on GitHub**: each real send commits the updated history. Run `git pull` locally to see it in the dashboard. Once GitHub is live, treat it as the owner of history (local edits + push can conflict). Run results live in the Actions tab (logs kept ~90 days); `schedule_runs.json` is not kept on GitHub.
+
+**Go-live checklist** (detailed version: `GO_LIVE_GUIDE.html` — step 8 tests one scheduled send with `SCHEDULE_MODE=test`, `SEND_DAYS` = today, `SEND_TIME` = now or earlier; step 9 sets real To/CC/day/time): repo on GitHub (**private**: config holds recipients, JQL holds Jira account IDs) → add secrets/variables → *Run workflow* `test` → `dry-run` (check artifact) → set `WEEKLY_EMAIL_ENABLED=true` → **turn off the local schedule** (otherwise recipients get two emails).
+
+**Verified locally 2026-10-20**: YAML parses (triggers, cron, modes, `if:`); CLI with env-only credentials — wrong `JIRA_API_TOKEN` env fails (exit 1) despite a valid file (env wins), real values + `TZ=Asia/Kolkata` dry-run OK, history unchanged. Not yet run on GitHub itself.
+
+## 6e. Standalone Deploy (`web_legacy_emails/deploy/sync_deploy.js`)
+Copies **only this module's end-user files** from the main project into the separate deploy repo folder `C:\Users\rahul.shetty\Documents\Important\AntiGravity\web_legacy_emails_deploy` (default: `../web_legacy_emails_deploy` next to the main project; `--dest <folder>` to override). Modelled on `Data Generate/sync_links.py` (one-way push, secrets excluded and deleted).
+
+**Run**: double-click `web_legacy_emails/deploy/sync_push.bat`, or `node web_legacy_emails/deploy/sync_deploy.js [--dry-run] [--pull-history] [--overwrite-history]`. Then `git status` / commit / push **in the deploy folder**.
+
+**Deploy repo layout** (same relative paths as the main project, so the workflow and `../style.css` work unchanged):
+| Deploy path | From |
+| :--- | :--- |
+| `web_legacy_emails/**` | module folder, **mirrored** (stale files deleted) — excluding `deploy/`, `node_modules`, `*.log/*.bak/*.tmp` and **private files** |
+| `.github/workflows/web-legacy-emails-weekly.yml` | main project workflow |
+| `style.css` | main project root (the page links `../style.css`) |
+| `server.js`, `index.html` (redirect), `README.md`, `.gitignore` | templates in `web_legacy_emails/deploy/` (`gitignore.txt` → `.gitignore`) |
+| `package.json` | generated: only `express`, `body-parser`, `nodemailer`, `chart.js`, `chartjs-plugin-datalabels`, `@napi-rs/canvas` at the main project's pinned versions; scripts `start` / `send` / `test` |
+| `package-lock.json` | `npm install --package-lock-only` in the deploy folder whenever `package.json` changes (needed for `npm ci` on GitHub; includes the Linux canvas binary) |
+
+**Rules**
+* **Secrets never deployed**: `jira_credentials.json`, `email_credentials.json`, `schedule_runs.json`, `last_scheduled_preview.html` are skipped, and **deleted** from the deploy folder if found (`[SECURITY]`).
+* **History is owned by the deploy repo** once it exists there (GitHub Actions commits new weeks into it): the sync **keeps** the deploy copy (`[KEEP]`). `--pull-history` copies it back into the main project (main copy backed up to the temp folder first); `--overwrite-history` forces main → deploy.
+* Never touches the deploy folder's `.git`, `node_modules` or files outside the managed paths. Re-running with no changes reports 0 copied.
+* Standalone `server.js`: binds **127.0.0.1** only (the page can change settings and send email), redirects `/` to the page, blocks private files and dotfiles, starts the scheduler only as the main process.
+
+**Verified 2026-10-20**: first sync → 18 files, no secrets; in the deploy folder `npm ci` OK, tests 14/14, CLI `--dry-run` with env-only credentials OK (no credential files present), standalone server serves the page/API and 404s private files and `.github`; planted secret → deleted, stale file → removed, deploy-side history → kept; second run → 0 changes.
+
+## 6f. Private-file protection
+The main server shares the **whole project folder** (`express.static(__dirname)`, listening on `0.0.0.0`). Until 2026-10-20 this exposed `jira_credentials.json` and `email_credentials.json` to anyone on the network (verified HTTP 200 with token/app password). Now `routes.blockPrivateFiles` (→ `core.isPrivatePath`) runs **before** static serving and returns 404 for `PRIVATE_FILES` (`jira_credentials.json`, `email_credentials.json`, `schedule_runs.json`, `last_scheduled_preview.html`). It URL-decodes and normalises like Windows does (case-insensitive, trailing dots/spaces and `:stream` suffixes ignored) and refuses malformed encodings. Covered by a regression test. Other features' files served by the main server were not reviewed (out of this module's scope).
+
 ## 7. Historical Data Provenance
 * `jira_weekly_history.json` holds **real** weekly counts transcribed from the manually-sent weekly email / its trend charts. It is not test data.
 * Initial seed was 18 points read off the email screenshot; it was then replaced with the full **66-week** dataset (Jun 20, 2025 → Oct 16, 2026) supplied by the user.
@@ -184,7 +274,13 @@ Constants: `JIRA_DIR = web_legacy_emails/`, `JIRA_HISTORY_FILE`, `JIRA_CONFIG_FI
 * **Fetch ≠ Save (by design)**: fetched counts are lost on reload unless 💾 Save Snapshot is clicked. The badge shows *(not saved)* as a reminder.
 * **Compose paste untested in Gmail** (as of 2026-10-19): pasting the copied HTML with data-URL chart images into Gmail compose has not yet been confirmed by the user. If charts don't paste, fall back to dragging the chart images or use Send Method = auto.
 * **Gmail app passwords** (auto mode only) need 2-Step Verification on the Google account and the Workspace admin allowing app passwords. If the option is missing, IT has disabled it; the alternative is OAuth (not built).
-* **Sending needs the page open**: chart PNGs are rendered in the browser (Chart.js) and posted with the email. A future unattended/scheduled send (Task Scheduler) must render charts server-side (e.g. headless browser via the existing `puppeteer-core`, or `chartjs-node-canvas`).
+* **Button sends** (compose/auto) use browser-rendered charts; **scheduled/CLI sends** render charts server-side with the same `buildChartConfig()` (visually identical; fonts may differ slightly by OS).
+* **Time only applies on ticked days**: a time set for "today" does nothing unless today's weekday is ticked (default is Fri only). The save toast and status line show the real next send.
+* **Credentials were reachable over HTTP before 2026-10-20** (Section 6f). If the dashboard ran on a shared network before then, consider rotating the Jira API token and Google App Password.
+* **Deploy folder is generated**: edits made directly there are overwritten on the next sync (except history).
+* **GitHub Actions workflow not yet run on GitHub** (as of 2026-10-20) — only validated locally (Section 6d).
+* **Double sends**: if both the local schedule and `WEEKLY_EMAIL_ENABLED=true` are on, recipients get two emails.
+* **In-server scheduler needs the PC on and the dashboard server running** at the scheduled minute; a missed slot is **not** caught up later. Times use the PC's local clock.
 * **nodemailer pinned to 10.0.9**: versions ≤ 10.0.5 have high-severity advisories (header/SMTP injection, unintended-domain delivery). 10.1.x was days old when added (2026-10-19), so the newest patched release older than 5 weeks was chosen. Upgrade deliberately, re-run `npm audit`.
 * **CDN scripts unpinned**: `chart.js` is loaded without a version.
 
@@ -210,3 +306,11 @@ Constants: `JIRA_DIR = web_legacy_emails/`, `JIRA_HISTORY_FILE`, `JIRA_CONFIG_FI
 * **2026-10-19**: Renamed "Weekly Digest" → "Weekly Summary" (email header band, page title, auto-send confirm text).
 * **2026-10-19**: Email widened 680px → 900px and charts 616×280 → 820×320 to use empty space; sizes centralised in `LAYOUT` (exported from `email_template.js`).
 * **2026-10-19**: Removed outside-click close from all three modals; they close only via × or Cancel.
+* **2026-10-20**: **Scheduled / unattended sending** (step 1 toward GitHub Actions). New `core.js` (all Node logic moved out of `server.js`; routes are now thin) and `send_weekly.js` CLI. Charts rendered server-side (pinned `chart.js@4.5.1`, `chartjs-plugin-datalabels@2.2.0`, `@napi-rs/canvas@1.0.10`). In-server scheduler with UI (days/time/save-to-history, Run Now test, run log). `formatDateLabel`/`buildJiraUrl`/`buildJiraLinks` moved into `email_template.js` (removed from `script.js`). Env-var credential overrides for CI. Verified: live fetch through the refactored routes, CLI `--dry-run` end-to-end (history unchanged), scheduler fires exactly once per slot (stub job). 2 tests added (13 total).
+* **2026-10-20**: Save Schedule toast now states the exact next send (weekday, date, time). Reason: a 17:04 test on a Tuesday did not send because only Fri (the default) was ticked — the time applies only on ticked days.
+* **2026-10-20**: **GitHub Actions workflow** `.github/workflows/web-legacy-emails-weekly.yml` (Fri 10:00 IST cron gated by `WEEKLY_EMAIL_ENABLED`, manual run with test/dry-run/send, preview artifact, history commit-back). To/CC overridable by repository variables `EMAIL_TO` / `EMAIL_CC` (`core.readRecipients()`), recipients validated before sending; `JIRA_EMAIL` / `GMAIL_USER` accepted as variables or secrets, token/password secrets only. Email modal notes the override. 1 test added (14 total).
+* **2026-10-20**: **Security fix** — credential files were downloadable from the main server (static root = project folder, bound to 0.0.0.0); now blocked by `routes.blockPrivateFiles` / `core.isPrivatePath` before static serving. **Routes moved** from `server.js` into `web_legacy_emails/routes.js` (`server.js` now has 2 lines for this module). **Standalone deploy**: `web_legacy_emails/deploy/` with `sync_deploy.js` (+ `sync_push.bat`) and templates; first sync to `web_legacy_emails_deploy` verified end-to-end (Section 6e). 1 test added (15 total).
+* **2026-10-20**: Added `GO_LIVE_GUIDE.html` (step-by-step GitHub go-live: repo, push, secrets, variables, Actions permissions, test → dry-run, real To/CC, `WEEKLY_EMAIL_ENABLED`, local schedule off, after-Friday checks, troubleshooting). Documentation only.
+* **2026-10-20**: **GitHub schedule now variable-driven** (user: test one scheduled send; day/time should be variables; sends are usually after 17:00 IST). Workflow wakes every 30 min 15:30–00:00 IST (`0,30 10-18 * * *`) and runs `send_weekly.js --check-due` (`core.isSendDue`) against `SEND_DAYS` / `SEND_TIME` (defaults Fri / 17:30) before installing anything; sends once per day per mode via the `last_scheduled_send.json` marker (`--mark-sent`); `SCHEDULE_MODE=test` for safe scheduled tests. Checkout uses the branch tip. Sync keeps the marker (`DEPLOY_OWNED`). Guide steps 8/9 rewritten (test one scheduled send → go real), everyday table now variable-based. 1 test added (16 total).
+* **2026-10-20**: **Back to a single fixed cron (Option A)** at the user's request — simpler than wake-ups. Default `0 12 * * 5` (Fri 17:30 IST). Day/time changed by editing the cron line on GitHub; `sync_deploy.js` preserves GitHub's cron lines (`--reset-schedule` to override). Removed `--check-due` / `--mark-sent`, `core.isSendDue` & helpers, the `last_scheduled_send.json` marker and the `SEND_DAYS` / `SEND_TIME` variables; kept `SCHEDULE_MODE`. Guide: new "Change the schedule (cron)" section (field diagram, examples for single/multiple days, single/multiple times, odd minutes like 9:18, before-05:30 IST, rules) with an **IST → cron converter** (11 conversion cases verified) and step-by-step edit/commit on github.com or via git; steps 8/9 rewritten. isSendDue test removed (15 total).
+* **2026-10-20**: **Rolled back to the variable-driven schedule (Option B)** at the user's request: with a fixed cron, every day/time change (including tests) needs GitHub to re-register the schedule — a 21:35 IST test cron committed shortly before did not fire. Restored `--check-due` / `--mark-sent`, `core.isSendDue` & helpers, the `last_scheduled_send.json` marker (`DEPLOY_OWNED`) and the `SEND_DAYS` / `SEND_TIME` variables; workflow cron back to `0,30 10-18 * * *` (wake-up window). Removed Option A's cron preservation / `--reset-schedule` from the sync (it would have kept a hand-edited GitHub cron) and the guide's cron section / IST converter. Guide steps 8/9 now test with `SEND_TIME` = now or earlier (next wake-up sends). isSendDue test restored (16 total).

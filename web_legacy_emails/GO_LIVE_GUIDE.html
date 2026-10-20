@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Go-Live Guide</title>
+<style>
+    :root {
+        --bg: #f6f7fb;
+        --card: #ffffff;
+        --text: #1e293b;
+        --muted: #64748b;
+        --border: #e2e8f0;
+        --accent: #1d4ed8;
+        --accent-soft: #eff6ff;
+        --ok: #15803d;
+        --ok-soft: #f0fdf4;
+        --warn: #b45309;
+        --warn-soft: #fffbeb;
+        --danger: #b91c1c;
+        --danger-soft: #fef2f2;
+        --code-bg: #f1f5f9;
+    }
+    @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+            --bg: #0f172a;
+            --card: #1e293b;
+            --text: #e2e8f0;
+            --muted: #94a3b8;
+            --border: #334155;
+            --accent: #60a5fa;
+            --accent-soft: #172554;
+            --ok: #4ade80;
+            --ok-soft: #052e16;
+            --warn: #fbbf24;
+            --warn-soft: #422006;
+            --danger: #f87171;
+            --danger-soft: #450a0a;
+            --code-bg: #0b1220;
+        }
+    }
+    :root[data-theme="dark"] {
+        --bg: #0f172a; --card: #1e293b; --text: #e2e8f0; --muted: #94a3b8; --border: #334155;
+        --accent: #60a5fa; --accent-soft: #172554; --ok: #4ade80; --ok-soft: #052e16;
+        --warn: #fbbf24; --warn-soft: #422006; --danger: #f87171; --danger-soft: #450a0a; --code-bg: #0b1220;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font: 15px/1.6 -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    }
+    .wrap { max-width: 860px; margin: 0 auto; padding: 24px 16px 64px; }
+    h1 { font-size: 1.7rem; margin: 0 0 4px; }
+    h2 { font-size: 1.2rem; margin: 0; }
+    h3 { font-size: 1rem; margin: 18px 0 6px; }
+    p { margin: 8px 0; }
+    a { color: var(--accent); }
+    .sub { color: var(--muted); margin: 0 0 20px; }
+
+    .progress { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 10px 0 12px; }
+    .bar { height: 8px; background: var(--border); border-radius: 99px; overflow: hidden; }
+    .bar > div { height: 100%; width: 0; background: var(--ok); transition: width .25s; }
+    .progress small { color: var(--muted); }
+
+    .overview { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 8px 0 20px; }
+    .overview a { display: block; text-decoration: none; color: var(--text); background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; font-size: 0.85rem; }
+    .overview a b { color: var(--accent); display: block; font-size: 0.75rem; }
+
+    .step { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 18px 18px 14px; margin: 16px 0; }
+    .step.done { border-color: var(--ok); }
+    .step-head { display: flex; align-items: center; gap: 12px; }
+    .num { flex: none; width: 34px; height: 34px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-weight: 800; display: grid; place-items: center; }
+    .step.done .num { background: var(--ok-soft); color: var(--ok); }
+    .step-head .meta { color: var(--muted); font-size: 0.8rem; }
+
+    ol, ul { padding-left: 22px; margin: 8px 0; }
+    li { margin: 4px 0; }
+
+    .check { display: flex; gap: 10px; align-items: flex-start; margin-top: 12px; padding: 10px 12px; background: var(--ok-soft); border-radius: 10px; cursor: pointer; }
+    .check input { margin-top: 4px; width: 18px; height: 18px; accent-color: var(--ok); flex: none; }
+
+    .note, .warn, .danger { border-radius: 10px; padding: 10px 12px; margin: 10px 0; font-size: 0.92rem; }
+    .note { background: var(--accent-soft); }
+    .warn { background: var(--warn-soft); }
+    .danger { background: var(--danger-soft); }
+    .note b:first-child, .warn b:first-child, .danger b:first-child { display: block; }
+
+    code { background: var(--code-bg); border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; font: 0.88em Consolas, "Courier New", monospace; word-break: break-word; }
+    .copy { cursor: pointer; }
+    .copy:hover { border-color: var(--accent); }
+    pre { position: relative; background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px 12px; overflow-x: auto; font: 0.86rem/1.55 Consolas, "Courier New", monospace; margin: 8px 0; }
+    pre button { position: absolute; top: 6px; right: 6px; }
+
+    button.btn { background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 7px; padding: 3px 10px; font-size: 0.78rem; cursor: pointer; }
+    button.btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    .table-wrap { overflow-x: auto; margin: 8px 0; }
+    table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+    th, td { border: 1px solid var(--border); padding: 7px 9px; text-align: left; vertical-align: top; }
+    th { background: var(--code-bg); }
+
+    .path { font-weight: 600; }
+    .path span { color: var(--muted); font-weight: 400; padding: 0 4px; }
+
+    .toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-size: 0.85rem; opacity: 0; transition: opacity .2s; pointer-events: none; }
+    .toast.show { opacity: 1; }
+
+    .reset { margin-top: 28px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+    <h1>Web Legacy Emails — Go-Live Guide</h1>
+    <p class="sub">Move the weekly Jira summary email from your PC to GitHub Actions, step by step. Tick each step as you finish it — your progress is remembered in this browser.</p>
+
+    <div class="progress">
+        <div class="bar"><div id="barFill"></div></div>
+        <small id="barText">0 of 10 steps done</small>
+    </div>
+
+    <div class="overview">
+        <a href="#s1"><b>Step 1</b>Create the GitHub repo</a>
+        <a href="#s2"><b>Step 2</b>Push the deploy folder</a>
+        <a href="#s3"><b>Step 3</b>Add the 2 Secrets</a>
+        <a href="#s4"><b>Step 4</b>Add the Variables</a>
+        <a href="#s5"><b>Step 5</b>Allow Actions to save history</a>
+        <a href="#s6"><b>Step 6</b>Run in test mode</a>
+        <a href="#s7"><b>Step 7</b>Run in dry-run mode</a>
+        <a href="#s8"><b>Step 8</b>Test one scheduled send</a>
+        <a href="#s9"><b>Step 9</b>Go real: team, day &amp; time</a>
+        <a href="#s10"><b>Step 10</b>Turn off the PC schedule</a>
+        <a href="#everyday"><b>Reference</b>Change day / time / recipients</a>
+    </div>
+
+    <div class="danger">
+        <b>Before you start: use fresh credentials</b>
+        Until Oct 20, 2026 the dashboard could expose the Jira token and Gmail app password to other machines on the network. Create a <b>new</b> Jira API token and a <b>new</b> Google App Password for GitHub, then delete the old ones (Jira: id.atlassian.com → Security → API tokens · Google: myaccount.google.com → Security → App passwords).
+    </div>
+
+    <div class="note">
+        <b>What you need ready</b>
+        A GitHub account · the new Jira API token · the new Google App Password · your Atlassian login email · the Gmail address that sends the email · 20–30 minutes.
+    </div>
+
+    <!-- STEP 1 -->
+    <section class="step" id="s1" data-step="1">
+        <div class="step-head"><div class="num">1</div><div><h2>Create a private repository on GitHub</h2><div class="meta">~2 minutes · on github.com</div></div></div>
+        <ol>
+            <li>Go to <a href="https://github.com/new" target="_blank" rel="noopener">github.com/new</a>.</li>
+            <li><b>Repository name:</b> <code class="copy">web-legacy-emails</code> (any name works).</li>
+            <li>Choose <b>Private</b>. The config contains recipient emails and the Jira queries contain team account IDs.</li>
+            <li>Leave <b>Add a README</b>, <b>.gitignore</b> and <b>license</b> <b>unticked</b> — the deploy folder already has them, and an empty repo avoids a merge conflict on the first push.</li>
+            <li>Click <b>Create repository</b>. Keep the page open; you need its URL (e.g. <code>https://github.com/your-name/web-legacy-emails.git</code>).</li>
+        </ol>
+        <div class="note"><b>Company GitHub organisation?</b> If you create it under a Cropin organisation instead of your personal account, an admin may need to allow GitHub Actions there (see Step 5).</div>
+        <label class="check"><input type="checkbox"> I created an empty private repository and have its URL.</label>
+    </section>
+
+    <!-- STEP 2 -->
+    <section class="step" id="s2" data-step="2">
+        <div class="step-head"><div class="num">2</div><div><h2>Refresh the deploy folder and push it</h2><div class="meta">~5 minutes · on your PC</div></div></div>
+        <h3>2a. Refresh the deploy folder</h3>
+        <p>Double-click <code>web_legacy_emails\deploy\sync_push.bat</code> in the main dashboard project (or run the command below from the project folder). It copies only this module's files and never copies passwords.</p>
+        <pre><button class="btn" data-copy>Copy</button>node web_legacy_emails/deploy/sync_deploy.js</pre>
+        <h3>2b. Push it to GitHub (first time only)</h3>
+        <p>Open <b>Command Prompt</b> and run these one by one. Replace the URL in the 5th line with your repository's URL from Step 1.</p>
+        <pre><button class="btn" data-copy>Copy</button>cd "C:\Users\rahul.shetty\Documents\Important\AntiGravity\web_legacy_emails_deploy"
+git init
+git add .
+git commit -m "Initial commit: Web Legacy Emails"
+git remote add origin https://github.com/YOUR-NAME/web-legacy-emails.git
+git branch -M main
+git push -u origin main</pre>
+        <div class="warn"><b>Check before you push</b>Run <code class="copy">git status</code> after <code>git add .</code> — you must <b>not</b> see <code>jira_credentials.json</code>, <code>email_credentials.json</code> or <code>node_modules</code> in the list. They are excluded by <code>.gitignore</code>.</div>
+        <p>Refresh the GitHub page: you should see <code>.github</code>, <code>web_legacy_emails</code>, <code>package.json</code>, <code>server.js</code>, <code>README.md</code> and a few more files.</p>
+        <label class="check"><input type="checkbox"> The files are on GitHub and no credentials file is in the list.</label>
+    </section>
+
+    <!-- STEP 3 -->
+    <section class="step" id="s3" data-step="3">
+        <div class="step-head"><div class="num">3</div><div><h2>Add the 2 Secrets (token and password)</h2><div class="meta">~3 minutes · on github.com</div></div></div>
+        <p class="path">Your repository <span>→</span> Settings <span>→</span> Secrets and variables <span>→</span> Actions <span>→</span> <u>Secrets</u> tab <span>→</span> New repository secret</p>
+        <p>Create these two, one at a time (Name exactly as shown, then paste the value, then <b>Add secret</b>):</p>
+        <div class="table-wrap"><table>
+            <tr><th>Name</th><th>Value</th></tr>
+            <tr><td><code class="copy">JIRA_API_TOKEN</code></td><td>The new Jira API token (starts with <code>ATATT</code>)</td></tr>
+            <tr><td><code class="copy">GMAIL_APP_PASSWORD</code></td><td>The new 16-character Google App Password (spaces don't matter)</td></tr>
+        </table></div>
+        <div class="note"><b>Why Secrets and not Variables?</b>Secrets are encrypted and hidden as <code>***</code> in run logs. Nobody — including you — can read them back after saving; to change one, just add it again with the same name.</div>
+        <label class="check"><input type="checkbox"> Both secrets show in the Secrets list.</label>
+    </section>
+
+    <!-- STEP 4 -->
+    <section class="step" id="s4" data-step="4">
+        <div class="step-head"><div class="num">4</div><div><h2>Add the Variables (emails) — test settings first</h2><div class="meta">~3 minutes · on github.com</div></div></div>
+        <p class="path">Same page <span>→</span> <u>Variables</u> tab <span>→</span> New repository variable</p>
+        <div class="table-wrap"><table>
+            <tr><th>Name</th><th>Value for now</th><th>What it does</th></tr>
+            <tr><td><code class="copy">JIRA_EMAIL</code></td><td>Your Atlassian login email</td><td>Logs in to Jira with the token</td></tr>
+            <tr><td><code class="copy">GMAIL_USER</code></td><td>The Gmail address that sends the email</td><td>Sender account (must match the App Password)</td></tr>
+            <tr><td><code class="copy">EMAIL_TO</code></td><td><b>Only your own email</b> for now</td><td>"To" list — real team later (Step 8)</td></tr>
+            <tr><td><code class="copy">EMAIL_CC</code></td><td><b>Skip it for now</b></td><td>"CC" list — added in Step 8</td></tr>
+        </table></div>
+        <div class="warn"><b>Do not create <code>WEEKLY_EMAIL_ENABLED</code> yet</b>That switch turns on scheduled sending. It comes in Step 8, together with the test settings.</div>
+        <div class="note"><b>Several addresses?</b>Separate them with commas: <code>a@cropin.com, b@cropin.com</code></div>
+        <label class="check"><input type="checkbox"> JIRA_EMAIL, GMAIL_USER and EMAIL_TO (my own email) are added.</label>
+    </section>
+
+    <!-- STEP 5 -->
+    <section class="step" id="s5" data-step="5">
+        <div class="step-head"><div class="num">5</div><div><h2>Allow GitHub Actions to run and to save history</h2><div class="meta">~1 minute · on github.com</div></div></div>
+        <p class="path">Your repository <span>→</span> Settings <span>→</span> Actions <span>→</span> General</p>
+        <ol>
+            <li><b>Actions permissions:</b> "Allow all actions and reusable workflows" (or at least "Allow actions created by GitHub" — the workflow only uses GitHub's own actions).</li>
+            <li>Scroll to <b>Workflow permissions</b> → choose <b>Read and write permissions</b> → <b>Save</b>. This lets the workflow commit the new week to <code>jira_weekly_history.json</code> after each real send.</li>
+        </ol>
+        <div class="note"><b>Options greyed out?</b>Your organisation controls them — ask a GitHub admin to allow Actions with write permission for this repository.</div>
+        <label class="check"><input type="checkbox"> Actions are allowed and Workflow permissions are "Read and write".</label>
+    </section>
+
+    <!-- STEP 6 -->
+    <section class="step" id="s6" data-step="6">
+        <div class="step-head"><div class="num">6</div><div><h2>Run the workflow in <code>test</code> mode</h2><div class="meta">~3 minutes · on github.com + your inbox</div></div></div>
+        <ol>
+            <li>Open the <b>Actions</b> tab of your repository. If GitHub asks, click <b>"I understand my workflows, go ahead and enable them"</b>.</li>
+            <li>In the left list, click <b>Web Legacy Emails – Weekly Summary</b>.</li>
+            <li>On the right, click <b>Run workflow</b> → Branch <code>main</code> → mode <b><code>test</code></b> → green <b>Run workflow</b> button.</li>
+            <li>Refresh after a few seconds. A new run appears with a yellow dot (running). It takes about 1–2 minutes.</li>
+            <li>A <b>green tick</b> means success. Check the inbox of <b>GMAIL_USER</b> for an email whose subject starts with <code>[TEST]</code>.</li>
+        </ol>
+        <p><b>What test mode does:</b> fetches live counts from Jira, draws the charts, sends <i>only to the Gmail account itself</i>, and does <b>not</b> change the history.</p>
+        <div class="note"><b>Red cross?</b>Click the run → <b>weekly-summary</b> → expand <b>Send weekly summary</b>. The last line says what failed — see the Troubleshooting table at the bottom.</div>
+        <label class="check"><input type="checkbox"> The run is green and the [TEST] email arrived with cards and charts.</label>
+    </section>
+
+    <!-- STEP 7 -->
+    <section class="step" id="s7" data-step="7">
+        <div class="step-head"><div class="num">7</div><div><h2>Run the workflow in <code>dry-run</code> mode</h2><div class="meta">~3 minutes · on github.com</div></div></div>
+        <ol>
+            <li>Actions → <b>Web Legacy Emails – Weekly Summary</b> → <b>Run workflow</b> → mode <b><code>dry-run</code></b> → Run workflow.</li>
+            <li>When it is green, click the run. Scroll to <b>Artifacts</b> at the bottom and download <b>email-preview</b> (a .zip).</li>
+            <li>Unzip it and open <code>last_scheduled_preview.html</code> in your browser — this is exactly what the team will receive.</li>
+        </ol>
+        <p><b>What dry-run does:</b> builds the full email but sends <b>nothing</b> and saves <b>nothing</b>.</p>
+        <label class="check"><input type="checkbox"> The preview looks right (numbers, ▲/▼ changes, both charts, links).</label>
+    </section>
+
+    <!-- STEP 8 -->
+    <section class="step" id="s8" data-step="8">
+        <div class="step-head"><div class="num">8</div><div><h2>Test one scheduled send (to you only)</h2><div class="meta">~3 minutes setup + up to ~45 minutes waiting · on github.com · no file edits</div></div></div>
+        <p>This proves the <b>automatic</b> path: GitHub starts the run by itself — you don't click anything.</p>
+        <p class="path">Settings <span>→</span> Secrets and variables <span>→</span> Actions <span>→</span> Variables tab <span>→</span> New repository variable</p>
+        <div class="table-wrap"><table>
+            <tr><th>Name</th><th>Value for the test</th><th>Meaning</th></tr>
+            <tr><td><code class="copy">SCHEDULE_MODE</code></td><td><code class="copy">test</code></td><td>Scheduled runs send a <code>[TEST]</code> email <b>only to GMAIL_USER</b> and don't touch history</td></tr>
+            <tr><td><code class="copy">SEND_DAYS</code></td><td><b>Today</b>, e.g. <code>Tue</code></td><td>Days to send: <code>Mon</code> <code>Tue</code> <code>Wed</code> <code>Thu</code> <code>Fri</code> <code>Sat</code> <code>Sun</code> — several with commas</td></tr>
+            <tr><td><code class="copy">SEND_TIME</code></td><td><b>The current time or earlier</b>, e.g. <code>16:00</code></td><td>IST, 24-hour. "At or after" this time — so a time already passed means <b>the next wake-up sends</b></td></tr>
+            <tr><td><code class="copy">WEEKLY_EMAIL_ENABLED</code></td><td><code class="copy">true</code> (lower case)</td><td>Master switch for scheduled sending</td></tr>
+        </table></div>
+        <h3>Then wait and watch</h3>
+        <ol>
+            <li>Open the <b>Actions</b> tab (Event filter → <b>schedule</b>). GitHub wakes the workflow at <b>:00 and :30 past each hour between 15:30 and 00:00 IST</b>, often 5–20 minutes late. Each wake-up appears as a <i>Scheduled</i> run.</li>
+            <li>Open the first one → step <b>Is a send due now?</b> says <code>Due (…)</code>, then it installs and sends. Your inbox gets the <code>[TEST]</code> email.</li>
+            <li>Later wake-ups that day finish in seconds with <code>Already sent today</code> — proof it sends only once.</li>
+        </ol>
+        <div class="note"><b>Why "wake-ups"?</b>GitHub's timer (the <code>cron:</code> line) is fixed and can't read variables, so the workflow wakes every 30 minutes in this evening window and checks SEND_DAYS / SEND_TIME. You never edit the file — only the variables. A SEND_TIME earlier than 15:30 sends at the first wake-up (~15:30). Need morning sends? Ask to widen the window.</div>
+        <div class="note"><b>Test again the same day?</b>Delete <code>web_legacy_emails/last_scheduled_send.json</code> in the repository (open it on github.com → ⋯ → Delete file). A test send never blocks a real send on the same day.</div>
+        <label class="check"><input type="checkbox"> A Scheduled run said "Due" and the [TEST] email arrived.</label>
+    </section>
+
+    <!-- STEP 9 -->
+    <section class="step" id="s9" data-step="9">
+        <div class="step-head"><div class="num">9</div><div><h2>Go real: team recipients, day and time</h2><div class="meta">~3 minutes · on github.com · no file edits</div></div></div>
+        <p class="path">Settings <span>→</span> Secrets and variables <span>→</span> Actions <span>→</span> Variables tab <span>→</span> ✏️ next to each</p>
+        <div class="table-wrap"><table>
+            <tr><th>Name</th><th>Real value</th></tr>
+            <tr><td><code class="copy">EMAIL_TO</code></td><td>The team's addresses, comma-separated</td></tr>
+            <tr><td><code class="copy">EMAIL_CC</code></td><td>The CC addresses (New repository variable if you skipped it)</td></tr>
+            <tr><td><code class="copy">SEND_DAYS</code></td><td>Your real day, e.g. <code class="copy">Fri</code></td></tr>
+            <tr><td><code class="copy">SEND_TIME</code></td><td>Your real time in IST, e.g. <code class="copy">17:30</code></td></tr>
+            <tr><td><code class="copy">SCHEDULE_MODE</code></td><td><code class="copy">send</code> — or delete the variable (<code>send</code> is the default)</td></tr>
+        </table></div>
+        <p>Keep <code>WEEKLY_EMAIL_ENABLED</code> = <code>true</code>. From now on the email goes to EMAIL_TO / EMAIL_CC at the first wake-up at or after SEND_TIME on each SEND_DAYS day, and the new week is saved to the history in the repository automatically.</p>
+        <div class="warn"><b>Do Step 10 right away</b>Otherwise your PC schedule and GitHub can both send and the team gets two emails.</div>
+        <label class="check"><input type="checkbox"> Real To/CC, day and time are set and SCHEDULE_MODE is send.</label>
+    </section>
+
+    <!-- STEP 10 -->
+    <section class="step" id="s10" data-step="10">
+        <div class="step-head"><div class="num">10</div><div><h2>Turn off the schedule on your PC</h2><div class="meta">~1 minute · local dashboard</div></div></div>
+        <ol>
+            <li>Open the dashboard → <b>Web legacy emails</b> → <b>📧 Email</b>.</li>
+            <li>Scroll to <b>📅 Scheduled Sending</b> → <b>untick</b> "Send automatically on schedule" → <b>Save Schedule</b>.</li>
+            <li>The status line must say <b>○ Off — nothing will be sent automatically</b>.</li>
+        </ol>
+        <p>The dashboard still works for viewing live counts, editing history and the manual <b>Send Email</b> (Gmail compose) button.</p>
+        <label class="check"><input type="checkbox"> The local schedule shows "○ Off".</label>
+    </section>
+
+    <!-- AFTER -->
+    <section class="step" id="after">
+        <div class="step-head"><div class="num">✓</div><div><h2>After the first real send</h2><div class="meta">check once, then it runs by itself</div></div></div>
+        <ul>
+            <li><b>On your send day, shortly after SEND_TIME:</b> one <i>Scheduled</i> run whose <b>Is a send due now?</b> step says <code>Due</code>, with a green tick. GitHub often starts scheduled runs 5–20 minutes late — normal.</li>
+            <li>The other half-hourly runs finish in seconds with <code>Too early</code> / <code>Already sent today</code> / <code>Not a send day</code>. That's expected; they don't send anything.</li>
+            <li>The repository has a new commit <code>chore(web-legacy-emails): weekly summary sent YYYY-MM-DD</code> — the saved week and the "sent today" marker.</li>
+            <li><b>Bring GitHub's history back to your dashboard</b> (optional, whenever you want the local charts up to date):</li>
+        </ul>
+        <pre><button class="btn" data-copy>Copy</button>cd "C:\Users\rahul.shetty\Documents\Important\AntiGravity\web_legacy_emails_deploy"
+git pull
+cd "C:\Users\rahul.shetty\Documents\Important\AntiGravity\My dashboard"
+node web_legacy_emails/deploy/sync_deploy.js --pull-history</pre>
+        <ul>
+            <li><b>Pushing code changes later:</b> run <code>sync_push.bat</code>, then in the deploy folder's <b>root</b>: <code>git pull</code>, <code>git add .</code>, <code>git commit -m "…"</code>, <code>git push</code>. Running <code>git add .</code> inside the <code>web_legacy_emails</code> subfolder would miss the workflow and other root files.</li>
+        </ul>
+    </section>
+
+    <!-- EVERYDAY -->
+    <section class="step" id="everyday">
+        <div class="step-head"><div class="num">⚙</div><div><h2>Everyday changes — all on GitHub, no file edits</h2><div class="meta">Settings → Secrets and variables → Actions → Variables</div></div></div>
+        <div class="table-wrap"><table>
+            <tr><th>I want to…</th><th>Do this</th></tr>
+            <tr><td>Change who receives it</td><td>Edit <code>EMAIL_TO</code> / <code>EMAIL_CC</code>.</td></tr>
+            <tr><td>Change the day</td><td>Edit <code>SEND_DAYS</code>: one day <code>Fri</code> · several <code>Mon,Fri</code> · full names work too (<code>Monday, Friday</code>).</td></tr>
+            <tr><td>Change the time</td><td>Edit <code>SEND_TIME</code> (IST, 24-hour): <code>17:30</code>, <code>18:05</code>, <code>21:18</code>. Effective range 15:30–23:59. One send per day.</td></tr>
+            <tr><td>Skip / pause sending</td><td>Edit <code>WEEKLY_EMAIL_ENABLED</code> → <code>false</code>. Set back to <code>true</code> to resume.</td></tr>
+            <tr><td>Test the schedule again</td><td><code>SCHEDULE_MODE</code> → <code>test</code>, <code>SEND_DAYS</code> → today, <code>SEND_TIME</code> → now or earlier; afterwards set them back.</td></tr>
+            <tr><td>Send it right now</td><td>Actions → Run workflow → mode <code>send</code> (real send + saves the week + marks today as sent). For a check only: mode <code>test</code>.</td></tr>
+            <tr><td>Replace an expired token / password</td><td>Secrets tab → add <code>JIRA_API_TOKEN</code> or <code>GMAIL_APP_PASSWORD</code> again with the new value.</td></tr>
+        </table></div>
+        <div class="note"><b>GitHub Actions minutes</b>Each half-hourly wake-up takes a few seconds, but private repositories bill at least 1 minute per run: about 18 runs/day ≈ 540 minutes/month. GitHub's free plan includes 2,000 minutes/month for private repos. When <code>WEEKLY_EMAIL_ENABLED</code> isn't <code>true</code>, wake-ups are skipped and cost nothing.</div>
+    </section>
+
+    <!-- TROUBLESHOOTING -->
+    <section class="step" id="trouble">
+        <div class="step-head"><div class="num">?</div><div><h2>Troubleshooting</h2><div class="meta">read the step output in the run: "Is a send due now?" first, then "Send weekly summary"</div></div></div>
+        <div class="table-wrap"><table>
+            <tr><th>Message / symptom</th><th>Fix</th></tr>
+            <tr><td>No <i>Scheduled</i> runs at all</td><td>Open <code>.github/workflows/web-legacy-emails-weekly.yml</code> on GitHub: the cron line must be <code>'0,30 10-18 * * *'</code>. If not, the latest workflow wasn't pushed — run <code>git add .</code> in the deploy folder's <b>root</b>, commit, push. Also check Actions are enabled (Step 5).</td></tr>
+            <tr><td>Scheduled runs show grey "skipped"</td><td><code>WEEKLY_EMAIL_ENABLED</code> missing or not exactly <code>true</code>.</td></tr>
+            <tr><td>Green runs but no email</td><td>Open the run → <b>Is a send due now?</b>: <code>Not a send day</code> (check SEND_DAYS), <code>Too early</code> (check SEND_TIME, IST), <code>Already sent today</code> (delete <code>last_scheduled_send.json</code> to resend).</td></tr>
+            <tr><td>Unknown day in SEND_DAYS / SEND_TIME must be HH:MM</td><td>Fix the variable: days like <code>Fri</code> or <code>Mon,Fri</code>; time like <code>17:30</code>.</td></tr>
+            <tr><td>Jira email and API token are not configured</td><td><code>JIRA_EMAIL</code> variable or <code>JIRA_API_TOKEN</code> secret missing or misspelled.</td></tr>
+            <tr><td>Jira rejected the email/API token</td><td>Token expired or wrong, or <code>JIRA_EMAIL</code> isn't the Atlassian login email. Create a new token and replace the secret.</td></tr>
+            <tr><td>Gmail address and app password are not configured</td><td><code>GMAIL_USER</code> variable or <code>GMAIL_APP_PASSWORD</code> secret missing.</td></tr>
+            <tr><td>Gmail rejected the login</td><td>Use a Google <b>App Password</b> (not the normal password) created for the same account as <code>GMAIL_USER</code>; 2-Step Verification must be on.</td></tr>
+            <tr><td>No "To" recipients configured / Invalid email address</td><td>Check <code>EMAIL_TO</code> / <code>EMAIL_CC</code> for typos; separate with commas.</td></tr>
+            <tr><td><b>Commit history</b> step fails with 403 / permission denied</td><td>Step 5: set Workflow permissions to "Read and write". Check branch protection rules on <code>main</code>.</td></tr>
+            <tr><td><code>git push</code> on your PC is rejected ("fetch first")</td><td>GitHub has newer commits (history / marker). Run <code>git pull</code>, then push again.</td></tr>
+            <tr><td><code>npm ci</code> step fails</td><td>The lock file is out of date: run <code>sync_push.bat</code> again (it regenerates <code>package-lock.json</code>), then commit and push.</td></tr>
+            <tr><td>Team got two emails</td><td>The PC schedule is still on — Step 10.</td></tr>
+        </table></div>
+    </section>
+
+<div class="reset"><button class="btn" id="resetBtn">Reset my ticks</button></div>
+</div>
+
+<div class="toast" id="toast">Copied</div>
+
+<script>
+    // Progress ticks are stored per browser only; the guide works without storage too
+    const KEY = 'wle-go-live-steps-v3';
+    const steps = [...document.querySelectorAll('.step[data-step]')];
+    const boxes = steps.map(s => s.querySelector('.check input'));
+
+    function load() {
+        try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch (e) { return []; }
+    }
+    function save(done) {
+        try { localStorage.setItem(KEY, JSON.stringify(done)); } catch (e) { /* storage unavailable */ }
+    }
+    function render() {
+        const done = boxes.map(b => b.checked);
+        steps.forEach((s, i) => s.classList.toggle('done', done[i]));
+        const n = done.filter(Boolean).length;
+        document.getElementById('barFill').style.width = (n / steps.length * 100) + '%';
+        document.getElementById('barText').textContent = n === steps.length
+            ? 'All 10 steps done — the weekly email now runs on GitHub 🎉'
+            : `${n} of ${steps.length} steps done`;
+        save(done);
+    }
+
+    const saved = load();
+    boxes.forEach((b, i) => { b.checked = !!saved[i]; b.addEventListener('change', render); });
+    render();
+
+    document.getElementById('resetBtn').addEventListener('click', () => {
+        boxes.forEach(b => { b.checked = false; });
+        render();
+    });
+
+    // Copy buttons and click-to-copy names
+    const toast = document.getElementById('toast');
+    function copy(text) {
+        const done = () => { toast.classList.add('show'); setTimeout(() => toast.classList.remove('show'), 1200); };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(done, () => {});
+        }
+    }
+    document.querySelectorAll('pre [data-copy]').forEach(btn => {
+        btn.addEventListener('click', () => copy(btn.parentElement.textContent.replace(btn.textContent, '').trim()));
+    });
+    document.querySelectorAll('code.copy').forEach(c => {
+        c.title = 'Click to copy';
+        c.addEventListener('click', () => copy(c.textContent.trim()));
+    });
+</script>
+</body>
+</html>

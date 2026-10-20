@@ -78,7 +78,15 @@ const el = {
     cfgGmailAppPassword: document.getElementById('cfgGmailAppPassword'),
     cfgEmailMode: document.getElementById('cfgEmailMode'),
     autoSendSection: document.getElementById('autoSendSection'),
-    composeHint: document.getElementById('composeHint')
+    composeHint: document.getElementById('composeHint'),
+    schEnabled: document.getElementById('schEnabled'),
+    schDays: document.getElementById('schDays'),
+    schTime: document.getElementById('schTime'),
+    schSave: document.getElementById('schSave'),
+    schStatus: document.getElementById('schStatus'),
+    schRuns: document.getElementById('schRuns'),
+    saveScheduleBtn: document.getElementById('saveScheduleBtn'),
+    runNowTestBtn: document.getElementById('runNowTestBtn')
 };
 
 const DEFAULT_EMAIL_SUBJECT = 'Legacy Highest/High Issues – Web Application Weekly Jira Summary';
@@ -146,13 +154,8 @@ function isCurrentSaved() {
         h.recentHighest === c.recentHighest && h.recentHigh === c.recentHigh);
 }
 
-function buildJiraUrl(domain, jql) {
-    const cleanDomain = (domain || 'cropin.atlassian.net').replace(/^https?:\/\//, '').replace(/\/.*$/, '');
-    return `https://${cleanDomain}/issues?jql=${encodeURIComponent(jql || '')}`;
-}
-
 // Renders a Chart.js config to a PNG data URL (2x for sharpness) using an off-screen canvas.
-// The email sender will render the same config server-side.
+// core.js renders the same config server-side for scheduled sends.
 function renderChartImage(config) {
     if (typeof Chart === 'undefined') {
         console.warn('Chart.js not loaded yet');
@@ -204,18 +207,12 @@ function renderBadge() {
 // Digest HTML for the current state; chart image sources are passed in (data URLs on the page, cid: in the email)
 function buildDigestHtml(chartSrcs) {
     const c = state.currentCounts;
-    const domain = state.config.jiraDomain || 'cropin.atlassian.net';
-    const q = state.config.queries || {};
-    const links = {};
-    ['older_combined', 'older_highest', 'older_high', 'recent_combined', 'recent_highest', 'recent_high']
-        .forEach(k => { links[k] = buildJiraUrl(domain, q[k]); });
-
     const tpl = window.WebLegacyEmail;
     return tpl.buildEmailHtml({
         date: c.date,
         counts: c,
         previous: tpl.previousWeek(state.history, c.date),
-        links,
+        links: tpl.buildJiraLinks(state.config.jiraDomain, state.config.queries),
         charts: chartSrcs,
         senderName: state.config.senderName
     });
@@ -311,10 +308,10 @@ async function fetchJiraCounts({ quiet = false } = {}) {
     }
 }
 
-// Email modal: Gmail sender fields and "Send Test to Me" only apply to automatic sending
+// Email modal: "Send Test to Me" only applies to button-triggered automatic sending.
+// The Gmail login section stays visible because scheduled sending needs it in either mode.
 function updateEmailModeUI() {
     const auto = el.cfgEmailMode.value === 'auto';
-    el.autoSendSection.style.display = auto ? '' : 'none';
     el.sendTestEmailBtn.style.display = auto ? '' : 'none';
     el.composeHint.style.display = auto ? 'none' : '';
     el.sendEmailBtn.innerHTML = auto ? '<span>📧</span> Send Email Now' : '<span>📧</span> Send Email';
@@ -337,6 +334,7 @@ async function openEmailModal() {
         showToast('Error loading email settings', true);
     }
     updateEmailModeUI();
+    loadSchedule();
     el.emailModal.style.display = 'flex';
 }
 
@@ -445,6 +443,88 @@ async function composeEmail() {
     showToast(copied
         ? '✓ Digest copied. In Gmail, click the message body and press Ctrl+V, then review and Send.'
         : 'Gmail opened, but copying failed — select the preview on this page, copy it, and paste into Gmail.', !copied);
+}
+
+// ---------- Scheduled sending (runs in the dashboard server, see core.js) ----------
+const escapeText = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+function renderSchedule({ schedule, nextRun, runs }) {
+    el.schEnabled.checked = !!schedule.enabled;
+    el.schTime.value = schedule.time;
+    el.schSave.checked = schedule.saveSnapshot !== false;
+    el.schDays.querySelectorAll('input').forEach(cb => { cb.checked = schedule.days.includes(Number(cb.value)); });
+
+    el.schStatus.innerHTML = schedule.enabled && nextRun
+        ? `<span style="color:#10b981;font-weight:700;">● Enabled</span> — next send: <strong>${new Date(nextRun).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</strong>`
+        : '<span style="color:var(--text-secondary);font-weight:700;">○ Off</span> — nothing will be sent automatically';
+
+    const label = { schedule: 'Scheduled', 'run-now': 'Run now', cli: 'Command line' };
+    el.schRuns.innerHTML = runs.length
+        ? 'Recent runs:<br>' + runs.slice(0, 5).map(r => {
+            const when = new Date(r.at).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+            const what = r.ok
+                ? (r.dryRun ? 'dry run (not sent)' : `sent${r.test ? ' (test)' : ''} → ${escapeText((r.to || []).join(', '))}`)
+                : `failed: ${escapeText(r.error)}`;
+            return `${r.ok ? '✅' : '❌'} ${when} · ${label[r.trigger] || r.trigger} · ${what}`;
+        }).join('<br>')
+        : 'No runs yet.';
+}
+
+async function loadSchedule() {
+    try {
+        renderSchedule(await fetch('/api/email/schedule').then(r => r.json()));
+    } catch (e) {
+        el.schStatus.textContent = 'Could not load schedule';
+    }
+}
+
+async function saveSchedule() {
+    // To/CC and Gmail login are needed by the scheduler too, so store them first
+    if (!(await saveEmailSettings({ quiet: true }))) return;
+    try {
+        const res = await fetch('/api/email/schedule', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                enabled: el.schEnabled.checked,
+                days: [...el.schDays.querySelectorAll('input:checked')].map(cb => Number(cb.value)),
+                time: el.schTime.value,
+                saveSnapshot: el.schSave.checked
+            })
+        });
+        const data = await res.json();
+        if (!data.success) {
+            showToast(data.error || 'Failed to save schedule', true);
+            return;
+        }
+        renderSchedule(data);
+        // Spell out the next send so a day/time mismatch (e.g. time today but only Fri ticked) is obvious
+        showToast(data.schedule.enabled && data.nextRun
+            ? `✓ Schedule on — next send: ${new Date(data.nextRun).toLocaleString([], { weekday: 'long', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`
+            : '✓ Schedule saved (off)');
+    } catch (e) {
+        showToast('Error saving schedule', true);
+    }
+}
+
+// Runs the exact unattended job now (live Jira fetch, server-rendered charts) but only to the Gmail account itself
+async function runScheduleTestNow() {
+    if (!(await saveEmailSettings({ quiet: true }))) return;
+    showLoading('Running the scheduled job (test to me)...');
+    try {
+        const res = await fetch('/api/email/schedule/run-now', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ test: true })
+        });
+        const data = await res.json();
+        hideLoading();
+        if (data.schedule) renderSchedule(data);
+        showToast(data.success ? `✓ Test sent to ${data.to.join(', ')} — check your inbox` : (data.error || 'Run failed'), !data.success);
+    } catch (e) {
+        hideLoading();
+        showToast('Network error while running the job', true);
+    }
 }
 
 // Automatic send (Send Method = auto only): saves settings, refreshes counts from Jira
@@ -702,6 +782,8 @@ function setupEventListeners() {
     if (el.saveEmailSettingsBtn) el.saveEmailSettingsBtn.addEventListener('click', () => saveEmailSettings());
     if (el.sendTestEmailBtn) el.sendTestEmailBtn.addEventListener('click', () => sendEmail({ test: true }));
     if (el.sendEmailBtn) el.sendEmailBtn.addEventListener('click', () => (el.cfgEmailMode.value === 'auto' ? sendEmail() : composeEmail()));
+    if (el.saveScheduleBtn) el.saveScheduleBtn.addEventListener('click', saveSchedule);
+    if (el.runNowTestBtn) el.runNowTestBtn.addEventListener('click', runScheduleTestNow);
     if (el.cfgEmailMode) el.cfgEmailMode.addEventListener('change', updateEmailModeUI);
 
     // Chrome only opens the calendar from the small icon; open it on any click in a date field

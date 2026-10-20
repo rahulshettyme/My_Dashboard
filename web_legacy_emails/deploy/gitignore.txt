@@ -1,0 +1,14 @@
+# Generated from the main dashboard project (web_legacy_emails/deploy/gitignore.txt)
+node_modules/
+
+# Secrets — never commit (on GitHub use repository Secrets/Variables instead)
+jira_credentials.json
+email_credentials.json
+
+# Local run outputs
+web_legacy_emails/schedule_runs.json
+web_legacy_emails/last_scheduled_preview.html
+
+# OS files
+.DS_Store
+Thumbs.db

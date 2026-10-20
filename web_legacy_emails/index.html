@@ -137,6 +137,22 @@
             overflow-x: auto;
         }
 
+        /* Checkbox rows in modals (kept out of .form-row so inputs aren't stretched to 100%) */
+        .check-row {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+
+        .check-row label {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            cursor: pointer;
+        }
+
         /* Shown only when the page falls back to saved local data (not part of the email) */
         .stale-banner {
             display: none;
@@ -549,6 +565,9 @@
             <div class="form-row">
                 <label>CC</label>
                 <textarea id="cfgEmailCc" rows="2" placeholder="manager@cropin.com"></textarea>
+                <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.3rem;">
+                    On GitHub Actions, the repository variables <code>EMAIL_TO</code> / <code>EMAIL_CC</code> override these when set.
+                </div>
             </div>
             <div class="form-row">
                 <label>Subject</label>
@@ -561,7 +580,7 @@
 
             <!-- Only for Send Method = auto -->
             <div id="autoSendSection">
-                <h3 style="font-size: 1rem; margin: 1.5rem 0 0.75rem;">Automatic Sending (Gmail)</h3>
+                <h3 style="font-size: 1rem; margin: 1.5rem 0 0.75rem;">Gmail Login <span style="font-weight: 400; font-size: 0.85rem;">(for automatic &amp; scheduled sending)</span></h3>
                 <div class="form-row">
                     <label>Gmail Address</label>
                     <input type="email" id="cfgGmailUser" placeholder="you@cropin.com">
@@ -570,6 +589,38 @@
                     <label>Google App Password <span style="font-weight: 400;">(not your normal password)</span></label>
                     <input type="password" id="cfgGmailAppPassword" placeholder="16-character app password">
                 </div>
+            </div>
+
+            <!-- Scheduled sending (runs inside the dashboard server) -->
+            <h3 style="font-size: 1rem; margin: 1.75rem 0 0.5rem;">📅 Scheduled Sending</h3>
+            <p style="font-size: 0.8rem; color: var(--text-secondary); margin: 0 0 0.85rem;">
+                Sends the summary to To/CC on the chosen days and time using live Jira data (nothing is sent if Jira fails).
+                Runs inside this dashboard server — your PC must be on and the server running at that time.
+            </p>
+            <label class="check-row">
+                <input type="checkbox" id="schEnabled"> <strong>Send automatically on schedule</strong>
+            </label>
+            <div class="check-row" id="schDays" style="flex-wrap: wrap; gap: 0.35rem 1rem; margin-top: 0.6rem;">
+                <label><input type="checkbox" value="1"> Mon</label>
+                <label><input type="checkbox" value="2"> Tue</label>
+                <label><input type="checkbox" value="3"> Wed</label>
+                <label><input type="checkbox" value="4"> Thu</label>
+                <label><input type="checkbox" value="5"> Fri</label>
+                <label><input type="checkbox" value="6"> Sat</label>
+                <label><input type="checkbox" value="0"> Sun</label>
+            </div>
+            <div class="form-row" style="max-width: 180px; margin-top: 0.75rem;">
+                <label>Time (24-hour, this PC's clock)</label>
+                <input type="time" id="schTime" value="10:00">
+            </div>
+            <label class="check-row">
+                <input type="checkbox" id="schSave" checked> Save the week to trend history after a successful send
+            </label>
+            <div id="schStatus" style="font-size: 0.85rem; margin: 0.85rem 0 0.4rem;"></div>
+            <div id="schRuns" style="font-size: 0.8rem; color: var(--text-secondary);"></div>
+            <div style="display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 0.85rem;">
+                <button class="action-btn" id="saveScheduleBtn">Save Schedule</button>
+                <button class="action-btn" id="runNowTestBtn">Run Now (test to me)</button>
             </div>
 
             <p id="composeHint" style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 1rem;">

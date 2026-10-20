@@ -14,6 +14,13 @@ browsers
 jira_credentials.json
 email_credentials.json
 
+# Web Legacy Emails deploy-sync launcher is part of the module (overrides *.bat above)
+!web_legacy_emails/deploy/sync_push.bat
+
+# Web Legacy Emails local run outputs (scheduler run log, dry-run email preview)
+web_legacy_emails/schedule_runs.json
+web_legacy_emails/last_scheduled_preview.html
+
 # Logs
 npm-debug.log*
 

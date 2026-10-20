@@ -8,7 +8,7 @@ const vm = require('vm');
 
 // Ratchets forward to tests.length after every task — represents "tests that existed
 // before the CURRENT task's changes", not a fixed historical constant.
-const baselineCount = 11;
+const baselineCount = 16;
 
 const MODULE_DIR = path.join(__dirname, '..');
 
@@ -159,11 +159,111 @@ const tests = [
         }
     },
     {
+        name: 'core.renderChartPng: renders a PNG server-side (no browser) at 2x LAYOUT size',
+        fn: () => {
+            const core = require(path.join(MODULE_DIR, 'core.js'));
+            const png = core.renderChartPng([week('Oct 2, 2026'), week('Oct 9, 2026')], 'recent');
+            assert.ok(Buffer.isBuffer(png) && png.length > 1000, 'PNG buffer produced');
+            assert.strictEqual(png.slice(1, 4).toString(), 'PNG', 'PNG signature');
+            assert.strictEqual(png.readUInt32BE(16), tpl.LAYOUT.chartWidth * 2, 'Width is 2x chartWidth');
+            assert.strictEqual(png.readUInt32BE(20), tpl.LAYOUT.chartHeight * 2, 'Height is 2x chartHeight');
+        }
+    },
+    {
+        name: 'core.nextScheduledRun / writeSchedule validation / buildSubject',
+        fn: () => {
+            const core = require(path.join(MODULE_DIR, 'core.js'));
+            const tue = new Date(2026, 9, 20, 9, 0); // Tue Oct 20, 2026 09:00
+            const fri10 = core.nextScheduledRun({ enabled: true, days: [5], time: '10:00' }, tue);
+            assert.strictEqual(fri10.toDateString(), new Date(2026, 9, 23).toDateString(), 'Next Friday');
+            assert.strictEqual(fri10.getHours(), 10);
+            assert.strictEqual(core.nextScheduledRun({ enabled: true, days: [2], time: '09:30' }, tue).getDate(), 20, 'Later today counts');
+            assert.strictEqual(core.nextScheduledRun({ enabled: true, days: [2], time: '08:00' }, tue).getDate(), 27, 'Earlier today -> next week');
+            assert.strictEqual(core.nextScheduledRun({ enabled: false, days: [5], time: '10:00' }, tue), null, 'Disabled -> null');
+
+            // Invalid input is rejected before anything is written
+            assert.throws(() => core.writeSchedule({ enabled: true, days: [5], time: '25:00' }), /HH:MM/);
+            assert.throws(() => core.writeSchedule({ enabled: true, days: [], time: '10:00' }), /at least one day/);
+
+            assert.strictEqual(core.buildSubject({ subject: 'S {date}' }, 'Oct 20, 2026', false), 'S Oct 20, 2026');
+            assert.strictEqual(core.buildSubject({}, '', true), `[TEST] ${core.DEFAULT_EMAIL_SUBJECT}`);
+        }
+    },
+    {
+        name: 'core.readRecipients: EMAIL_TO / EMAIL_CC env (GitHub variables) override config To/CC',
+        fn: () => {
+            const core = require(path.join(MODULE_DIR, 'core.js'));
+            const config = { recipients: 'a@x.com, b@x.com', cc: 'c@x.com' };
+            const saved = { to: process.env.EMAIL_TO, cc: process.env.EMAIL_CC };
+            try {
+                delete process.env.EMAIL_TO;
+                delete process.env.EMAIL_CC;
+                let r = core.readRecipients(config);
+                assert.deepStrictEqual([r.to, r.cc, r.source.to], [['a@x.com', 'b@x.com'], ['c@x.com'], 'config']);
+
+                process.env.EMAIL_TO = 'team@x.com; lead@x.com';
+                r = core.readRecipients(config);
+                assert.deepStrictEqual(r.to, ['team@x.com', 'lead@x.com'], 'EMAIL_TO wins');
+                assert.deepStrictEqual(r.cc, ['c@x.com'], 'CC still from config when EMAIL_CC unset');
+                assert.strictEqual(r.source.to, 'EMAIL_TO');
+
+                process.env.EMAIL_CC = '';
+                assert.deepStrictEqual(core.readRecipients(config).cc, ['c@x.com'], 'Empty variable falls back to config');
+            } finally {
+                if (saved.to === undefined) delete process.env.EMAIL_TO; else process.env.EMAIL_TO = saved.to;
+                if (saved.cc === undefined) delete process.env.EMAIL_CC; else process.env.EMAIL_CC = saved.cc;
+            }
+        }
+    },
+    {
+        name: 'core.isPrivatePath: credential/run-output files are never served (incl. Windows path tricks)',
+        fn: () => {
+            const core = require(path.join(MODULE_DIR, 'core.js'));
+            [
+                '/web_legacy_emails/jira_credentials.json',
+                '/web_legacy_emails/email_credentials.json',
+                '/web_legacy_emails/JIRA_CREDENTIALS.JSON',
+                '/web_legacy_emails/jira%5Fcredentials.json',
+                '/web_legacy_emails/jira_credentials.json.',
+                '/web_legacy_emails/jira_credentials.json::$DATA',
+                '/web_legacy_emails/schedule_runs.json',
+                '/web_legacy_emails/last_scheduled_preview.html',
+                '/web_legacy_emails/%E0%A4%A' // malformed encoding is refused
+            ].forEach(p => assert.strictEqual(core.isPrivatePath(p), true, `must block ${p}`));
+            ['/web_legacy_emails/index.html', '/web_legacy_emails/jira_config.json', '/style.css']
+                .forEach(p => assert.strictEqual(core.isPrivatePath(p), false, `must allow ${p}`));
+        }
+    },
+    {
+        name: 'core.isSendDue: SEND_DAYS / SEND_TIME / once-per-day marker for GitHub Actions',
+        fn: () => {
+            const core = require(path.join(MODULE_DIR, 'core.js'));
+            const fri1745 = new Date(2026, 9, 23, 17, 45); // Fri Oct 23, 2026 17:45 (local)
+            const due = (o) => core.isSendDue({ lastSent: null, now: fri1745, ...o }).due;
+
+            assert.strictEqual(due({ days: 'Fri', time: '17:30' }), true, 'Friday after 17:30 -> due');
+            assert.strictEqual(due({ days: undefined, time: undefined }), true, 'Defaults Fri 17:30 -> due');
+            assert.strictEqual(due({ days: 'Fri', time: '18:00' }), false, 'Before SEND_TIME -> not due');
+            assert.strictEqual(due({ days: 'Mon,Thu', time: '17:00' }), false, 'Not a send day');
+            assert.strictEqual(due({ days: 'monday; friday', time: '9:05' }), true, 'Full names, ; separator, H:MM');
+            assert.strictEqual(due({ days: '5', time: '17:45' }), true, 'Day number, exactly on time');
+
+            // Once per day per mode
+            const sentSend = { date: 'Oct 23, 2026', mode: 'send', at: 'x' };
+            assert.strictEqual(core.isSendDue({ days: 'Fri', time: '17:30', now: fri1745, lastSent: sentSend }).due, false, 'Already sent today');
+            assert.strictEqual(core.isSendDue({ days: 'Fri', time: '17:30', now: fri1745, lastSent: { ...sentSend, date: 'Oct 16, 2026' } }).due, true, 'Sent last week -> due');
+            assert.strictEqual(core.isSendDue({ days: 'Fri', time: '17:30', mode: 'send', now: fri1745, lastSent: { ...sentSend, mode: 'test' } }).due, true, 'A test today does not block the real send');
+
+            assert.throws(() => core.isSendDue({ days: 'Fry', time: '17:30', now: fri1745, lastSent: null }), /Unknown day/);
+            assert.throws(() => core.isSendDue({ days: 'Fri', time: '5 PM', now: fri1745, lastSent: null }), /HH:MM/);
+        }
+    },
+    {
         name: 'buildJiraUrl: strips protocol/path and encodes JQL',
         fn: () => {
-            assert.strictEqual(script.buildJiraUrl('https://cropin.atlassian.net/browse/X', 'priority = High'),
+            assert.strictEqual(tpl.buildJiraUrl('https://cropin.atlassian.net/browse/X', 'priority = High'),
                 'https://cropin.atlassian.net/issues?jql=priority%20%3D%20High');
-            assert.strictEqual(script.buildJiraUrl('', ''), 'https://cropin.atlassian.net/issues?jql=');
+            assert.strictEqual(tpl.buildJiraUrl('', ''), 'https://cropin.atlassian.net/issues?jql=');
         }
     }
 ];

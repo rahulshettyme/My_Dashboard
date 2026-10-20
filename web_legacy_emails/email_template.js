@@ -79,6 +79,27 @@
         return filtered;
     }
 
+    const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+    // History/week date label, e.g. "Oct 20, 2026"
+    function formatDateLabel(d) {
+        return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+    }
+
+    function buildJiraUrl(domain, jql) {
+        const cleanDomain = (domain || 'cropin.atlassian.net').replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+        return `https://${cleanDomain}/issues?jql=${encodeURIComponent(jql || '')}`;
+    }
+
+    // The 6 card / "View in Jira" links, keyed like config.queries
+    function buildJiraLinks(domain, queries) {
+        const q = queries || {};
+        const links = {};
+        ['older_combined', 'older_highest', 'older_high', 'recent_combined', 'recent_highest', 'recent_high']
+            .forEach(k => { links[k] = buildJiraUrl(domain, q[k]); });
+        return links;
+    }
+
     // Latest history week strictly before `date` (the comparison point for ▲/▼); null if none
     function previousWeek(history, date) {
         const t = new Date(date).getTime();
@@ -283,7 +304,7 @@
 </table>`;
     }
 
-    const api = { LAYOUT, COLORS, filterHistoryForChart, previousWeek, withCurrentWeek, buildChartConfig, buildEmailHtml };
+    const api = { LAYOUT, COLORS, formatDateLabel, buildJiraUrl, buildJiraLinks, filterHistoryForChart, previousWeek, withCurrentWeek, buildChartConfig, buildEmailHtml };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     else root.WebLegacyEmail = api;
 })(typeof window !== 'undefined' ? window : this);
