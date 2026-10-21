@@ -9,7 +9,8 @@ Weekly email summary of open **Highest / High** priority Web bugs in Jira (Older
 
 | Where | How |
 |---|---|
-| **GitHub Actions** (main use) | `.github/workflows/web-legacy-emails-weekly.yml` — sends on `SEND_DAYS` at/after `SEND_TIME` (IST; default Fri 17:30) once `WEEKLY_EMAIL_ENABLED` is `true`. Wakes every 30 min between 15:30 and 00:00 IST; a quick check decides whether to send (once per day). Day/time are repository variables — never edit the workflow for them. Manual runs: **Actions → Web Legacy Emails – Weekly Summary → Run workflow** (`test` / `dry-run` / `send`). |
+| **GitHub Actions** (main use) | `.github/workflows/web-legacy-emails-weekly.yml` — sends on `SEND_DAYS` at/after `SEND_TIME` (IST; default Fri 17:30) once `WEEKLY_EMAIL_ENABLED` is `true`. Wakes every 30 min between 15:30 and 00:00 IST; a quick check decides whether to send (once per day). Day/time are repository variables — never edit the workflow for them. Manual runs: **Actions → Web Legacy Emails – Weekly Summary → Run workflow** (`test` / `dry-run` / `send`, or `scheduled` = run the timer's exact logic now). |
+| **Google Apps Script** (reliable trigger) | `web_legacy_emails/apps_script/github_trigger.gs` in script.google.com starts the workflow (mode `scheduled`) every `SEND_DAYS` at `SEND_TIME`, checking every 10 min — GitHub's own timer is best-effort and kept only as a backup. Setup: guide Step 7b. |
 | **Command line** | `npm ci` then `node web_legacy_emails/send_weekly.js [--test] [--dry-run] [--no-save]` |
 | **Local dashboard** (optional) | `npm ci` then `npm start` → <http://localhost:3000> |
 
@@ -24,10 +25,11 @@ Weekly email summary of open **Highest / High** priority Web bugs in Jira (Older
 | `SEND_DAYS` | Variable — e.g. `Fri` or `Mon,Fri` (default `Fri`) |
 | `SEND_TIME` | Variable — IST 24-hour, e.g. `17:30` (default `17:30`; effective 15:30–23:59) |
 | `SCHEDULE_MODE` | Variable — `send` (default) or `test` (scheduled runs send `[TEST]` only to `GMAIL_USER`, no history) |
+| `CHART_MAX_POINTS`, `CHART_RECENT_WEEKS` | Variables (optional) — trend chart length (default 19 points, last 4 weeks always shown) |
 
 ## Data
 
-* `web_legacy_emails/jira_weekly_history.json` — weekly counts. Each real send commits the new week back to this repo, so **this repo owns the history** once GitHub Actions is live. The sync script never overwrites it; use `--pull-history` in the main project to copy it back there.
+* `web_legacy_emails/jira_weekly_history.json` — weekly counts. Each real send commits the new week back to this repo. In the main project the one flow is `sync_pull.bat` → (delete/correct weeks, change code) → `sync_push.bat` → commit here. History is merged three-way against the last pull, so deletions/corrections made in the main project propagate and weeks GitHub sent in between are never lost.
 * `web_legacy_emails/last_scheduled_send.json` — "already sent today" marker committed by the workflow (also never overwritten by the sync).
 * Credentials are never committed (`.gitignore`). Locally they live in `web_legacy_emails/jira_credentials.json` / `email_credentials.json` (created by the dashboard's settings), on GitHub in Secrets.
 

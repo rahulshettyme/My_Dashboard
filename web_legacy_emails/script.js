@@ -47,6 +47,9 @@ const el = {
     editSnapshotDate: document.getElementById('editSnapshotDate'),
     historyTableBody: document.getElementById('historyTableBody'),
     saveAllHistoryBtn: document.getElementById('saveAllHistoryBtn'),
+    chartMaxPoints: document.getElementById('chartMaxPoints'),
+    chartRecentWeeks: document.getElementById('chartRecentWeeks'),
+    saveChartSettingsBtn: document.getElementById('saveChartSettingsBtn'),
 
     // Settings Modal
     settingsModal: document.getElementById('settingsModal'),
@@ -225,8 +228,8 @@ function renderDigest() {
     const tpl = window.WebLegacyEmail;
     const chartHistory = tpl.withCurrentWeek(state.history, state.currentCounts);
     state.chartImages = {
-        older: renderChartImage(tpl.buildChartConfig(chartHistory, 'older')),
-        recent: renderChartImage(tpl.buildChartConfig(chartHistory, 'recent'))
+        older: renderChartImage(tpl.buildChartConfig(chartHistory, 'older', state.config.chart)),
+        recent: renderChartImage(tpl.buildChartConfig(chartHistory, 'recent', state.config.chart))
     };
     el.emailDigest.innerHTML = buildDigestHtml(state.chartImages);
 }
@@ -712,8 +715,38 @@ function openManualEditModal() {
     el.editRecentHighest.value = state.currentCounts.recentHighest;
     el.editRecentHigh.value = state.currentCounts.recentHigh;
     el.editSnapshotDate.value = labelToIso(state.currentCounts.date) || labelToIso(formatDateLabel(new Date()));
+    const chart = window.WebLegacyEmail.normalizeChartOptions(state.config.chart);
+    el.chartMaxPoints.value = chart.maxPoints;
+    el.chartRecentWeeks.value = chart.recentWeeks;
     renderHistoryTable();
     el.manualEditModal.style.display = 'flex';
+}
+
+// Stores the trend chart length in jira_config.json ("chart") and redraws the preview
+async function saveChartSettings() {
+    const chart = window.WebLegacyEmail.normalizeChartOptions({
+        maxPoints: el.chartMaxPoints.value,
+        recentWeeks: el.chartRecentWeeks.value
+    });
+    try {
+        const res = await fetch('/api/jira/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chart })
+        });
+        const data = await res.json();
+        if (!data.success) {
+            showToast(data.error || 'Failed to save chart settings', true);
+            return;
+        }
+        state.config.chart = chart;
+        el.chartMaxPoints.value = chart.maxPoints;
+        el.chartRecentWeeks.value = chart.recentWeeks;
+        renderDigest();
+        showToast(`✓ Chart: at most ${chart.maxPoints} points, last ${chart.recentWeeks} weeks always shown`);
+    } catch (e) {
+        showToast('Error saving chart settings', true);
+    }
 }
 
 // Reads the week entry form; null (with a toast) when no date is picked
@@ -768,6 +801,7 @@ function setupEventListeners() {
     if (el.closeManualEditModal) el.closeManualEditModal.addEventListener('click', () => el.manualEditModal.style.display = 'none');
     if (el.cancelManualEditBtn) el.cancelManualEditBtn.addEventListener('click', () => el.manualEditModal.style.display = 'none');
     if (el.saveAllHistoryBtn) el.saveAllHistoryBtn.addEventListener('click', saveAllHistory);
+    if (el.saveChartSettingsBtn) el.saveChartSettingsBtn.addEventListener('click', saveChartSettings);
 
     // Settings Modal
     if (el.settingsBtn) el.settingsBtn.addEventListener('click', openSettingsModal);

@@ -7,6 +7,7 @@
 //   node web_legacy_emails/send_weekly.js --dry-run   build everything, write last_scheduled_preview.html, send nothing
 //   node web_legacy_emails/send_weekly.js --no-save   real send without saving the week to history
 //   --mark-sent      after a successful send, write last_scheduled_send.json ("already sent today" marker)
+//   --scheduled      GitHub scheduled-style run: a late run before 06:00 is dated the previous evening
 //   --check-due      only decide whether a scheduled send is due now (SEND_DAYS / SEND_TIME / SCHEDULE_MODE env, local time);
 //                    prints the reason, writes due=true|false to $GITHUB_OUTPUT when set, sends nothing.
 //                    Needs no npm packages, so the workflow can run it before installing anything.
@@ -30,7 +31,7 @@ function checkDue() {
 }
 
 function send() {
-    return core.runWeeklyJob({ test, dryRun, saveSnapshot, trigger: 'cli' })
+    return core.runWeeklyJob({ test, dryRun, saveSnapshot, trigger: 'cli', scheduledRun: args.includes('--scheduled') })
         .then(result => {
             const c = result.counts;
             console.log(`OK ${result.date}: Older ${c.olderHighest + c.olderHigh} (Highest ${c.olderHighest}, High ${c.olderHigh}), ` +

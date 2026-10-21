@@ -9,17 +9,25 @@
 #               SEND_DAYS  = Fri                              (days to send, e.g. "Fri" or "Mon,Fri"; default Fri)
 #               SEND_TIME  = 17:30                            (IST, 24-hour; default 17:30)
 #               SCHEDULE_MODE = send                          ("test" = scheduled runs send [TEST] only to GMAIL_USER, no history)
+#               CHART_MAX_POINTS = 19, CHART_RECENT_WEEKS = 4 (optional; trend chart length — override jira_config.json "chart")
 #
 # Day and time are VARIABLES — change them on GitHub, never in this file. GitHub's cron cannot read
 # variables (and is often late), so this workflow wakes every 30 minutes between 15:30 and 00:00 IST and
 # a quick check decides whether to send: today is a SEND_DAYS day, the IST time is at/after SEND_TIME,
 # and nothing was sent today yet (last_scheduled_send.json). The first wake-up that qualifies sends;
-# the rest of the day is skipped. Do not edit the cron line below unless you need a different window.
+# the rest of the day is skipped. GitHub can start a slot hours late: a wake-up before 06:00 IST counts as a
+# late run of the PREVIOUS evening (so a delayed Friday 00:00 slot still sends Friday's email).
+# RELIABLE TRIGGER: GitHub's timer skipped most slots (1 run in ~20). The main trigger is now a Google Apps
+# Script (web_legacy_emails/apps_script/github_trigger.gs) that starts this workflow in mode "scheduled" every
+# SEND_DAYS at SEND_TIME (checks every 10 min). The cron below stays as a free backup; the once-per-day marker
+# prevents double sends. Do not edit the cron line below unless you need a different window.
 #
 # Manual run: Actions → "Web Legacy Emails – Weekly Summary" → Run workflow → mode
-#   test    = send only to the Gmail account itself, history untouched (default)
-#   dry-run = build the email, send nothing; download the preview from the run's artifacts
-#   send    = real send to To/CC, save the week to history and mark today as sent
+#   test      = send only to the Gmail account itself, history untouched (default)
+#   dry-run   = build the email, send nothing; download the preview from the run's artifacts
+#   send      = real send to To/CC, save the week to history and mark today as sent
+#   scheduled = run NOW exactly like a timer wake-up: due check with SEND_DAYS / SEND_TIME, then SCHEDULE_MODE
+#               (use it to test the scheduled path without waiting for the evening window)
 name: Web Legacy Emails – Weekly Summary
 
 on:
@@ -29,9 +37,9 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'test = only to the Gmail account · dry-run = build only · send = real send + save history'
+        description: 'test = only to the Gmail account · dry-run = build only · send = real send + save history · scheduled = act exactly like a timer wake-up now'
         type: choice
-        options: [test, dry-run, send]
+        options: [test, dry-run, send, scheduled]
         default: test
 
 permissions:
@@ -49,6 +57,8 @@ jobs:
     timeout-minutes: 15
     env:
       TZ: Asia/Kolkata   # SEND_TIME, the week date and "Week of …" all use IST
+      # Timer wake-ups and the manual "scheduled" mode follow the same scheduled path
+      SCHEDULED_PATH: ${{ github.event_name == 'schedule' || inputs.mode == 'scheduled' }}
     steps:
       # Latest commit on the branch (not the triggering one) so a queued run sees today's marker
       - uses: actions/checkout@v4
@@ -61,10 +71,15 @@ jobs:
           SEND_DAYS: ${{ vars.SEND_DAYS }}
           SEND_TIME: ${{ vars.SEND_TIME }}
           SCHEDULE_MODE: ${{ vars.SCHEDULE_MODE || 'send' }}
+          ENABLED: ${{ vars.WEEKLY_EMAIL_ENABLED }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "Manual run — always runs."
+          if [ "$SCHEDULED_PATH" != "true" ]; then
+            echo "Manual run (mode ${{ inputs.mode }}) — always runs."
             echo "due=true" >> "$GITHUB_OUTPUT"
+          elif [ "$ENABLED" != "true" ]; then
+            # Covers every trigger of the scheduled path: GitHub timer, Apps Script, manual "scheduled"
+            echo "Scheduled sending is off (WEEKLY_EMAIL_ENABLED is not true)."
+            echo "due=false" >> "$GITHUB_OUTPUT"
           else
             node web_legacy_emails/send_weekly.js --check-due
           fi
@@ -87,14 +102,18 @@ jobs:
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           EMAIL_TO: ${{ vars.EMAIL_TO }}
           EMAIL_CC: ${{ vars.EMAIL_CC }}
-          # Scheduled runs: SCHEDULE_MODE (default send). Manual runs: the chosen mode.
-          MODE: ${{ github.event_name == 'schedule' && (vars.SCHEDULE_MODE || 'send') || inputs.mode }}
+          CHART_MAX_POINTS: ${{ vars.CHART_MAX_POINTS }}
+          CHART_RECENT_WEEKS: ${{ vars.CHART_RECENT_WEEKS }}
+          # Scheduled path: SCHEDULE_MODE (default send). Other manual runs: the chosen mode.
+          MODE: ${{ (github.event_name == 'schedule' || inputs.mode == 'scheduled') && (vars.SCHEDULE_MODE || 'send') || inputs.mode }}
         run: |
-          echo "Mode: $MODE (trigger: ${{ github.event_name }})"
+          echo "Mode: $MODE (trigger: ${{ github.event_name }}, scheduled path: $SCHEDULED_PATH)"
+          SCHED=""
+          if [ "$SCHEDULED_PATH" = "true" ]; then SCHED="--mark-sent --scheduled"; fi
           case "$MODE" in
-            test)    node web_legacy_emails/send_weekly.js --test $([ "${{ github.event_name }}" = "schedule" ] && echo --mark-sent) ;;
+            test)    node web_legacy_emails/send_weekly.js --test $SCHED ;;
             dry-run) node web_legacy_emails/send_weekly.js --dry-run ;;
-            send)    node web_legacy_emails/send_weekly.js --mark-sent ;;
+            send)    node web_legacy_emails/send_weekly.js --mark-sent $([ "$SCHEDULED_PATH" = "true" ] && echo --scheduled) ;;
             *)       echo "Unknown mode: $MODE (use test / dry-run / send)"; exit 1 ;;
           esac
 

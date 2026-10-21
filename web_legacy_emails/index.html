@@ -454,6 +454,24 @@
 
             <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 1.75rem 0 1.25rem;">
 
+            <!-- Trend chart length (also overridable on GitHub: CHART_MAX_POINTS / CHART_RECENT_WEEKS variables) -->
+            <h3 style="font-size: 1rem; margin: 0 0 0.5rem;">Trend Chart</h3>
+            <p style="font-size: 0.8rem; color: var(--text-secondary); margin: 0 0 0.75rem;">
+                The last weeks and the first week of every month are never hidden; beyond the limit the oldest points drop off.
+                History itself is never changed.
+            </p>
+            <div style="display: flex; flex-wrap: wrap; align-items: flex-end; gap: 1rem; margin-bottom: 1.5rem;">
+                <div class="form-row" style="margin: 0; width: 150px;">
+                    <label>Max points (4–60)</label>
+                    <input type="number" id="chartMaxPoints" min="4" max="60" value="19">
+                </div>
+                <div class="form-row" style="margin: 0; width: 170px;">
+                    <label>Always show last weeks (1–12)</label>
+                    <input type="number" id="chartRecentWeeks" min="1" max="12" value="4">
+                </div>
+                <button class="action-btn" id="saveChartSettingsBtn">Save Chart Settings</button>
+            </div>
+
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
                 <h3 style="font-size: 1rem; margin: 0;">All Weeks (Trend History)</h3>
                 <button class="action-btn btn-accent" id="saveAllHistoryBtn">Save Table Changes</button>

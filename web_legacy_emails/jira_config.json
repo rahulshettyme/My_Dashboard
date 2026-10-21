@@ -20,5 +20,9 @@
     ],
     "time": "17:00",
     "saveSnapshot": true
+  },
+  "chart": {
+    "maxPoints": 20,
+    "recentWeeks": 4
   }
 }

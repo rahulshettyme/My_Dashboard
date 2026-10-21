@@ -265,6 +265,16 @@ const isValidEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 
 // Effective To/CC: EMAIL_TO / EMAIL_CC environment variables (GitHub repository variables) win over
 // jira_config.json when set and non-empty; the dashboard UI edits the config file.
+// Effective chart settings: CHART_MAX_POINTS / CHART_RECENT_WEEKS environment variables (GitHub repository
+// variables) win over jira_config.json "chart"; always normalised to safe limits.
+function readChartOptions(config = readConfig()) {
+    const c = config.chart || {};
+    return tpl.normalizeChartOptions({
+        maxPoints: process.env.CHART_MAX_POINTS || c.maxPoints,
+        recentWeeks: process.env.CHART_RECENT_WEEKS || c.recentWeeks
+    });
+}
+
 function readRecipients(config = readConfig()) {
     return {
         to: parseEmailList(process.env.EMAIL_TO || config.recipients),
@@ -338,9 +348,9 @@ function getChartLib() {
 }
 
 // PNG Buffer for one section's trend chart, at 2x for sharpness
-function renderChartPng(history, section) {
+function renderChartPng(history, section, chartOptions) {
     const { createCanvas, Chart } = getChartLib();
-    const config = tpl.buildChartConfig(history, section);
+    const config = tpl.buildChartConfig(history, section, chartOptions);
     config.options.devicePixelRatio = 2;
     const canvas = createCanvas(tpl.LAYOUT.chartWidth, tpl.LAYOUT.chartHeight);
     const chart = new Chart(canvas.getContext('2d'), config);
@@ -366,16 +376,18 @@ function appendRunLog(entry) {
 //   dryRun: build everything, write last_scheduled_preview.html, send nothing, save nothing
 //   saveSnapshot: store today's counts in history after a successful real send
 //   trigger: 'schedule' | 'run-now' | 'cli' (logged)
-async function runWeeklyJob({ test = false, dryRun = false, saveSnapshot = true, trigger = 'cli', slot = null } = {}) {
+//   scheduledRun: GitHub scheduled run — a late run after midnight is dated the previous evening
+async function runWeeklyJob({ test = false, dryRun = false, saveSnapshot = true, trigger = 'cli', slot = null, scheduledRun = false } = {}) {
     const startedAt = new Date();
     const logBase = { at: startedAt.toISOString(), trigger, slot, test, dryRun };
     try {
         const config = readConfig();
         const { counts, fetchedAs } = await fetchCounts();
-        const date = tpl.formatDateLabel(startedAt);
+        const date = tpl.formatDateLabel(scheduledRun ? scheduledEvening(startedAt) : startedAt);
         const history = readHistory();
         const chartHistory = tpl.withCurrentWeek(history, { ...counts, date });
-        const pngs = { older: renderChartPng(chartHistory, 'older'), recent: renderChartPng(chartHistory, 'recent') };
+        const chartOptions = readChartOptions(config);
+        const pngs = { older: renderChartPng(chartHistory, 'older', chartOptions), recent: renderChartPng(chartHistory, 'recent', chartOptions) };
 
         const buildHtml = (charts) => tpl.buildEmailHtml({
             date,
@@ -445,20 +457,37 @@ function parseSendTime(value) {
 const readLastSent = () => readJson(FILES.lastSent, null);
 const writeLastSent = (entry) => writeJson(FILES.lastSent, entry);
 
+// GitHub can start a scheduled run hours late (a 00:00 IST slot was seen starting at 01:48).
+// The wake-up window is evening-only, so any run before this hour is a late run of the previous
+// evening and is evaluated as that day at 23:59.
+const LATE_RUN_CUTOFF_HOUR = 6;
+
+// The evening a scheduled run belongs to: itself, or the previous day 23:59 for a late run before the cutoff
+function scheduledEvening(now = new Date()) {
+    return now.getHours() < LATE_RUN_CUTOFF_HOUR
+        ? new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59)
+        : now;
+}
+
 // { due, reason } for the given moment (local time — the workflow sets TZ=Asia/Kolkata).
 // mode: 'send' | 'test' — a marker only blocks the same mode, so a scheduled test today doesn't
 // stop a real send later today.
 function isSendDue({ days, time, mode = 'send', now = new Date(), lastSent = readLastSent() } = {}) {
     const dayList = parseSendDays(days);
     const t = parseSendTime(time);
+    let lateNote = '';
+    if (now.getHours() < LATE_RUN_CUTOFF_HOUR) {
+        lateNote = ` — late run at ${DAY_NAMES[now.getDay()]} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}, counted as previous evening`;
+        now = scheduledEvening(now);
+    }
     const today = tpl.formatDateLabel(now);
     const dayNames = dayList.map(d => DAY_NAMES[d]).join(', ');
     const nowLabel = `${DAY_NAMES[now.getDay()]} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-    if (!dayList.includes(now.getDay())) return { due: false, reason: `Not a send day (${nowLabel}; SEND_DAYS = ${dayNames})` };
-    if (now.getHours() * 60 + now.getMinutes() < t.hh * 60 + t.mm) return { due: false, reason: `Too early (${nowLabel}; SEND_TIME = ${t.label})` };
-    if (lastSent && lastSent.date === today && lastSent.mode === mode) return { due: false, reason: `Already sent today (${lastSent.mode} at ${lastSent.at})` };
-    return { due: true, reason: `Due (${nowLabel}; SEND_DAYS = ${dayNames}, SEND_TIME = ${t.label})` };
+    if (!dayList.includes(now.getDay())) return { due: false, reason: `Not a send day (${nowLabel}; SEND_DAYS = ${dayNames})${lateNote}` };
+    if (now.getHours() * 60 + now.getMinutes() < t.hh * 60 + t.mm) return { due: false, reason: `Too early (${nowLabel}; SEND_TIME = ${t.label})${lateNote}` };
+    if (lastSent && lastSent.date === today && lastSent.mode === mode) return { due: false, reason: `Already sent today (${lastSent.mode} at ${lastSent.at})${lateNote}` };
+    return { due: true, reason: `Due (${nowLabel}; SEND_DAYS = ${dayNames}, SEND_TIME = ${t.label})${lateNote}` };
 }
 
 function readSchedule() {
@@ -535,7 +564,7 @@ module.exports = {
     readConfig, writeConfig, readHistory, writeHistory, upsertHistory, sortHistory,
     readJiraCredentials, readJiraCredentialsFile, writeJiraCredentials,
     readEmailCredentials, readEmailCredentialsFile, writeEmailCredentials, migrateLegacyCredentials,
-    fetchCounts, parseEmailList, isValidEmail, readRecipients, buildSubject, sendDigestMail, renderChartPng,
+    fetchCounts, parseEmailList, isValidEmail, readRecipients, readChartOptions, buildSubject, sendDigestMail, renderChartPng,
     readRunLog, runWeeklyJob, readSchedule, writeSchedule, nextScheduledRun, startScheduler, stopScheduler,
-    DEFAULT_SEND_DAYS, DEFAULT_SEND_TIME, parseSendDays, parseSendTime, isSendDue, readLastSent, writeLastSent
+    DEFAULT_SEND_DAYS, DEFAULT_SEND_TIME, parseSendDays, parseSendTime, isSendDue, scheduledEvening, readLastSent, writeLastSent
 };

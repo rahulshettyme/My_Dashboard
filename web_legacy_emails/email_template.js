@@ -8,6 +8,7 @@
     // The page renders chart canvases at this size so preview and email match.
     const LAYOUT = { emailWidth: 900, chartWidth: 820, chartHeight: 320 };
 
+
     const COLORS = {
         highest: '#ef4444',
         high: '#f59e0b',
@@ -21,62 +22,59 @@
         same: '#64748b'
     };
 
-    // Filter history for charts according to the progressive monthly rollover rule:
-    // 1. All records for past months (older than previous month) retain ONLY their 1st week entry.
-    // 2. For the previous month, as N new weekly entries are added in the current month:
-    //    - Week 1 of previous month is always kept as the monthly anchor.
-    //    - Intermediate weeks (week 2, week 3, ...) are progressively hidden from the start (i.e. week 2 is hidden first when N=1, week 3 when N=2, etc.).
-    // 3. For the current active month: all weekly entries are displayed.
-    function filterHistoryForChart(rawHistory) {
-        if (!rawHistory || rawHistory.length <= 1) return rawHistory || [];
+    // Chart length settings (configurable: jira_config.json "chart", dashboard Edit / Trend Data,
+    // GitHub variables CHART_MAX_POINTS / CHART_RECENT_WEEKS). 19 = the point count on Oct 16, 2026.
+    const CHART_DEFAULTS = { maxPoints: 19, recentWeeks: 4 };
+    const CHART_LIMITS = { maxPoints: [4, 60], recentWeeks: [1, 12] };
 
-        const monthGroups = new Map();
-        rawHistory.forEach(item => {
-            const d = new Date(item.date);
-            const key = isNaN(d.getTime())
-                ? item.date.slice(0, 8)
-                : (d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'));
-            if (!monthGroups.has(key)) {
-                monthGroups.set(key, []);
-            }
-            monthGroups.get(key).push(item);
-        });
+    // Whole numbers within limits, and never fewer points than protected recent weeks
+    function normalizeChartOptions(options) {
+        const o = options || {};
+        const pick = (v, def, [lo, hi]) => {
+            const n = parseInt(v, 10);
+            return Math.min(hi, Math.max(lo, Number.isFinite(n) ? n : def));
+        };
+        const recentWeeks = pick(o.recentWeeks, CHART_DEFAULTS.recentWeeks, CHART_LIMITS.recentWeeks);
+        const maxPoints = Math.max(recentWeeks, pick(o.maxPoints, CHART_DEFAULTS.maxPoints, CHART_LIMITS.maxPoints));
+        return { maxPoints, recentWeeks };
+    }
 
-        const monthKeys = Array.from(monthGroups.keys());
-        if (monthKeys.length === 1) return rawHistory;
+    const monthKey = (item) => {
+        const d = new Date(item.date);
+        return isNaN(d.getTime()) ? String(item.date).slice(0, 8) : `${d.getFullYear()}-${d.getMonth() + 1}`;
+    };
 
-        const currentMonthKey = monthKeys[monthKeys.length - 1];
-        const prevMonthKey = monthKeys[monthKeys.length - 2];
-        const olderMonthKeys = monthKeys.slice(0, monthKeys.length - 2);
+    // Which history weeks become chart points (history itself is never changed):
+    // - At most maxPoints points.
+    // - Never hidden: the last recentWeeks weeks (incl. the newest) and the first week of every month.
+    // - Over the limit: hide the oldest unprotected week first (in practice the previous month's week 2,
+    //   then week 3, ...). If only protected weeks remain, hide the oldest point overall (left edge).
+    function filterHistoryForChart(rawHistory, options) {
+        const { maxPoints, recentWeeks } = normalizeChartOptions(options);
+        const items = rawHistory || [];
+        if (items.length <= maxPoints) return items.slice();
 
-        const filtered = [];
-
-        // 1. Older months: keep only 1st week
-        olderMonthKeys.forEach(mKey => {
-            const entries = monthGroups.get(mKey);
-            if (entries && entries.length > 0) {
-                filtered.push(entries[0]);
-            }
-        });
-
-        // 2. Previous month: progressive retirement based on count in current month
-        const currentMonthEntries = monthGroups.get(currentMonthKey) || [];
-        const prevMonthEntries = monthGroups.get(prevMonthKey) || [];
-        const nAdded = currentMonthEntries.length;
-
-        prevMonthEntries.forEach((entry, idx) => {
-            // idx 0 = monthly anchor (always kept); idx N is retired once nAdded >= N
-            if (idx === 0 || idx > nAdded) {
-                filtered.push(entry);
+        const isProtected = items.map((item, i) => i >= items.length - recentWeeks);
+        const seenMonths = new Set();
+        items.forEach((item, i) => {
+            const key = monthKey(item);
+            if (!seenMonths.has(key)) {
+                seenMonths.add(key);
+                isProtected[i] = true;
             }
         });
 
-        // 3. Current month: all entries visible
-        currentMonthEntries.forEach(entry => {
-            filtered.push(entry);
-        });
-
-        return filtered;
+        const keep = items.map(() => true);
+        let count = items.length;
+        // 1. Oldest unprotected weeks first
+        for (let i = 0; i < items.length && count > maxPoints; i++) {
+            if (!isProtected[i]) { keep[i] = false; count--; }
+        }
+        // 2. Still too many: oldest remaining points (old month anchors on the left edge)
+        for (let i = 0; i < items.length && count > maxPoints; i++) {
+            if (keep[i]) { keep[i] = false; count--; }
+        }
+        return items.filter((item, i) => keep[i]);
     }
 
     const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -133,8 +131,9 @@
 
     // Chart.js config for one section's trend image. section: 'older' | 'recent'.
     // Highest = red and High = amber in both charts.
-    function buildChartConfig(history, section) {
-        const items = filterHistoryForChart(history);
+    // chartOptions: { maxPoints, recentWeeks } — see filterHistoryForChart
+    function buildChartConfig(history, section, chartOptions) {
+        const items = filterHistoryForChart(history, chartOptions);
         const key = section === 'older' ? 'older' : 'recent';
         const line = (label, data, color) => ({
             label,
@@ -304,7 +303,7 @@
 </table>`;
     }
 
-    const api = { LAYOUT, COLORS, formatDateLabel, buildJiraUrl, buildJiraLinks, filterHistoryForChart, previousWeek, withCurrentWeek, buildChartConfig, buildEmailHtml };
+    const api = { LAYOUT, CHART_DEFAULTS, CHART_LIMITS, normalizeChartOptions, COLORS, formatDateLabel, buildJiraUrl, buildJiraLinks, filterHistoryForChart, previousWeek, withCurrentWeek, buildChartConfig, buildEmailHtml };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     else root.WebLegacyEmail = api;
 })(typeof window !== 'undefined' ? window : this);

@@ -118,7 +118,7 @@
 
     <div class="progress">
         <div class="bar"><div id="barFill"></div></div>
-        <small id="barText">0 of 10 steps done</small>
+        <small id="barText">0 of 11 steps done</small>
     </div>
 
     <div class="overview">
@@ -129,10 +129,12 @@
         <a href="#s5"><b>Step 5</b>Allow Actions to save history</a>
         <a href="#s6"><b>Step 6</b>Run in test mode</a>
         <a href="#s7"><b>Step 7</b>Run in dry-run mode</a>
+        <a href="#s7b"><b>Step 7b</b>Reliable trigger (Apps Script)</a>
         <a href="#s8"><b>Step 8</b>Test one scheduled send</a>
         <a href="#s9"><b>Step 9</b>Go real: team, day &amp; time</a>
         <a href="#s10"><b>Step 10</b>Turn off the PC schedule</a>
         <a href="#everyday"><b>Reference</b>Change day / time / recipients</a>
+        <a href="#history"><b>Important</b>Pull → edit → push (one flow)</a>
     </div>
 
     <div class="danger">
@@ -248,27 +250,77 @@ git push -u origin main</pre>
         <label class="check"><input type="checkbox"> The preview looks right (numbers, ▲/▼ changes, both charts, links).</label>
     </section>
 
-    <!-- STEP 8 -->
+    <!-- STEP 7B -->
+    <section class="step" id="s7b" data-step="7b">
+        <div class="step-head"><div class="num">7b</div><div><h2>Reliable trigger: Google Apps Script</h2><div class="meta">~15 minutes once · github.com + script.google.com</div></div></div>
+        <p>GitHub's own timer is best-effort — for this repository it skipped most slots (1 run in ~20). A small Google Apps Script in your account therefore starts the workflow (same as <b>Run workflow</b>) on your <code>SEND_DAYS</code> at <code>SEND_TIME</code>, checking every 10 minutes. It reads those GitHub variables, so you still change day/time only on GitHub. GitHub's timer stays as a free backup; the "sent today" marker prevents double emails.</p>
+
+        <h3>7b-1. Create a GitHub token that can only start this workflow</h3>
+        <ol>
+            <li>github.com → your avatar (top right) → <b>Settings</b> → <b>Developer settings</b> (bottom of the left menu) → <b>Personal access tokens</b> → <b>Fine-grained tokens</b> → <b>Generate new token</b>.</li>
+            <li><b>Token name:</b> <code class="copy">web-legacy-emails trigger</code> · <b>Expiration:</b> the longest allowed (e.g. 1 year — note the date; see "Everyday changes").</li>
+            <li><b>Resource owner:</b> <code>rahulshettycropin</code> · <b>Repository access:</b> <b>Only select repositories</b> → <code>web_legacy_emails</code>.</li>
+            <li><b>Permissions → Repository permissions:</b> <b>Actions → Read and write</b> and <b>Variables → Read-only</b>. Leave everything else as "No access" (Metadata read-only is added automatically).</li>
+            <li><b>Generate token</b> → copy it (starts with <code>github_pat_</code>). It is shown only once.</li>
+        </ol>
+        <div class="note"><b>What this token can do</b>Start this repository's workflows and read its variables — nothing else. It cannot read your code or your Secrets, and it can't touch other repositories.</div>
+
+        <h3>7b-2. Create the Apps Script project</h3>
+        <ol>
+            <li>Open <a href="https://script.google.com" target="_blank" rel="noopener">script.google.com</a> (the Google account that should own the trigger) → <b>New project</b>.</li>
+            <li>Click "Untitled project" at the top → rename to <code class="copy">Web Legacy Emails trigger</code>.</li>
+            <li>In <code>Code.gs</code>, delete everything and paste the full contents of <b><code>web_legacy_emails/apps_script/github_trigger.gs</code></b> from the repository (open it on github.com → <b>Raw</b> → Ctrl+A, Ctrl+C) → <b>Save</b> (💾).</li>
+            <li>⚙️ <b>Project Settings</b> (left bar) → scroll to <b>Script properties</b> → <b>Add script property</b> → Property <code class="copy">GITHUB_TOKEN</code>, Value = the token from 7b-1 → <b>Save script properties</b>.</li>
+        </ol>
+
+        <h3>7b-3. Check, then switch on</h3>
+        <ol>
+            <li>Back in the <b>Editor</b> (&lt;&gt; icon): in the function dropdown next to ▶ Run choose <b><code>testCheckNow</code></b> → <b>▶ Run</b>.</li>
+            <li>First time only, Google asks for permission: <b>Review permissions</b> → pick your account → "Google hasn't verified this app" → <b>Advanced</b> → <b>Go to Web Legacy Emails trigger (unsafe)</b>. It is your own script, so "unverified" is expected.</li>
+            <li>On "Select what Web Legacy Emails trigger can access", <b>tick both checkboxes</b> (or <b>Select all</b>) → <b>Continue</b>:
+                <ul>
+                    <li><b>Connect to an external service</b> — needed to call GitHub (read SEND_DAYS / SEND_TIME, start the workflow).</li>
+                    <li><b>Allow this application to run when you are not present</b> — needed for the 10-minute trigger to run with your PC and browser closed.</li>
+                </ul>
+                Leaving either unticked makes the script fail. It asks for nothing else (no Gmail, Drive or contacts access).</li>
+            <li>The <b>Execution log</b> shows e.g. <code>Wed 17:40 (Asia/Kolkata) · slots: Wed 17:00 [send] · due: 1</code> and <code>Would dispatch: …</code> — nothing has been sent.</li>
+            <li>Optional: run <b><code>testDispatchNow</code></b> → the Actions tab shows a new run in mode <code>test</code> → a <code>[TEST]</code> email arrives. This proves the token works.</li>
+            <li><b>Careful:</b> if today is a send day and SEND_TIME has passed, the first check after <code>setup</code> (within 10 minutes) <b>sends today's real email</b> and saves today as a week. Don't want that? Set <code>WEEKLY_EMAIL_ENABLED</code> = <code>false</code> or change <code>SEND_DAYS</code> first — or delete the test week afterwards (see "one flow for every update" at the end).</li>
+            <li>Run <b><code>setup</code></b> once → the log says <code>Trigger created: checkAndDispatch every 10 minutes</code>. ⏰ <b>Triggers</b> (left bar) now lists it. Done — it runs by itself from now on, even with your PC off.</li>
+        </ol>
+        <div class="note"><b>Watching it</b>⏰ Triggers → ⋮ on the trigger → <b>Executions</b> lists every check (most say <code>due: 0</code>). Google emails you about failures; on the trigger you can set failure notifications to <b>Notify me immediately</b>. On GitHub, runs started by the script show as "Manually run by &lt;your GitHub user&gt;" with mode <code>scheduled</code>.</div>
+        <div class="note"><b>Several times a day (other projects)</b>Change <code>schedule: 'github'</code> at the top of the script to a list, e.g. <code>schedule: [{ days: 'Mon-Fri', times: '10:00, 13:00, 17:00' }]</code> — each time is started once per day, within 10 minutes. Days accept <code>Mon</code>, <code>Mon,Fri</code>, <code>Mon-Fri</code>, <code>*</code>. Point <code>owner</code> / <code>repo</code> / <code>workflowFile</code> / <code>inputs</code> at the other workflow. To stop: run <code>remove</code>.</div>
+        <label class="check"><input type="checkbox"> testCheckNow shows the right slot and setup created the 10-minute trigger.</label>
+    </section>
+
+<!-- STEP 8 -->
     <section class="step" id="s8" data-step="8">
-        <div class="step-head"><div class="num">8</div><div><h2>Test one scheduled send (to you only)</h2><div class="meta">~3 minutes setup + up to ~45 minutes waiting · on github.com · no file edits</div></div></div>
-        <p>This proves the <b>automatic</b> path: GitHub starts the run by itself — you don't click anything.</p>
+        <div class="step-head"><div class="num">8</div><div><h2>Test the scheduled send (to you only)</h2><div class="meta">~5 minutes · on github.com · no file edits, no waiting</div></div></div>
+        <p>This tests the <b>automatic</b> path — the same logic the timer uses — with test-only settings.</p>
         <p class="path">Settings <span>→</span> Secrets and variables <span>→</span> Actions <span>→</span> Variables tab <span>→</span> New repository variable</p>
         <div class="table-wrap"><table>
             <tr><th>Name</th><th>Value for the test</th><th>Meaning</th></tr>
             <tr><td><code class="copy">SCHEDULE_MODE</code></td><td><code class="copy">test</code></td><td>Scheduled runs send a <code>[TEST]</code> email <b>only to GMAIL_USER</b> and don't touch history</td></tr>
             <tr><td><code class="copy">SEND_DAYS</code></td><td><b>Today</b>, e.g. <code>Tue</code></td><td>Days to send: <code>Mon</code> <code>Tue</code> <code>Wed</code> <code>Thu</code> <code>Fri</code> <code>Sat</code> <code>Sun</code> — several with commas</td></tr>
-            <tr><td><code class="copy">SEND_TIME</code></td><td><b>The current time or earlier</b>, e.g. <code>16:00</code></td><td>IST, 24-hour. "At or after" this time — so a time already passed means <b>the next wake-up sends</b></td></tr>
+            <tr><td><code class="copy">SEND_TIME</code></td><td><b>The current time or earlier</b>, e.g. <code>16:00</code></td><td>IST, 24-hour. "At or after" this time — so a time already passed means <b>it's due right away</b> (e.g. <code>00:00</code> for any time today)</td></tr>
             <tr><td><code class="copy">WEEKLY_EMAIL_ENABLED</code></td><td><code class="copy">true</code> (lower case)</td><td>Master switch for scheduled sending</td></tr>
         </table></div>
-        <h3>Then wait and watch</h3>
+        <h3>Run it now — no waiting (recommended)</h3>
         <ol>
-            <li>Open the <b>Actions</b> tab (Event filter → <b>schedule</b>). GitHub wakes the workflow at <b>:00 and :30 past each hour between 15:30 and 00:00 IST</b>, often 5–20 minutes late. Each wake-up appears as a <i>Scheduled</i> run.</li>
-            <li>Open the first one → step <b>Is a send due now?</b> says <code>Due (…)</code>, then it installs and sends. Your inbox gets the <code>[TEST]</code> email.</li>
-            <li>Later wake-ups that day finish in seconds with <code>Already sent today</code> — proof it sends only once.</li>
+            <li><b>Actions</b> → <b>Web Legacy Emails – Weekly Summary</b> → <b>Run workflow</b> → mode <b><code>scheduled</code></b> → Run workflow.</li>
+            <li>This runs <b>exactly what a timer wake-up runs</b> — the due check with your SEND_DAYS / SEND_TIME, then SCHEDULE_MODE, the "sent today" marker and the commit — just immediately, at any time of day.</li>
+            <li>Open the run → step <b>Is a send due now?</b> says <code>Due (…)</code> → your inbox gets the <code>[TEST]</code> email.</li>
+            <li>Run <code>scheduled</code> once more: it now says <code>Already sent today</code> — proof it sends only once per day.</li>
+        </ol>
+        <h3>Optional: also watch the real timer</h3>
+        <ol>
+            <li>The timer wakes at <b>:00 and :30 past each hour between 15:30 and 00:00 IST</b>. GitHub often starts them late — 5–20 minutes usually, occasionally hours (a 00:00 slot was seen starting at 01:48).</li>
+            <li>Runs before your SEND_TIME say <code>Too early</code>; the first after it sends; later ones say <code>Already sent today</code>.</li>
+            <li>A late run after midnight (before 06:00 IST) still counts as the <b>previous evening</b>, so a delayed Friday slot still sends Friday's email.</li>
         </ol>
         <div class="note"><b>Why "wake-ups"?</b>GitHub's timer (the <code>cron:</code> line) is fixed and can't read variables, so the workflow wakes every 30 minutes in this evening window and checks SEND_DAYS / SEND_TIME. You never edit the file — only the variables. A SEND_TIME earlier than 15:30 sends at the first wake-up (~15:30). Need morning sends? Ask to widen the window.</div>
         <div class="note"><b>Test again the same day?</b>Delete <code>web_legacy_emails/last_scheduled_send.json</code> in the repository (open it on github.com → ⋯ → Delete file). A test send never blocks a real send on the same day.</div>
-        <label class="check"><input type="checkbox"> A Scheduled run said "Due" and the [TEST] email arrived.</label>
+        <label class="check"><input type="checkbox"> A "scheduled" run said "Due" and the [TEST] email arrived.</label>
     </section>
 
     <!-- STEP 9 -->
@@ -307,14 +359,11 @@ git push -u origin main</pre>
             <li><b>On your send day, shortly after SEND_TIME:</b> one <i>Scheduled</i> run whose <b>Is a send due now?</b> step says <code>Due</code>, with a green tick. GitHub often starts scheduled runs 5–20 minutes late — normal.</li>
             <li>The other half-hourly runs finish in seconds with <code>Too early</code> / <code>Already sent today</code> / <code>Not a send day</code>. That's expected; they don't send anything.</li>
             <li>The repository has a new commit <code>chore(web-legacy-emails): weekly summary sent YYYY-MM-DD</code> — the saved week and the "sent today" marker.</li>
-            <li><b>Bring GitHub's history back to your dashboard</b> (optional, whenever you want the local charts up to date):</li>
+            <li><b>Bring GitHub's history back to the main project</b> — do this every few weeks, and always before moving to a new laptop:</li>
         </ul>
-        <pre><button class="btn" data-copy>Copy</button>cd "C:\Users\rahul.shetty\Documents\Important\AntiGravity\web_legacy_emails_deploy"
-git pull
-cd "C:\Users\rahul.shetty\Documents\Important\AntiGravity\My dashboard"
-node web_legacy_emails/deploy/sync_deploy.js --pull-history</pre>
+        <p>Double-click <code>web_legacy_emails\deploy\<b>sync_pull.bat</b></code> in the main project. It runs <code>git pull</code> in the deploy folder, then <b>merges</b> GitHub's new weeks into the main project's history (nothing is removed; the old file is backed up to your temp folder first) and lists any file that differs from the main project (e.g. edited on github.com).</p>
         <ul>
-            <li><b>Pushing code changes later:</b> run <code>sync_push.bat</code>, then in the deploy folder's <b>root</b>: <code>git pull</code>, <code>git add .</code>, <code>git commit -m "…"</code>, <code>git push</code>. Running <code>git add .</code> inside the <code>web_legacy_emails</code> subfolder would miss the workflow and other root files.</li>
+            <li><b>Pushing code changes later:</b> follow "one flow for every update" at the end of this guide (<code>sync_pull.bat</code> → edit → <code>sync_push.bat</code> → <code>git add .</code> / <code>git commit</code> / <code>git push</code> in the deploy folder's <b>root</b>). Running <code>git add .</code> inside the <code>web_legacy_emails</code> subfolder would miss the workflow and other root files.</li>
         </ul>
     </section>
 
@@ -326,10 +375,12 @@ node web_legacy_emails/deploy/sync_deploy.js --pull-history</pre>
             <tr><td>Change who receives it</td><td>Edit <code>EMAIL_TO</code> / <code>EMAIL_CC</code>.</td></tr>
             <tr><td>Change the day</td><td>Edit <code>SEND_DAYS</code>: one day <code>Fri</code> · several <code>Mon,Fri</code> · full names work too (<code>Monday, Friday</code>).</td></tr>
             <tr><td>Change the time</td><td>Edit <code>SEND_TIME</code> (IST, 24-hour): <code>17:30</code>, <code>18:05</code>, <code>21:18</code>. Effective range 15:30–23:59. One send per day.</td></tr>
+            <tr><td>Change the trend chart length</td><td>Variables <code>CHART_MAX_POINTS</code> (default 19, 4–60) and <code>CHART_RECENT_WEEKS</code> (default 4, 1–12). The last weeks and every month's first week are never hidden; beyond the limit the oldest points drop off. Locally: ✏️ Edit / Trend Data → Trend Chart.</td></tr>
             <tr><td>Skip / pause sending</td><td>Edit <code>WEEKLY_EMAIL_ENABLED</code> → <code>false</code>. Set back to <code>true</code> to resume.</td></tr>
-            <tr><td>Test the schedule again</td><td><code>SCHEDULE_MODE</code> → <code>test</code>, <code>SEND_DAYS</code> → today, <code>SEND_TIME</code> → now or earlier; afterwards set them back.</td></tr>
+            <tr><td>Test the schedule again</td><td><code>SCHEDULE_MODE</code> → <code>test</code>, <code>SEND_DAYS</code> → today, <code>SEND_TIME</code> → <code>00:00</code>, then Actions → Run workflow → mode <code>scheduled</code>. Afterwards set the variables back (and delete <code>last_scheduled_send.json</code> if you test twice in a day).</td></tr>
             <tr><td>Send it right now</td><td>Actions → Run workflow → mode <code>send</code> (real send + saves the week + marks today as sent). For a check only: mode <code>test</code>.</td></tr>
-            <tr><td>Replace an expired token / password</td><td>Secrets tab → add <code>JIRA_API_TOKEN</code> or <code>GMAIL_APP_PASSWORD</code> again with the new value.</td></tr>
+            <tr><td>Replace an expired token / password</td><td>Secrets tab → add <code>JIRA_API_TOKEN</code> or <code>GMAIL_APP_PASSWORD</code> again with the new value. <b>Trigger token</b> (Step 7b) expired → create a new fine-grained token and replace <code>GITHUB_TOKEN</code> in the Apps Script project's Script properties.</td></tr>
+            <tr><td>Stop all automatic sending</td><td><code>WEEKLY_EMAIL_ENABLED</code> → <code>false</code> stops every trigger (Apps Script and GitHub timer). To delete the Apps Script trigger itself: run <code>remove</code> in the script.</td></tr>
         </table></div>
         <div class="note"><b>GitHub Actions minutes</b>Each half-hourly wake-up takes a few seconds, but private repositories bill at least 1 minute per run: about 18 runs/day ≈ 540 minutes/month. GitHub's free plan includes 2,000 minutes/month for private repos. When <code>WEEKLY_EMAIL_ENABLED</code> isn't <code>true</code>, wake-ups are skipped and cost nothing.</div>
     </section>
@@ -339,9 +390,10 @@ node web_legacy_emails/deploy/sync_deploy.js --pull-history</pre>
         <div class="step-head"><div class="num">?</div><div><h2>Troubleshooting</h2><div class="meta">read the step output in the run: "Is a send due now?" first, then "Send weekly summary"</div></div></div>
         <div class="table-wrap"><table>
             <tr><th>Message / symptom</th><th>Fix</th></tr>
+            <tr><td>No email on the send day (Apps Script set up)</td><td>script.google.com → the project → <b>Executions</b>: <code>slots: none (disabled)</code> → <code>WEEKLY_EMAIL_ENABLED</code> isn't <code>true</code>; <code>HTTP 401/403</code> → token expired or missing a permission (Step 7b-1); <code>GITHUB_TOKEN is not set</code> → Step 7b-2. If it says <code>Dispatched</code>, open the GitHub run ("Manually run by …", mode <code>scheduled</code>) and read <b>Is a send due now?</b>.</td></tr>
             <tr><td>No <i>Scheduled</i> runs at all</td><td>Open <code>.github/workflows/web-legacy-emails-weekly.yml</code> on GitHub: the cron line must be <code>'0,30 10-18 * * *'</code>. If not, the latest workflow wasn't pushed — run <code>git add .</code> in the deploy folder's <b>root</b>, commit, push. Also check Actions are enabled (Step 5).</td></tr>
             <tr><td>Scheduled runs show grey "skipped"</td><td><code>WEEKLY_EMAIL_ENABLED</code> missing or not exactly <code>true</code>.</td></tr>
-            <tr><td>Green runs but no email</td><td>Open the run → <b>Is a send due now?</b>: <code>Not a send day</code> (check SEND_DAYS), <code>Too early</code> (check SEND_TIME, IST), <code>Already sent today</code> (delete <code>last_scheduled_send.json</code> to resend).</td></tr>
+            <tr><td>Green runs but no email</td><td>Open the run → <b>Is a send due now?</b>: <code>Not a send day</code> (check SEND_DAYS), <code>Too early</code> (check SEND_TIME, IST), <code>Already sent today</code> (delete <code>last_scheduled_send.json</code> to resend). Runs between 00:00 and 06:00 IST are judged as the previous evening and say "late run".</td></tr>
             <tr><td>Unknown day in SEND_DAYS / SEND_TIME must be HH:MM</td><td>Fix the variable: days like <code>Fri</code> or <code>Mon,Fri</code>; time like <code>17:30</code>.</td></tr>
             <tr><td>Jira email and API token are not configured</td><td><code>JIRA_EMAIL</code> variable or <code>JIRA_API_TOKEN</code> secret missing or misspelled.</td></tr>
             <tr><td>Jira rejected the email/API token</td><td>Token expired or wrong, or <code>JIRA_EMAIL</code> isn't the Atlassian login email. Create a new token and replace the secret.</td></tr>
@@ -355,6 +407,55 @@ node web_legacy_emails/deploy/sync_deploy.js --pull-history</pre>
         </table></div>
     </section>
 
+<!-- HISTORY ROUTINE -->
+    <section class="step" id="history">
+        <div class="step-head"><div class="num">!</div><div><h2>Very important: one flow for every update — pull, edit, push</h2><div class="meta">main project = <code>My dashboard</code> · deploy folder = <code>web_legacy_emails_deploy</code> (the GitHub repo)</div></div></div>
+        <p>GitHub adds a new week to the <b>deploy repo</b> after every real send. Use this same flow for <b>everything</b> — bringing those weeks back, deleting or correcting a week, changing code or docs, or any mix of them. Skip the parts you don't need.</p>
+
+        <ol>
+            <li><b>Pull</b> — double-click <code>My dashboard\web_legacy_emails\deploy\<b>sync_pull.bat</b></code>.
+                <ul>
+                    <li>Runs <code>git pull</code> in the deploy folder, then brings GitHub's new weeks into the main project (the old history file is backed up to your temp folder).</li>
+                    <li>Expect <code>[HISTORY] base: +N week(s) from GitHub: …</code> when emails were sent since the last pull, and <code>[DIFF]</code> lines for any code/docs you already changed (just a report — nothing is overwritten).</li>
+                </ul>
+            </li>
+            <li><b>Delete or correct a week</b> (optional) — in the main project:
+                <ul>
+                    <li><b>Dashboard</b> (easiest): Web legacy emails → ✏️ Edit / Trend Data → All Weeks table → 🗑️ on the date (or change its numbers) → <b>Save Table Changes</b>; or</li>
+                    <li><b>File</b>: edit <code>My dashboard\web_legacy_emails\jira_weekly_history.json</code> (delete the whole <code>{ "date": "…", … }</code> entry, watch the commas), save.</li>
+                </ul>
+            </li>
+            <li><b>Change code / config / docs</b> (optional) — in the main project, as usual. Steps 2 and 3 can happen in any order, even before step 1.</li>
+            <li><b>Push</b> — double-click <code>My dashboard\web_legacy_emails\deploy\<b>sync_push.bat</b></code>.
+                <ul>
+                    <li>Runs <code>git pull</code> in the deploy folder first, then copies your changes. Expect <code>[COPY] …</code> for changed files and, if you deleted/corrected weeks, <code>[HISTORY] deploy: −1 deleted in base: …</code> / <code>… corrected in base: …</code>.</li>
+                    <li>If GitHub sent an email after your pull, you'll see <code>[INFO] GitHub has 1 week(s) base doesn't … — kept</code>: that week is safe; the next pull brings it to the main project.</li>
+                </ul>
+            </li>
+            <li><b>Commit and push the deploy folder</b> — straight away:
+                <pre><button class="btn" data-copy>Copy</button>cd "C:\Users\rahul.shetty\Documents\Important\AntiGravity\web_legacy_emails_deploy"
+git status
+git add .
+git commit -m "Describe your change"
+git push</pre>
+                <code>git status</code> should list only what you changed (plus <code>web_legacy_emails/jira_weekly_history.json</code> if you deleted/corrected a week).</li>
+        </ol>
+
+        <h3>How the history stays safe</h3>
+        <p>Each pull saves a snapshot of GitHub's history (local file <code>deploy\last_pull_snapshot.json</code>). On the next push or pull every week is compared with that snapshot:</p>
+        <div class="table-wrap"><table>
+            <tr><th>Week</th><th>Result</th></tr>
+            <tr><td>Deleted in the main project since the last pull</td><td>Removed from GitHub too</td></tr>
+            <tr><td>Numbers corrected in the main project, GitHub's copy unchanged</td><td>Your numbers win</td></tr>
+            <tr><td>Sent by GitHub after your last pull</td><td>Always kept (never lost)</td></tr>
+            <tr><td>Changed on both sides</td><td>GitHub's numbers win (that is what was emailed) — shown as <code>[WARN]</code></td></tr>
+            <tr><td>Only in the main project</td><td>Added to GitHub</td></tr>
+        </table></div>
+        <div class="note"><b>Before deleting a week, pull at least once on this PC</b>The snapshot is created by <code>sync_pull.bat</code>. Without it (e.g. a new laptop), the first push only adds weeks and never deletes — it says <code>no pull snapshot yet</code>. Run <code>sync_pull.bat</code>, then delete again and push.</div>
+        <div class="note"><b>git push rejected ("fetch first")?</b>GitHub committed something between step 4 and step 5. Run <code>sync_pull.bat</code> → <code>sync_push.bat</code> again, then step 5. Never force-push.</div>
+        <div class="note"><b>Same-day marker</b>A send also writes <code>web_legacy_emails/last_scheduled_send.json</code> in the deploy repo ("already sent today"). Leave it — it only blocks a second send on that same date.</div>
+    </section>
+
 <div class="reset"><button class="btn" id="resetBtn">Reset my ticks</button></div>
 </div>
 
@@ -362,7 +463,7 @@ node web_legacy_emails/deploy/sync_deploy.js --pull-history</pre>
 
 <script>
     // Progress ticks are stored per browser only; the guide works without storage too
-    const KEY = 'wle-go-live-steps-v3';
+    const KEY = 'wle-go-live-steps-v4';
     const steps = [...document.querySelectorAll('.step[data-step]')];
     const boxes = steps.map(s => s.querySelector('.check input'));
 
@@ -378,7 +479,7 @@ node web_legacy_emails/deploy/sync_deploy.js --pull-history</pre>
         const n = done.filter(Boolean).length;
         document.getElementById('barFill').style.width = (n / steps.length * 100) + '%';
         document.getElementById('barText').textContent = n === steps.length
-            ? 'All 10 steps done — the weekly email now runs on GitHub 🎉'
+            ? `All ${steps.length} steps done — the weekly email now runs on GitHub 🎉`
             : `${n} of ${steps.length} steps done`;
         save(done);
     }

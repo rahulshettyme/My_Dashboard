@@ -16,6 +16,9 @@ email_credentials.json
 
 # Web Legacy Emails deploy-sync launcher is part of the module (overrides *.bat above)
 !web_legacy_emails/deploy/sync_push.bat
+!web_legacy_emails/deploy/sync_pull.bat
+# Local sync state (snapshot of GitHub's history at the last pull)
+web_legacy_emails/deploy/last_pull_snapshot.json
 
 # Web Legacy Emails local run outputs (scheduler run log, dry-run email preview)
 web_legacy_emails/schedule_runs.json
