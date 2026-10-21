@@ -5,7 +5,7 @@ const { selectYieldPredictionParameters, extractGrowthStageData } = require('../
 // Ratchets forward to tests.length after every task — represents "tests that existed
 // before the CURRENT task's changes", not a fixed historical constant. If this is not
 // bumped, "new" count keeps counting tests added in past sessions as if they were new.
-const baselineCount = 37;
+const baselineCount = 38;
 
 const tests = [
     {
@@ -1741,6 +1741,82 @@ const tests = [
             assert.strictEqual(vm.runInContext('typeof fmtSmart', context), 'function', 'fmtSmart must be defined in global scope');
             assert.strictEqual(vm.runInContext('typeof renderEnvironments', context), 'function', 'renderEnvironments must be defined in global scope');
             assert.strictEqual(vm.runInContext('typeof computeProgressionMetrics', context), 'function', 'computeProgressionMetrics must be defined in global scope');
+        }
+    },
+    {
+        name: 'resolveAuditedArea_primary_audited_area_with_harvest_over_yield_fallback',
+        fn: () => {
+            const fs = require('fs');
+            const vm = require('vm');
+            const path = require('path');
+
+            const dummyEl = {
+                addEventListener: () => {},
+                appendChild: () => {},
+                style: {},
+                classList: { add: () => {}, remove: () => {}, contains: () => false },
+                setAttribute: () => {},
+                getAttribute: () => null,
+                innerHTML: '',
+                textContent: ''
+            };
+            const dom = {
+                addEventListener: () => {},
+                getElementById: () => dummyEl,
+                querySelector: () => dummyEl,
+                querySelectorAll: () => [],
+                createElement: () => ({ ...dummyEl })
+            };
+            const contextObj = {
+                console: { log: () => {}, warn: () => {}, error: () => {}, info: () => {} },
+                document: dom,
+                location: { href: '', search: '', pathname: '' },
+                sessionStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+                localStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+                setTimeout: () => {},
+                clearTimeout: () => {},
+                setInterval: () => {},
+                clearInterval: () => {},
+                navigator: { userAgent: 'node' },
+                Chart: function() { this.destroy = () => {}; },
+                XLSX: {},
+                api: { getEnvironments: () => Promise.resolve([]), getDb: () => Promise.resolve({}) }
+            };
+            contextObj.window = contextObj;
+            contextObj.global = contextObj;
+            const context = vm.createContext(contextObj);
+
+            const exportManagerPath = path.join(__dirname, '../components/export_manager.js');
+            vm.runInContext(fs.readFileSync(exportManagerPath, 'utf8'), context, { filename: 'components/export_manager.js' });
+            const aggScriptPath = path.join(__dirname, '../aggregate_script_backup.js');
+            vm.runInContext(fs.readFileSync(aggScriptPath, 'utf8'), context, { filename: 'aggregate_script_backup.js' });
+
+            const resolveAuditedArea = context.resolveAuditedArea;
+            assert.strictEqual(typeof resolveAuditedArea, 'function', 'resolveAuditedArea must be defined');
+
+            // 1. Primary: a recorded audited area is always used as-is, even if Harvest/Yield disagree.
+            const primary = resolveAuditedArea(3.02, 3000, 1000, 1, 1);
+            assert.strictEqual(primary.area, 3.02, 'Audited area > 0 must be used unchanged');
+            assert.strictEqual(primary.derived, false, 'Audited area > 0 must not be flagged as derived');
+
+            // 2. Fallback: PROD asp CA 3912202 (auditedArea 0, expectedHarvest 3000 KILOGRAM, expectedYield 1000 kg/Acre).
+            const fallback = resolveAuditedArea(0, 3000, 1000, 1, 1);
+            assert.strictEqual(fallback.area, 3, 'Area must be derived as 3000 / 1000 = 3');
+            assert.strictEqual(fallback.derived, true, 'Derived area must be flagged');
+
+            // 3. Missing / non-numeric audited area (e.g. an auditedArea object with no count) also falls back.
+            assert.strictEqual(resolveAuditedArea(undefined, 3000, 1000, 1, 1).area, 3);
+            assert.strictEqual(resolveAuditedArea({ count: null }, 3000, 1000, 1, 1).area, 3);
+
+            // 4. Units: harvest 3 MT (MT->kg = 1000), yield 1000 kg/Acre, company unit Ha (Ha->Acre = 2.47105)
+            //    => 3 Acre in the yield unit => 3 / 2.47105 Ha in the company unit.
+            const converted = resolveAuditedArea(0, 3, 1000, 1000, 2.47105);
+            assert.ok(Math.abs(converted.area - (3 / 2.47105)) < 1e-9, `Expected ${3 / 2.47105} Ha, got ${converted.area}`);
+
+            // 5. No fallback possible without both Expected Harvest and Expected Yield > 0 -> stays 0, not derived.
+            assert.deepStrictEqual({ ...resolveAuditedArea(0, 0, 1000, 1, 1) }, { area: 0, derived: false });
+            assert.deepStrictEqual({ ...resolveAuditedArea(0, 3000, null, 1, 1) }, { area: 0, derived: false });
+            assert.deepStrictEqual({ ...resolveAuditedArea(0, 3000, 0, 1, 1) }, { area: 0, derived: false });
         }
     }
 ];

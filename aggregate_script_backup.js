@@ -340,6 +340,27 @@ function getDynamicFactor(srcCandidate, tgtCandidate, unitType, masterData = nul
     return getFallbackFactor(sStr, tStr, unitType);
 }
 
+/**
+ * Resolves a plot's Audited Area (in the company's area unit). Primary: the CA API's auditedArea,
+ * used as-is whenever it is > 0. Fallback ONLY when no area audit is recorded (0/missing/non-numeric,
+ * e.g. PROD asp CA 3912202): derive Area = Expected Harvest / Expected Yield. Expected Harvest is in
+ * the harvest unit and Expected Yield in the variety's yield unit, so harvest is first converted to the
+ * yield mass unit, and the resulting area (in the yield area unit) is converted back to the company unit.
+ * See YIELD_MODULE_SOP.md Section 3B.
+ */
+function resolveAuditedArea(rawAuditedArea, expectedHarvest, expectedYield, harvestToYieldMassFactor, companyToYieldAreaFactor) {
+    const audited = parseFloat(rawAuditedArea);
+    if (audited > 0) return { area: audited, derived: false };
+
+    const harvest = parseFloat(expectedHarvest);
+    const yieldVal = parseFloat(expectedYield);
+    if (!(harvest > 0) || !(yieldVal > 0)) return { area: 0, derived: false };
+
+    const areaInYieldUnit = (harvest * (harvestToYieldMassFactor || 1)) / yieldVal;
+    const area = companyToYieldAreaFactor > 0 ? areaInYieldUnit / companyToYieldAreaFactor : areaInYieldUnit;
+    return { area, derived: true };
+}
+
 function getFallbackFactor(src, tgt, unitType) {
     const type = (unitType || '').toLowerCase();
     if (type === 'area') {
@@ -3411,17 +3432,27 @@ async function generateDataFromAPI() {
             const caExpectedYield = (caData?.expectedYield !== undefined && caData?.expectedYield !== null && caData?.expectedYield !== 'NA' && !isNaN(parseFloat(caData.expectedYield)))
                 ? parseFloat(caData.expectedYield)
                 : null;
+            const reEstMassFactor = getDynamicFactor(rawUnit, yieldMassUnit, 'Mass');
+            const reEstAreaFactor = getDynamicFactor(companyAreaUnit, yieldAreaUnitRaw, 'Area');
+
+            // Audited Area: the CA API's auditedArea is primary; only when no area audit is recorded
+            // is it derived as Expected Harvest / Expected Yield (CA's own expectedYield only — never
+            // the Harvest/Area fallback below, which would be circular).
+            const resolvedArea = resolveAuditedArea(caData.auditedArea, caData.expectedHarvest, caExpectedYield, reEstMassFactor, reEstAreaFactor);
+            const auditedArea = resolvedArea.area;
+            if (resolvedArea.derived) {
+                console.info(`[INFO] CA ${plot.caId} has no audited area; derived ${auditedArea.toFixed(4)} (${companyAreaUnit}) from Expected Harvest / Expected Yield.`);
+            }
+
             const expectedYieldValue = (caExpectedYield !== null)
                 ? caExpectedYield
-                : (caData.auditedArea > 0 ? (caData.expectedHarvest || 0) / caData.auditedArea : 0);
+                : (auditedArea > 0 ? (caData.expectedHarvest || 0) / auditedArea : 0);
 
             // Re-estimated Yield has no equivalent pre-computed API field (it's field-audited), so it
             // must be calculated as Harvest / Area. Area's unit for this division is the COMPANY unit
             // (matching Audited Area's true unit), and the raw result is then converted into the
             // variety's yield unit so it's directly comparable to Expected Yield and Predicted Yield.
-            const reEstYieldPerCompanyArea = caData.auditedArea > 0 ? (caData.reEstimatedHarvest || 0) / caData.auditedArea : 0;
-            const reEstMassFactor = getDynamicFactor(rawUnit, yieldMassUnit, 'Mass');
-            const reEstAreaFactor = getDynamicFactor(companyAreaUnit, yieldAreaUnitRaw, 'Area');
+            const reEstYieldPerCompanyArea = auditedArea > 0 ? (caData.reEstimatedHarvest || 0) / auditedArea : 0;
             const reEstYield = reEstAreaFactor > 0 ? (reEstYieldPerCompanyArea * reEstMassFactor / reEstAreaFactor) : (reEstYieldPerCompanyArea * reEstMassFactor);
 
             // Maximum Attainable Yield/Harvest, shown on the plot's Yield/Harvest cards only when the
@@ -3435,7 +3466,7 @@ async function generateDataFromAPI() {
                 : null;
             let maxAttainableHarvestValue = null;
             if (maxAttainableYieldRaw !== null) {
-                const areaInYieldUnit = caData.auditedArea * reEstAreaFactor;
+                const areaInYieldUnit = auditedArea * reEstAreaFactor;
                 const maxAttainableHarvestInYieldMassUnit = maxAttainableYieldRaw * areaInYieldUnit;
                 const harvestMassFactor = getDynamicFactor(yieldMassUnit, rawUnit, 'Mass');
                 maxAttainableHarvestValue = maxAttainableHarvestInYieldMassUnit * harvestMassFactor;
@@ -3444,7 +3475,7 @@ async function generateDataFromAPI() {
             return {
                 'Plot Name': plot.name || 'Unknown',
                 'caId': plot.caId,
-                'Audited Area': caData.auditedArea || 0,
+                'Audited Area': auditedArea,
                 'Usable Area': (caData.usableArea !== undefined && caData.usableArea !== null) ? caData.usableArea : 'NA',
                 'Expected Harvest': caData.expectedHarvest || 0,
                 'Re-estimated Harvest': caData.reEstimatedHarvest || 0,
