@@ -5,7 +5,7 @@ const { selectYieldPredictionParameters, extractGrowthStageData } = require('../
 // Ratchets forward to tests.length after every task — represents "tests that existed
 // before the CURRENT task's changes", not a fixed historical constant. If this is not
 // bumped, "new" count keeps counting tests added in past sessions as if they were new.
-const baselineCount = 38;
+const baselineCount = 40;
 
 const tests = [
     {
@@ -1817,6 +1817,91 @@ const tests = [
             assert.deepStrictEqual({ ...resolveAuditedArea(0, 0, 1000, 1, 1) }, { area: 0, derived: false });
             assert.deepStrictEqual({ ...resolveAuditedArea(0, 3000, null, 1, 1) }, { area: 0, derived: false });
             assert.deepStrictEqual({ ...resolveAuditedArea(0, 3000, 0, 1, 1) }, { area: 0, derived: false });
+        }
+    },
+    {
+        name: 'extractGrowthStageHistory_full_season_paged_series',
+        fn: () => {
+            const { extractGrowthStageHistory } = require('../server.js');
+            // Two upstream pages, newest-first (orderBy=DESC), as the growthstage API returns them.
+            const page0 = {
+                totalPages: 2,
+                records: [
+                    { id: 'c', date: '2026-03-03T00:00:00Z', cropGrowthStage: { cropStageName: 'Vegetative', seasonProgression: 12.5, dailyInterpretation: 'Fast Growth', stageInterpretation: 'Germination stage was normal.', harvestWindowStartDate: '2026-08-01T00:00:00Z', harvestWindowEndDate: '2026-08-05T00:00:00Z' } },
+                    { id: 'c2', date: '2026-03-03T06:00:00Z', cropGrowthStage: { cropStageName: 'Vegetative', seasonProgression: 99 } }, // same day duplicate -> dropped
+                    { id: 'b', date: '2026-03-02T00:00:00Z', cropGrowthStage: { cropStageName: 'Germination', seasonProgression: '5.25' } }
+                ]
+            };
+            const page1 = {
+                records: [
+                    { id: 'a', date: '2026-03-01T00:00:00Z', cropGrowthStage: { cropStageName: 'Germination', seasonProgression: 0 } },
+                    { id: 'x', date: 'not-a-date', cropGrowthStage: { cropStageName: 'Germination' } }, // bad date -> skipped
+                    { id: 'y', date: '2026-02-28T00:00:00Z', cropGrowthStage: {} }                    // no stage -> skipped
+                ]
+            };
+            const out = extractGrowthStageHistory([page0, page1], '123');
+            assert.strictEqual(out.caId, '123');
+            assert.strictEqual(out.totalRecords, 3, 'Expected 3 unique-day valid records');
+            assert.deepStrictEqual(out.records.map(r => r.date.slice(0, 10)), ['2026-03-01', '2026-03-02', '2026-03-03'], 'Series must be date-ascending');
+            assert.strictEqual(out.records[1].seasonProgression, 5.25, 'Numeric strings must be parsed');
+            assert.strictEqual(out.records[2].seasonProgression, 12.5, 'Same-day duplicate: first (newest page order) record wins');
+            assert.strictEqual(out.records[2].stageInterpretation, 'Germination stage was normal.');
+            assert.strictEqual(out.records[0].dailyInterpretation, null, 'Missing interpretation -> null');
+
+            assert.strictEqual(extractGrowthStageHistory([], '1').totalRecords, 0);
+            assert.strictEqual(extractGrowthStageHistory({ records: null }, '1').totalRecords, 0, 'Malformed page must not throw');
+        }
+    },
+    {
+        name: 'buildCropStageProgressionModel_stage_segments_and_scaling',
+        fn: () => {
+            const { buildCropStageProgressionModel, classifyGrowthRate, STAGE_COLORS } = require('../components/growth_crop_stage_progression.js');
+            const recs = [
+                { date: '2026-03-03T00:00:00Z', cropStageName: 'Vegetative', seasonProgression: 10, dailyInterpretation: 'Fast Growth' },
+                { date: '2026-03-01T00:00:00Z', cropStageName: 'Germination', seasonProgression: 0 },
+                { date: '2026-03-02T00:00:00Z', cropStageName: 'germination', seasonProgression: 4 },
+                { date: '2026-03-05T00:00:00Z', cropStageName: 'Flowering', seasonProgression: 130, dailyInterpretation: 'Slow Growth', harvestWindowStartDate: '2026-08-01T00:00:00Z' }
+            ];
+            const m = buildCropStageProgressionModel(recs);
+            assert.strictEqual(m.points.length, 4);
+            assert.deepStrictEqual(m.stages.map(s => s.name), ['Germination', 'Vegetative', 'Flowering'], 'Stages are contiguous, case-insensitive, chronological');
+            assert.deepStrictEqual(m.stages.map(s => s.days), [2, 2, 1], 'Stage days run until the next stage starts; last stage inclusive');
+            assert.deepStrictEqual(m.stages.map(s => s.color), STAGE_COLORS.slice(0, 3), 'Colors assigned in fixed order of first appearance');
+            assert.strictEqual(m.points[3].progression, 100, 'Progression clamped to 100');
+            assert.strictEqual(m.latest.cropStageName, 'Flowering');
+            assert.strictEqual(m.latest.rate, 'slow');
+            assert.strictEqual(m.latest.daysInStage, 1);
+            assert.strictEqual(m.latest.harvestWindowStartDate, '2026-08-01T00:00:00Z');
+
+            // Series-level fraction scaling: only when EVERY value is <= 1
+            const frac = buildCropStageProgressionModel([
+                { date: '2026-03-01T00:00:00Z', cropStageName: 'A', seasonProgression: 0.1 },
+                { date: '2026-03-02T00:00:00Z', cropStageName: 'A', seasonProgression: 0.5 }
+            ]);
+            assert.deepStrictEqual(frac.points.map(p => p.progression), [10, 50]);
+            const pct = buildCropStageProgressionModel([
+                { date: '2026-03-01T00:00:00Z', cropStageName: 'A', seasonProgression: 0.5 },
+                { date: '2026-03-02T00:00:00Z', cropStageName: 'A', seasonProgression: 20 }
+            ]);
+            assert.strictEqual(pct.points[0].progression, 0.5, 'A small early % must not be rescaled when the series is in %');
+
+            // A stage that re-appears keeps its original color
+            const back = buildCropStageProgressionModel([
+                { date: '2026-03-01T00:00:00Z', cropStageName: 'A', seasonProgression: 1 },
+                { date: '2026-03-02T00:00:00Z', cropStageName: 'B', seasonProgression: 2 },
+                { date: '2026-03-03T00:00:00Z', cropStageName: 'A', seasonProgression: 3 }
+            ]);
+            assert.strictEqual(back.stages.length, 3);
+            assert.strictEqual(back.stages[2].color, back.stages[0].color);
+
+            assert.strictEqual(buildCropStageProgressionModel(null).points.length, 0);
+            assert.strictEqual(buildCropStageProgressionModel([{ date: 'bad', cropStageName: 'A' }]).latest, null);
+
+            assert.strictEqual(classifyGrowthRate('Slow Growth'), 'slow');
+            assert.strictEqual(classifyGrowthRate('FAST growth'), 'fast');
+            assert.strictEqual(classifyGrowthRate('Normal Growth'), 'normal');
+            assert.strictEqual(classifyGrowthRate('-'), 'unknown', 'Missing interpretation is NOT counted as Normal on this card');
+            assert.strictEqual(classifyGrowthRate(null), 'unknown');
         }
     }
 ];

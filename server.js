@@ -2056,6 +2056,116 @@ app.get('/api/user-aggregate/growth-stage', (req, res) => {
     gReq.end();
 });
 
+// ---------------------------------------------------------------------------------------------
+// Crop Stage Progression (per-plot season history) — ADDITIVE, independent of the route above.
+// Calls the SAME upstream endpoint as /api/user-aggregate/growth-stage, but pages through every
+// record (instead of only the latest one) so the UI can plot the whole season. See
+// GROWTH_MODULE_SOP.md Section 11.
+// ---------------------------------------------------------------------------------------------
+
+// Flattens one or more upstream growthstage pages into a date-ascending, de-duplicated series.
+// One point per calendar day (first occurrence wins — pages arrive newest-first, so that is the
+// newest record for that day). Records without a cropStageName or a parsable date are skipped.
+function extractGrowthStageHistory(pages, caIds) {
+    const byDay = new Map();
+    (Array.isArray(pages) ? pages : [pages]).forEach(page => {
+        const records = (page && Array.isArray(page.records)) ? page.records : [];
+        records.forEach(rec => {
+            const g = rec && rec.cropGrowthStage;
+            if (!g || !g.cropStageName) return;
+            const t = new Date(rec.date).getTime();
+            if (isNaN(t)) return;
+            const dayKey = new Date(t).toISOString().slice(0, 10);
+            if (byDay.has(dayKey)) return;
+            const prog = parseFloat(g.seasonProgression);
+            const dayProg = parseFloat(g.dayProgression);
+            byDay.set(dayKey, {
+                date: rec.date,
+                cropStageName: g.cropStageName,
+                seasonProgression: isNaN(prog) ? null : prog,
+                dayProgression: isNaN(dayProg) ? null : dayProg,
+                dailyInterpretation: g.dailyInterpretation || null,
+                stageInterpretation: g.stageInterpretation || null,
+                overAllInterpretation: g.overAllInterpretation || null,
+                harvestWindowStartDate: g.harvestWindowStartDate || null,
+                harvestWindowEndDate: g.harvestWindowEndDate || null
+            });
+        });
+    });
+    const records = Array.from(byDay.values())
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    return { caId: caIds, totalRecords: records.length, records };
+}
+
+// GET full-season Growth Stage history for ONE plot (used by the Crop Stage Progression card)
+app.get('/api/user-aggregate/growth-stage-history', (req, res) => {
+    const { environment, caIds } = req.query;
+    const authHeader = req.headers.authorization;
+
+    if (!environment || !caIds) return res.status(400).json({ error: 'Missing environment or caIds' });
+    if (!authHeader) return res.status(401).json({ error: 'Missing authorization' });
+
+    const db = readDb();
+    const apiBaseUrl = resolveEnvUrl(db, environment, 'api');
+    if (!apiBaseUrl) return res.status(400).json({ error: 'Unknown environment' });
+
+    const PAGE_SIZE = 100;
+    const MAX_PAGES = 20; // hard cap: 2000 daily records is far beyond any single season
+
+    const fetchPage = (page) => new Promise((resolve, reject) => {
+        const urlObj = new URL(`${apiBaseUrl}/services/farm/api/plot-risk/growthstage?caIds=${caIds}&size=${PAGE_SIZE}&page=${page}&orderBy=DESC&sortBy=date`);
+        const hReq = https.request({
+            hostname: urlObj.hostname,
+            port: 443,
+            path: urlObj.pathname + urlObj.search,
+            method: 'GET',
+            headers: { 'Authorization': authHeader, 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' }
+        }, (hRes) => {
+            let data = '';
+            hRes.on('data', chunk => data += chunk);
+            hRes.on('end', () => {
+                const trimmed = data.trim();
+                if (trimmed.startsWith('<!DOCTYPE') || trimmed.startsWith('<html')) {
+                    return reject({ status: 502, message: 'Upstream API returned HTML (possible session timeout)' });
+                }
+                if (!trimmed) return resolve({ records: [] });
+                if (hRes.statusCode < 200 || hRes.statusCode >= 300) {
+                    return reject({ status: hRes.statusCode, message: trimmed.substring(0, 300) });
+                }
+                try { resolve(JSON.parse(trimmed)); }
+                catch (e) { reject({ status: 500, message: 'Failed to parse growthstage response' }); }
+            });
+        });
+        hReq.on('error', e => reject({ status: 500, message: 'Proxy request failed: ' + e.message }));
+        hReq.end();
+    });
+
+    (async () => {
+        const pages = [];
+        const seenIds = new Set();
+        for (let page = 0; page < MAX_PAGES; page++) {
+            const parsed = await fetchPage(page);
+            const records = (parsed && Array.isArray(parsed.records)) ? parsed.records : [];
+            // Stop if the upstream ignores `page` and keeps returning the same records.
+            const fresh = records.filter(r => {
+                const key = r && (r.id || r.date);
+                if (!key || seenIds.has(key)) return false;
+                seenIds.add(key);
+                return true;
+            });
+            if (fresh.length === 0) break;
+            pages.push({ records: fresh });
+            const totalPages = parseInt(parsed.totalPages, 10);
+            if (!isNaN(totalPages) && page + 1 >= totalPages) break;
+            if (records.length < PAGE_SIZE) break;
+        }
+        res.json(extractGrowthStageHistory(pages, caIds));
+    })().catch(err => {
+        console.error(`[User Aggregate] Growth Stage History Error for caIds=${caIds}:`, err && err.message);
+        res.status((err && err.status) || 500).json({ error: (err && err.message) || 'Failed to load growth stage history' });
+    });
+});
+
 // GET Plot Features (Intelligence Features)
 app.get('/api/user-aggregate/plot-features/:caId', (req, res) => {
     const { environment } = req.query;
@@ -2215,4 +2325,6 @@ module.exports = {
     selectYieldPredictionParameters,
     extractGrowthStageData
 };
+// Crop Stage Progression (additive export; existing export block above left untouched)
+module.exports.extractGrowthStageHistory = extractGrowthStageHistory;
 

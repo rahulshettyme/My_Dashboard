@@ -1778,6 +1778,97 @@
                     </div>
                 </div>
 
+                <!-- Crop Stage Progression (Plot Level) — additive card, driven entirely by
+                     components/growth_crop_stage_progression.js. See GROWTH_MODULE_SOP.md Section 11. -->
+                <style>
+                    #crop-stage-progression-card .csp-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.75rem; margin-bottom: 1rem; }
+                    #crop-stage-progression-card .csp-kpi { background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: 10px; padding: 0.75rem 0.9rem; min-width: 0; }
+                    #crop-stage-progression-card .csp-kpi-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); margin-bottom: 0.35rem; }
+                    #crop-stage-progression-card .csp-kpi-value { font-size: 1.05rem; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 0.45rem; overflow-wrap: anywhere; }
+                    #crop-stage-progression-card .csp-kpi-sub { font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.3rem; min-height: 1em; }
+                    #crop-stage-progression-card .csp-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+                    #crop-stage-progression-card .csp-track { height: 6px; border-radius: 999px; background: rgba(148, 163, 184, 0.15); margin-top: 0.5rem; overflow: hidden; }
+                    #crop-stage-progression-card .csp-track > div { height: 100%; width: 0; border-radius: 999px; transition: width 0.4s ease; }
+                    #crop-stage-progression-card .csp-timeline { display: flex; gap: 2px; margin-bottom: 0.75rem; overflow-x: auto; }
+                    #crop-stage-progression-card .csp-chip { flex-basis: 0; min-width: 96px; border-top: 4px solid; background: rgba(255, 255, 255, 0.03); padding: 0.4rem 0.55rem; border-radius: 0 0 6px 6px; }
+                    #crop-stage-progression-card .csp-chip-current { background: rgba(255, 255, 255, 0.07); }
+                    #crop-stage-progression-card .csp-chip-name { font-size: 0.8rem; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                    #crop-stage-progression-card .csp-chip-meta { font-size: 0.7rem; color: var(--text-secondary); white-space: nowrap; }
+                    #crop-stage-progression-card .csp-nav { padding: 0.5rem 0.8rem; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer; color: var(--text-primary); }
+                    #crop-stage-progression-card .csp-diag { display: flex; }
+                    #crop-stage-progression-card .csp-diag.hidden { display: none; }
+                    #crop-stage-progression-card .csp-message { text-align: center; padding: 3rem 1rem; color: var(--text-secondary); font-size: 0.95rem; }
+                </style>
+                <div class="analysis-card" id="crop-stage-progression-card" style="margin-top: 2rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.25rem;">
+                        <div>
+                            <h3 style="margin: 0; font-size: 1.25rem; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem;">
+                                Crop Stage Progression
+                                <i class="fas fa-info-circle" style="font-size: 0.9rem; color: var(--text-secondary); cursor: help;"
+                                    title="Full-season season-progression history for one plot, colored by crop stage (Plot Risk growth stage API)"></i>
+                            </h3>
+                            <div style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.25rem;">Plot level · full season</div>
+                        </div>
+                        <div style="flex: 1 1 320px; max-width: 460px;">
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <button type="button" class="csp-nav" onclick="cspNavigatePlot(-1)" title="Previous Plot">&lt;</button>
+                                <div class="searchable-dropdown" style="flex-grow: 1;">
+                                    <input type="text" class="dropdown-search" id="csp-plot-search" placeholder="Search plots..." autocomplete="off">
+                                    <div class="dropdown-list" id="csp-plot-list"></div>
+                                </div>
+                                <button type="button" class="csp-nav" onclick="cspNavigatePlot(1)" title="Next Plot">&gt;</button>
+                            </div>
+                            <div id="csp-plot-count" style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.35rem; text-align: right;"></div>
+                        </div>
+                    </div>
+
+                    <div id="csp-message" class="csp-message">Load Growth Data to view per-plot crop stage progression.</div>
+
+                    <div id="csp-body" class="hidden">
+                        <div class="csp-kpis">
+                            <div class="csp-kpi">
+                                <div class="csp-kpi-label">Sowing Date</div>
+                                <div class="csp-kpi-value" id="csp-sowing">-</div>
+                                <div class="csp-kpi-sub">First growth-stage record</div>
+                            </div>
+                            <div class="csp-kpi">
+                                <div class="csp-kpi-label">Current Crop Stage</div>
+                                <div class="csp-kpi-value" id="csp-stage">-</div>
+                                <div class="csp-kpi-sub" id="csp-stage-sub"></div>
+                            </div>
+                            <div class="csp-kpi">
+                                <div class="csp-kpi-label">Overall Lifecycle Progression</div>
+                                <div class="csp-kpi-value" id="csp-progress">-</div>
+                                <div class="csp-track"><div id="csp-progress-bar"></div></div>
+                            </div>
+                            <div class="csp-kpi">
+                                <div class="csp-kpi-label">Growth Rate</div>
+                                <div class="csp-kpi-value" id="csp-rate">-</div>
+                                <div class="csp-kpi-sub">Latest daily interpretation</div>
+                            </div>
+                            <div class="csp-kpi">
+                                <div class="csp-kpi-label">Harvest Window</div>
+                                <div class="csp-kpi-value" id="csp-harvest" style="font-size: 0.95rem;">-</div>
+                                <div class="csp-kpi-sub" id="csp-harvest-sub"></div>
+                            </div>
+                        </div>
+
+                        <div id="csp-diagnosis" class="csp-diag hidden"
+                            style="gap: 0.6rem; align-items: flex-start; background: rgba(99, 102, 241, 0.07); border: 1px solid rgba(99, 102, 241, 0.25); border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 1rem; font-size: 0.9rem; color: var(--text-primary); line-height: 1.5;">
+                            <i class="fas fa-stethoscope" style="color: #818cf8; margin-top: 0.2rem;"></i>
+                            <div><strong style="color: var(--text-secondary);">Diagnosis:</strong> <span id="csp-diagnosis-text"></span></div>
+                        </div>
+
+                        <div id="csp-timeline" class="csp-timeline"></div>
+
+                        <div style="position: relative; height: 340px; width: 100%;">
+                            <canvas id="csp-chart"></canvas>
+                        </div>
+
+                        <div id="csp-updated" style="text-align: right; font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.5rem;"></div>
+                    </div>
+                </div>
+
                 <!-- Harvest Status Section (KPI) -->
                 <!-- Unified Harvest Status Card -->
                 <div id="harvest-status-section" class="hidden" style="margin-top: 2rem;">
@@ -2069,6 +2160,7 @@
     <script type="module" src="api.js"></script>
     <script src="components/export_manager.js" defer></script>
     <script src="aggregate_script_backup.js" defer></script>
+    <script src="components/growth_crop_stage_progression.js" defer></script>
     <script src="Aggregate-Data-Testing/health_script.js"></script>
 </body>
 

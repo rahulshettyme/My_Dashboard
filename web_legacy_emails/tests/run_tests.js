@@ -8,7 +8,7 @@ const vm = require('vm');
 
 // Ratchets forward to tests.length after every task — represents "tests that existed
 // before the CURRENT task's changes", not a fixed historical constant.
-const baselineCount = 21;
+const baselineCount = 22;
 
 const MODULE_DIR = path.join(__dirname, '..');
 
@@ -434,6 +434,34 @@ const tests = [
             // No snapshot (never pulled) -> plain union, nothing deleted; deploy wins per date (case-insensitive)
             const u = mergeHistories([w('Oct 16, 2026', 1), w('Oct 23, 2026', 2)], [w('Oct 9, 2026', 4), w('oct 16, 2026', 9)]);
             assert.deepStrictEqual(vals(u), { 'Oct 9, 2026': 4, 'Oct 16, 2026': 1, 'Oct 23, 2026': 2 });
+        }
+    },
+    {
+        name: 'ensureChartFont: Arial substitute registered on Linux runners without Arial',
+        fn: () => {
+            const { ensureChartFont } = require(path.join(MODULE_DIR, 'core.js'));
+            const fakeFonts = (hasArial) => {
+                const registered = [];
+                return { registered, has: (n) => hasArial && n === 'Arial', registerFromPath: (f, alias) => { registered.push([path.basename(f), alias]); return {}; } };
+            };
+            // Real Arial (Windows) -> nothing registered
+            const win = fakeFonts(true);
+            assert.deepStrictEqual(ensureChartFont(win, () => true), { source: 'system', files: [] });
+            assert.strictEqual(win.registered.length, 0);
+
+            // Ubuntu with Liberation + DejaVu -> Liberation Sans regular + bold as "Arial", DejaVu untouched
+            const linux = fakeFonts(false);
+            const onDisk = new Set(['/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
+                '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf']);
+            const r = ensureChartFont(linux, f => onDisk.has(f));
+            assert.strictEqual(r.source, 'substitute');
+            assert.deepStrictEqual(linux.registered, [['LiberationSans-Regular.ttf', 'Arial'], ['LiberationSans-Bold.ttf', 'Arial']]);
+
+            // Only DejaVu -> fallback; nothing at all -> 'none'
+            const dv = fakeFonts(false);
+            assert.strictEqual(ensureChartFont(dv, f => f.includes('DejaVuSans.ttf')).files.length, 1);
+            assert.deepStrictEqual(dv.registered, [['DejaVuSans.ttf', 'Arial']]);
+            assert.strictEqual(ensureChartFont(fakeFonts(false), () => false).source, 'none');
         }
     },
     {

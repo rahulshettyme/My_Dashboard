@@ -93,6 +93,17 @@ jobs:
       - if: steps.due.outputs.due == 'true'
         run: npm ci
 
+      # Ubuntu has no Arial; Liberation Sans has the same letter widths and core.js registers it as "Arial"
+      # for the chart images (usually preinstalled on the runner; install only when missing)
+      - name: Ensure chart font
+        if: steps.due.outputs.due == 'true'
+        run: |
+          if ls /usr/share/fonts/truetype/liberation*/LiberationSans-Regular.ttf >/dev/null 2>&1; then
+            echo "Liberation Sans present."
+          else
+            sudo apt-get update -qq && sudo apt-get install -y -qq fonts-liberation
+          fi
+
       - name: Send weekly summary
         if: steps.due.outputs.due == 'true'
         env:

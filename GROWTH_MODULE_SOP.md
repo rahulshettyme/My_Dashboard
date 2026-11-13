@@ -356,6 +356,12 @@ Three Growth-specific regression tests exist in `Aggregate-Data-Testing/health_s
 
 ## 10. Change Log (Feature & Logic Audit Trail)
 
+* **2026-11-11**: Added the "Crop Stage Progression" Plot-Level Card (Section 11):
+  1. New, purely additive per-plot card in `#growth-cards-container` (after the Harvest Window Daily section): searchable plot selector with prev/next, KPI tiles (Sowing Date, Current Crop Stage + days in stage, Overall Lifecycle Progression, Growth Rate, Harvest Window), Diagnosis line, a stage timeline strip, and ONE full-season chart (no preview/"View Full Season Data" split).
+  2. New server route `/api/user-aggregate/growth-stage-history` + helper `extractGrowthStageHistory()` — same upstream growthstage API as the existing route, paged to collect every record. The existing `/api/user-aggregate/growth-stage` route, `extractGrowthStageData()`, and the existing `module.exports` block are unchanged (new export appended on its own line).
+  3. New file `components/growth_crop_stage_progression.js`; it composes onto `window.handleLoadGrowthData` (original runs unchanged, card refreshes after). No existing Growth function body was edited.
+  4. Two new regression tests: `extractGrowthStageHistory_full_season_paged_series`, `buildCropStageProgressionModel_stage_segments_and_scaling` (40/40 passing — 2 new; `baselineCount` bumped to 40).
+
 * **2026-09-25**: Fixed the "Report:" Insight Line Redundantly Repeating the Same Peak Range, and Made It Always Include Harvested Plots:
   1. **Bug report**: with real data where slow, normal, and fast growth all genuinely peaked in the same bin (80-100%, a heavily skewed dataset), the message read "Slow growth is highest in the 80-100% range, while normal and fast growth peak in the 80-100% range" — mathematically correct in which range it named, but redundant, since slow's peak was always described in its own clause separately from normal/fast's regardless of whether they actually shared a bin.
   2. Fixed in `buildGrowthProgressionReportInsight()` (Section 3F): categories are now grouped by their peak bin index before building sentence 1, so any 2-or-3-way overlap collapses into one combined clause (e.g. `"Slow, normal, and fast growth peak in the {range} range."` when all three share a bin), while categories with genuinely different peak bins still get separate clauses (now also correctly handling a 3-way split with proper comma/"and" joining, and a slow+normal-merged/fast-separate 2-way split that wasn't previously distinguishable from the normal+fast-merged case).
@@ -397,3 +403,41 @@ Three Growth-specific regression tests exist in `Aggregate-Data-Testing/health_s
   2. Increased the Growth Progression chart's `layout.padding.top` from `35` to `70` to give the taller bubble headroom without clipping, matching the Stage window chart's padding.
   3. Added a `bins[i].totalArea` NA-exclusion assertion to the existing `computeProgressionMetrics_stacked_bins_and_insights_calculation` regression test (34/34 tests passing — 0 new named test cases, extended an existing one).
   4. Audited and documented the entire module for the first time: all four charts, the backend proxy/extraction layer, the base table, the two independent "hide harvested" checkboxes, and 12 pre-existing bugs/caveats (Section 8) that were previously undocumented and, in several cases, live latent bugs (e.g. the undefined `closeGrowthStageDrillDown()`, the Daily drill-down's missing `"NA"` guard).
+
+---
+
+## 11. Crop Stage Progression Card (Plot Level, added 2026-11-11)
+
+**Purpose**: per-plot, full-season view of season progression over time, colored by crop stage — the Growth equivalent of the Yield module's per-plot cards. Single chart only (no preview + "View Full Season Data" split).
+
+**Files** (all additive):
+- `server.js` — route `GET /api/user-aggregate/growth-stage-history?environment&caIds` and helper `extractGrowthStageHistory(pages, caIds)` (exported via an appended `module.exports.extractGrowthStageHistory = ...` line).
+- `components/growth_crop_stage_progression.js` — pure model helpers (`buildCropStageProgressionModel`, `classifyGrowthRate`, `STAGE_COLORS`, exported for Node) + all UI logic.
+- `aggregate_dashboard_backup.html` — card `#crop-stage-progression-card` (scoped `<style>` + ids prefixed `csp-`) and a `defer` script tag after `aggregate_script_backup.js`.
+
+### A. Backend — paging the same upstream API
+Upstream: `/services/farm/api/plot-risk/growthstage?caIds=..&size=100&page=N&orderBy=DESC&sortBy=date` (same endpoint as Section 2B, plus `page`). Pages 0.. until `page + 1 >= totalPages`, a short page (`< 100`), or a page with no new record ids (guards against an upstream that ignores `page`). Hard cap 20 pages. HTML/non-2xx upstream responses surface as an error JSON with the upstream status.
+
+`extractGrowthStageHistory()`:
+- Skips records with no `cropGrowthStage.cropStageName` or an unparsable `date`.
+- **One point per calendar day** (UTC `YYYY-MM-DD`); first occurrence wins (pages are newest-first).
+- Returns `{ caId, totalRecords, records[] }` **date-ascending**; each record: `date, cropStageName, seasonProgression (number|null), dayProgression, dailyInterpretation, stageInterpretation, overAllInterpretation, harvestWindowStartDate, harvestWindowEndDate` (missing → `null`).
+
+### B. Model (`buildCropStageProgressionModel`)
+- **Progression scaling is series-level**: the series is treated as a 0–1 fraction only if *every* value is `<= 1` (unlike Section 3A's per-value rule, so an early `0.5%` is not read as `50%`). Clamped to 0–100.
+- **Stages** = contiguous runs of the same stage name (case-insensitive). A stage that re-appears later is a new segment with the **same color**. Colors: dataviz dark categorical slots in fixed order of first appearance (`#3987e5, #d95926, #199e70, #c98500, #d55181, #008300, #9085e9, #e66767`; validated vs. the `#1e293b` card surface — green `#008300` is < 3:1, relieved by the labeled timeline chips). Crop-agnostic: stage names come from the API, not a hardcoded list (contrast Section 4A).
+- **Stage days** = days until the next stage starts; last stage is inclusive of its last record day. `latest.daysInStage` = last stage's days.
+- `classifyGrowthRate()`: slow/fast substring match like Section 3B, but empty/`"-"` → **`unknown`** (NOT Normal, unlike Section 3B/8.5) — this only affects this card.
+
+### C. UI
+- **Plot list** = `window.currentGrowthResults` (deduped by `caId`, natural-sorted by name, harvested plots included and tagged). First plot auto-selected after each Growth load.
+- **Hook**: wraps `window.handleLoadGrowthData` — resets the card, awaits the original unchanged, then repopulates. `window.refreshCropStageProgressionCard()` re-populates manually; `window.cspNavigatePlot(±1)` drives prev/next.
+- **Fetch** is lazy, per selected plot (not during the bulk Growth load), cached per `environment|caId`; cache cleared on every Growth load. Stale responses from a superseded selection are dropped (request sequence counter).
+- **KPI tiles**: Sowing Date = **first growth-stage record date** (no sowing-date field exists in this API — labeled as such); Current Crop Stage (+ days in stage); Overall Lifecycle Progression (latest %, progress bar); Growth Rate (latest `dailyInterpretation`; Slow/Normal colors as Section 3I, Fast uses `#38bdf8` because `#264653` is invisible on the dark card); Harvest Window (latest record's start → end, + "Opens in N days" / "Window open now" / "Window has passed").
+- **Diagnosis** = latest `stageInterpretation` + `overAllInterpretation` (hidden if both absent).
+- **Chart**: Chart.js line, category x-axis (one label per record day, max 12 ticks), y 0–100%. One dataset per stage segment, each extended to include the next segment's first point so line and gradient fill are continuous. Native legend off — the stage timeline strip (chip width ∝ stage days) is the labeled legend. Index-mode tooltip (date, stage, %, daily interpretation; boundary points de-duplicated) + dashed crosshair. No zoom plugin (not loaded in this app).
+
+### D. Caveats
+- The `page` query parameter is assumed from the upstream's paged response shape (`currentPage`/`totalPages`, 0-based); not verified against a live response. If ignored upstream, the duplicate-id guard stops after page 0 and the chart shows only the newest 100 days.
+- Sowing Date is a proxy (first record), not an agronomic sowing date.
+- Not covered by tests: the DOM/Chart.js rendering and the loader wrapper (consistent with Section 9's pattern). Covered: `extractGrowthStageHistory_full_season_paged_series`, `buildCropStageProgressionModel_stage_segments_and_scaling`.

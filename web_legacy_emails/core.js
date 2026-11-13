@@ -336,10 +336,40 @@ async function sendDigestMail({ html, date, charts = {}, test = false }) {
 }
 
 // ---------- Charts (server-side, same config as the page) ----------
+// Chart text asks for "Arial". Linux (GitHub runner) has no Arial and @napi-rs/canvas ignores fontconfig
+// aliases, so it fell back to a broken font (spaced-out digits, X-axis dates drawn letter by letter).
+// Fix: register a metric-compatible system font under the name "Arial" when Arial is missing.
+const ARIAL_SUBSTITUTES = [
+    // Liberation Sans = same glyph widths as Arial → identical layout to the Windows preview
+    '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
+    '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
+    '/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf',
+    '/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf',
+    '/usr/share/fonts/liberation-sans/LiberationSans-Regular.ttf',
+    '/usr/share/fonts/liberation-sans/LiberationSans-Bold.ttf'
+];
+const ARIAL_FALLBACKS = [
+    '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+    '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
+];
+
+// Returns which font now serves "Arial": 'system' (real Arial), the registered substitute files, or 'none'
+function ensureChartFont(fonts, exists = fs.existsSync) {
+    if (fonts.has('Arial')) return { source: 'system', files: [] };
+    for (const list of [ARIAL_SUBSTITUTES, ARIAL_FALLBACKS]) {
+        const files = list.filter(f => exists(f) && fonts.registerFromPath(f, 'Arial'));
+        if (files.length) return { source: 'substitute', files };
+    }
+    return { source: 'none', files: [] };
+}
+
 let chartLib = null;
 function getChartLib() {
     if (!chartLib) {
-        const { createCanvas } = require('@napi-rs/canvas');
+        const { createCanvas, GlobalFonts } = require('@napi-rs/canvas');
+        const font = ensureChartFont(GlobalFonts);
+        if (font.source === 'substitute') console.log(`Chart font: Arial → ${font.files.map(f => path.basename(f)).join(', ')}`);
+        if (font.source === 'none') console.warn('Chart font: no Arial or substitute found — chart text may render badly. Install fonts-liberation.');
         const { Chart } = require('chart.js/auto');
         Chart.register(require('chartjs-plugin-datalabels'));
         chartLib = { createCanvas, Chart };
@@ -564,7 +594,7 @@ module.exports = {
     readConfig, writeConfig, readHistory, writeHistory, upsertHistory, sortHistory,
     readJiraCredentials, readJiraCredentialsFile, writeJiraCredentials,
     readEmailCredentials, readEmailCredentialsFile, writeEmailCredentials, migrateLegacyCredentials,
-    fetchCounts, parseEmailList, isValidEmail, readRecipients, readChartOptions, buildSubject, sendDigestMail, renderChartPng,
+    fetchCounts, parseEmailList, isValidEmail, readRecipients, readChartOptions, buildSubject, sendDigestMail, renderChartPng, ensureChartFont,
     readRunLog, runWeeklyJob, readSchedule, writeSchedule, nextScheduledRun, startScheduler, stopScheduler,
     DEFAULT_SEND_DAYS, DEFAULT_SEND_TIME, parseSendDays, parseSendTime, isSendDue, scheduledEvening, readLastSent, writeLastSent
 };
