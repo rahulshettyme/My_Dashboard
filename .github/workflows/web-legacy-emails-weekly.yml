@@ -9,7 +9,8 @@
 #               SEND_DAYS  = Fri                              (days to send, e.g. "Fri" or "Mon,Fri"; default Fri)
 #               SEND_TIME  = 17:30                            (IST, 24-hour; default 17:30)
 #               SCHEDULE_MODE = send                          ("test" = scheduled runs send [TEST] only to GMAIL_USER, no history)
-#               CHART_MAX_POINTS = 19, CHART_RECENT_WEEKS = 4 (optional; trend chart length — override jira_config.json "chart")
+#               CHART_MAX_POINTS = 25                         (optional; weeks shown in the trend charts — overrides jira_config.json "chart")
+#               CHART_RECENT_WEEKS                            (optional; only used by the previous month-anchor chart rule)
 #
 # Day and time are VARIABLES — change them on GitHub, never in this file. GitHub's cron cannot read
 # variables (and is often late), so this workflow wakes every 30 minutes between 15:30 and 00:00 IST and

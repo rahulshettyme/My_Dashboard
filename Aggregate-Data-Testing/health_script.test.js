@@ -5,7 +5,7 @@ const { selectYieldPredictionParameters, extractGrowthStageData } = require('../
 // Ratchets forward to tests.length after every task — represents "tests that existed
 // before the CURRENT task's changes", not a fixed historical constant. If this is not
 // bumped, "new" count keeps counting tests added in past sessions as if they were new.
-const baselineCount = 40;
+const baselineCount = 41;
 
 const tests = [
     {
@@ -1902,6 +1902,83 @@ const tests = [
             assert.strictEqual(classifyGrowthRate('Normal Growth'), 'normal');
             assert.strictEqual(classifyGrowthRate('-'), 'unknown', 'Missing interpretation is NOT counted as Normal on this card');
             assert.strictEqual(classifyGrowthRate(null), 'unknown');
+        }
+    },
+    {
+        name: 'aggregate_yield_all_plots_fallback_when_no_plot_has_prediction',
+        fn: () => {
+            const fs = require('fs');
+            const vm = require('vm');
+            const path = require('path');
+
+            const makeEl = () => ({
+                addEventListener: () => {}, appendChild: () => {}, style: {},
+                classList: { add: () => {}, remove: () => {}, contains: () => false, toggle: () => false },
+                setAttribute: () => {}, getAttribute: () => null, querySelector: () => null,
+                innerHTML: '', textContent: '', value: undefined, checked: false
+            });
+            const els = {};
+            const dom = {
+                addEventListener: () => {},
+                getElementById: (id) => (els[id] = els[id] || makeEl()),
+                querySelector: () => makeEl(),
+                querySelectorAll: () => [],
+                createElement: () => makeEl()
+            };
+            const contextObj = {
+                console: { log: () => {}, warn: () => {}, error: () => {}, info: () => {} },
+                document: dom,
+                location: { href: '', search: '', pathname: '' },
+                sessionStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+                localStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+                setTimeout: () => {}, clearTimeout: () => {}, setInterval: () => {}, clearInterval: () => {},
+                navigator: { userAgent: 'node' },
+                Chart: function() { this.destroy = () => {}; },
+                XLSX: {},
+                api: { getEnvironments: () => Promise.resolve([]), getDb: () => Promise.resolve({}) }
+            };
+            contextObj.window = contextObj;
+            contextObj.global = contextObj;
+            const context = vm.createContext(contextObj);
+            vm.runInContext(fs.readFileSync(path.join(__dirname, '../components/export_manager.js'), 'utf8'), context);
+            vm.runInContext(fs.readFileSync(path.join(__dirname, '../aggregate_script_backup.js'), 'utf8'), context);
+
+            // Pure scope helper
+            const scope = context.resolveAggregatePlotScope;
+            assert.deepStrictEqual({ ...scope(0, false) }, { useAllPlots: true, isFallback: true });
+            assert.deepStrictEqual({ ...scope(2, false) }, { useAllPlots: false, isFallback: false });
+            assert.deepStrictEqual({ ...scope(2, true) }, { useAllPlots: true, isFallback: false });
+
+            const plot = (name, area, exp, re, records) => ({
+                'Plot Name': name, caId: name, 'Audited Area': area,
+                'Expected Harvest': exp, 'Re-estimated Harvest': re,
+                'Expected YIELD': exp / area, 'Re-estimated Yield': re / area,
+                plotHarvestUnit: 'MT', plotAreaUnit: 'ha', yieldRawRecords: records
+            });
+            const tasumi = [{ modelType: 'TASUMI', predictionDate: '2026-08-14',
+                parameters: { yieldMin: 4, yieldMax: 6, productionMin: 8, productionMax: 12 } }];
+            const text = (id) => els[id] && els[id].textContent;
+
+            // 1. No plot has a prediction -> Expected / Re-estimated aggregate over ALL plots
+            context.processData([plot('P1', 2, 10, 12, []), plot('P2', 3, 20, 18, [])]);
+            assert.strictEqual(text('agg-total-area'), '5.00 Ha');
+            assert.strictEqual(text('agg-exp-harvest'), '30');
+            assert.strictEqual(text('agg-re-harvest'), '30');
+            assert.strictEqual(text('agg-exp-yield'), '6');
+            assert.strictEqual(text('agg-re-yield'), '6');
+            assert.ok(String(text('agg-plots-count')).startsWith('2'), 'All 2 plots must be counted in the fallback');
+            assert.strictEqual(text('agg-ai-harvest-min'), '-', 'No predicted values in the fallback');
+            assert.strictEqual(text('agg-ai-yield-min'), '-');
+            assert.strictEqual(context.aggUsingAllPlotsFallback, true);
+
+            // 2. Any plot has a prediction -> only predicted plots (unchanged behavior)
+            context.processData([plot('P1', 2, 10, 12, tasumi), plot('P2', 3, 20, 18, [])]);
+            assert.strictEqual(text('agg-total-area'), '2.00 Ha');
+            assert.strictEqual(text('agg-exp-harvest'), '10');
+            assert.strictEqual(text('agg-exp-yield'), '5');
+            assert.strictEqual(text('agg-plots-count'), '1');
+            assert.strictEqual(text('agg-ai-harvest-min'), '8');
+            assert.strictEqual(context.aggUsingAllPlotsFallback, false);
         }
     }
 ];

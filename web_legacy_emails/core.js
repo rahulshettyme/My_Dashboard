@@ -266,7 +266,8 @@ const isValidEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 // Effective To/CC: EMAIL_TO / EMAIL_CC environment variables (GitHub repository variables) win over
 // jira_config.json when set and non-empty; the dashboard UI edits the config file.
 // Effective chart settings: CHART_MAX_POINTS / CHART_RECENT_WEEKS environment variables (GitHub repository
-// variables) win over jira_config.json "chart"; always normalised to safe limits.
+// variables) win over jira_config.json "chart"; always normalised to safe limits. CHART_RECENT_WEEKS only
+// matters in the previous 'monthAnchors' chart rule (email_template.js CHART_MODE).
 function readChartOptions(config = readConfig()) {
     const c = config.chart || {};
     return tpl.normalizeChartOptions({

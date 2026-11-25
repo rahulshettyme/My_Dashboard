@@ -8,7 +8,7 @@ const vm = require('vm');
 
 // Ratchets forward to tests.length after every task — represents "tests that existed
 // before the CURRENT task's changes", not a fixed historical constant.
-const baselineCount = 22;
+const baselineCount = 23;
 
 const MODULE_DIR = path.join(__dirname, '..');
 
@@ -33,6 +33,29 @@ const week = (date) => ({ date, olderHighest: 0, olderHigh: 0, recentHighest: 0,
 
 const tests = [
     {
+        name: 'filterHistoryForChart (rolling, active): last N weeks, oldest dropped as each new week arrives',
+        fn: () => {
+            assert.strictEqual(tpl.CHART_MODE, 'rolling', 'Active chart rule');
+            const h = Array.from({ length: 30 }, (_, i) => week(tpl.formatDateLabel(new Date(2026, 0, 2 + 7 * i))));
+            // Over the limit: exactly the last maxPoints weeks, in order, no gaps
+            assert.deepStrictEqual(dates(tpl.filterHistoryForChart(h, { maxPoints: 25 })), dates(h.slice(-25)));
+            assert.deepStrictEqual(dates(tpl.filterHistoryForChart(h)), dates(h.slice(-25)), 'Default = 25');
+            // recentWeeks has no effect in rolling mode
+            assert.deepStrictEqual(dates(tpl.filterHistoryForChart(h, { maxPoints: 10, recentWeeks: 2 })), dates(h.slice(-10)));
+            // Under the limit: every week
+            assert.deepStrictEqual(dates(tpl.filterHistoryForChart(h.slice(0, 7))), dates(h.slice(0, 7)));
+            // A new week replaces the first point
+            const next = [...h, week('Aug 7, 2026')];
+            const before = dates(tpl.filterHistoryForChart(h)), after = dates(tpl.filterHistoryForChart(next));
+            assert.deepStrictEqual(after, [...before.slice(1), 'Aug 7, 2026']);
+            // Real history: 25 points ending at the latest week
+            const history = JSON.parse(fs.readFileSync(path.join(MODULE_DIR, 'jira_weekly_history.json'), 'utf8'));
+            const f = tpl.filterHistoryForChart(history);
+            assert.strictEqual(f.length, Math.min(25, history.length));
+            assert.strictEqual(f[f.length - 1].date, history[history.length - 1].date);
+        }
+    },
+    {
         name: 'filterHistoryForChart: empty / single entry passthrough',
         fn: () => {
             assert.deepStrictEqual(dates(tpl.filterHistoryForChart([])), []);
@@ -41,44 +64,44 @@ const tests = [
         }
     },
     {
-        name: 'filterHistoryForChart: within the limit every week is shown',
+        name: 'monthAnchors (previous rule): within the limit every week is shown',
         fn: () => {
             const h = [week('Sep 4, 2026'), week('Sep 11, 2026'), week('Sep 18, 2026'), week('Oct 2, 2026'), week('Oct 9, 2026')];
-            assert.deepStrictEqual(dates(tpl.filterHistoryForChart(h)), dates(h), 'Default limit 19 > 5 weeks');
-            assert.deepStrictEqual(dates(tpl.filterHistoryForChart(h, { maxPoints: 5, recentWeeks: 4 })), dates(h), 'Exactly at the limit');
+            assert.deepStrictEqual(dates(tpl.filterHistoryMonthAnchors(h)), dates(h), 'Default limit 25 > 5 weeks');
+            assert.deepStrictEqual(dates(tpl.filterHistoryMonthAnchors(h, { maxPoints: 5, recentWeeks: 4 })), dates(h), 'Exactly at the limit');
         }
     },
     {
-        name: 'filterHistoryForChart: over the limit hides oldest unprotected week; month first-weeks + last N never hidden',
+        name: 'monthAnchors (previous rule): over the limit hides oldest unprotected week; month first-weeks + last N never hidden',
         fn: () => {
             const sep = [week('Sep 4, 2026'), week('Sep 11, 2026'), week('Sep 18, 2026'), week('Sep 25, 2026')];
             const oct = [week('Oct 2, 2026'), week('Oct 9, 2026'), week('Oct 16, 2026')];
             // 7 weeks, limit 6: Sep 11 (oldest unprotected) goes; Sep 4 = Sep's first week, last 4 = Sep 25..Oct 16
-            assert.deepStrictEqual(dates(tpl.filterHistoryForChart([...sep, ...oct], { maxPoints: 6, recentWeeks: 4 })),
+            assert.deepStrictEqual(dates(tpl.filterHistoryMonthAnchors([...sep, ...oct], { maxPoints: 6, recentWeeks: 4 })),
                 ['Sep 4, 2026', 'Sep 18, 2026', 'Sep 25, 2026', 'Oct 2, 2026', 'Oct 9, 2026', 'Oct 16, 2026']);
             // limit 5: Sep 18 goes next
-            assert.deepStrictEqual(dates(tpl.filterHistoryForChart([...sep, ...oct], { maxPoints: 5, recentWeeks: 4 })),
+            assert.deepStrictEqual(dates(tpl.filterHistoryMonthAnchors([...sep, ...oct], { maxPoints: 5, recentWeeks: 4 })),
                 ['Sep 4, 2026', 'Sep 25, 2026', 'Oct 2, 2026', 'Oct 9, 2026', 'Oct 16, 2026']);
             // limit 4: only protected left (Sep 4 + last 4) -> oldest point overall (Sep 4) is dropped
-            assert.deepStrictEqual(dates(tpl.filterHistoryForChart([...sep, ...oct], { maxPoints: 4, recentWeeks: 4 })),
+            assert.deepStrictEqual(dates(tpl.filterHistoryMonthAnchors([...sep, ...oct], { maxPoints: 4, recentWeeks: 4 })),
                 ['Sep 25, 2026', 'Oct 2, 2026', 'Oct 9, 2026', 'Oct 16, 2026']);
         }
     },
     {
-        name: 'filterHistoryForChart: settings are normalised (whole numbers, limits, maxPoints >= recentWeeks)',
+        name: 'normalizeChartOptions: settings are normalised (whole numbers, limits, maxPoints >= recentWeeks)',
         fn: () => {
-            assert.deepStrictEqual({ ...tpl.normalizeChartOptions() }, { maxPoints: 19, recentWeeks: 4 }, 'Defaults');
+            assert.deepStrictEqual({ ...tpl.normalizeChartOptions() }, { maxPoints: 25, recentWeeks: 4 }, 'Defaults');
             assert.deepStrictEqual({ ...tpl.normalizeChartOptions({ maxPoints: '20', recentWeeks: '6' }) }, { maxPoints: 20, recentWeeks: 6 }, 'Strings from variables');
             assert.deepStrictEqual({ ...tpl.normalizeChartOptions({ maxPoints: 2, recentWeeks: 8 }) }, { maxPoints: 8, recentWeeks: 8 }, 'maxPoints raised to recentWeeks');
             assert.deepStrictEqual({ ...tpl.normalizeChartOptions({ maxPoints: 999, recentWeeks: 0 }) }, { maxPoints: 60, recentWeeks: 1 }, 'Clamped to limits');
-            assert.deepStrictEqual({ ...tpl.normalizeChartOptions({ maxPoints: 'abc', recentWeeks: '' }) }, { maxPoints: 19, recentWeeks: 4 }, 'Invalid -> defaults');
+            assert.deepStrictEqual({ ...tpl.normalizeChartOptions({ maxPoints: 'abc', recentWeeks: '' }) }, { maxPoints: 25, recentWeeks: 4 }, 'Invalid -> defaults');
         }
     },
     {
-        name: 'filterHistoryForChart: real jira_weekly_history.json ends at the latest week, within the limit, last 4 shown',
+        name: 'monthAnchors (previous rule): real jira_weekly_history.json ends at the latest week, within the limit, last 4 shown',
         fn: () => {
             const history = JSON.parse(fs.readFileSync(path.join(MODULE_DIR, 'jira_weekly_history.json'), 'utf8'));
-            const filtered = tpl.filterHistoryForChart(history);
+            const filtered = tpl.filterHistoryMonthAnchors(history);
             const shown = new Set(Array.from(filtered, x => x.date));
             assert.strictEqual(filtered[filtered.length - 1].date, history[history.length - 1].date, 'Latest entry must be the last chart point');
             assert.ok(filtered.length <= tpl.CHART_DEFAULTS.maxPoints, 'Never more than the default limit');
@@ -86,7 +109,7 @@ const tests = [
         }
     },
     {
-        name: 'filterHistoryForChart: 3 more years of weekly data — exact length, last N + month first-weeks always shown, for several settings',
+        name: 'monthAnchors (previous rule): 3 more years of weekly data — exact length, last N + month first-weeks always shown, for several settings',
         fn: () => {
             const history = JSON.parse(fs.readFileSync(path.join(MODULE_DIR, 'jira_weekly_history.json'), 'utf8'));
             const firstOfMonth = (h) => {
@@ -101,7 +124,7 @@ const tests = [
                 let prevFirst = null;
                 for (let i = 0; i < 156; i++) {
                     h.push(week(tpl.formatDateLabel(d)));
-                    const f = tpl.filterHistoryForChart(h, opts);
+                    const f = tpl.filterHistoryMonthAnchors(h, opts);
                     const shown = new Set(Array.from(f, x => x.date));
                     const first = new Date(f[0].date);
                     const label = `${JSON.stringify(o)} week ${i}`;
@@ -316,7 +339,7 @@ const tests = [
                 delete process.env.CHART_MAX_POINTS;
                 delete process.env.CHART_RECENT_WEEKS;
                 assert.deepStrictEqual({ ...core.readChartOptions({ chart: { maxPoints: 22, recentWeeks: 5 } }) }, { maxPoints: 22, recentWeeks: 5 }, 'Config used');
-                assert.deepStrictEqual({ ...core.readChartOptions({}) }, { maxPoints: 19, recentWeeks: 4 }, 'Defaults when no config');
+                assert.deepStrictEqual({ ...core.readChartOptions({}) }, { maxPoints: 25, recentWeeks: 4 }, 'Defaults when no config');
                 process.env.CHART_MAX_POINTS = '20';
                 assert.deepStrictEqual({ ...core.readChartOptions({ chart: { maxPoints: 22, recentWeeks: 5 } }) }, { maxPoints: 20, recentWeeks: 5 }, 'Env wins per setting');
             } finally {

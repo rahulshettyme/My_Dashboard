@@ -22,7 +22,7 @@
     "saveSnapshot": true
   },
   "chart": {
-    "maxPoints": 20,
+    "maxPoints": 25,
     "recentWeeks": 4
   }
 }

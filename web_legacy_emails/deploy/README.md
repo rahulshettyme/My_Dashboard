@@ -25,7 +25,7 @@ Weekly email summary of open **Highest / High** priority Web bugs in Jira (Older
 | `SEND_DAYS` | Variable — e.g. `Fri` or `Mon,Fri` (default `Fri`) |
 | `SEND_TIME` | Variable — IST 24-hour, e.g. `17:30` (default `17:30`; effective 15:30–23:59) |
 | `SCHEDULE_MODE` | Variable — `send` (default) or `test` (scheduled runs send `[TEST]` only to `GMAIL_USER`, no history) |
-| `CHART_MAX_POINTS`, `CHART_RECENT_WEEKS` | Variables (optional) — trend chart length (default 19 points, last 4 weeks always shown) |
+| `CHART_MAX_POINTS` | Variable (optional) — weeks shown in the trend charts (default 25: the last 25 weeks). `CHART_RECENT_WEEKS` only applies to the previous chart rule |
 
 ## Data
 

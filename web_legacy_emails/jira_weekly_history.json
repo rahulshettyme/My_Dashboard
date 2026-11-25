@@ -481,5 +481,12 @@
     "olderHigh": 38,
     "recentHighest": 1,
     "recentHigh": 2
+  },
+  {
+    "date": "Nov 13, 2026",
+    "olderHighest": 0,
+    "olderHigh": 37,
+    "recentHighest": 0,
+    "recentHigh": 0
   }
 ]

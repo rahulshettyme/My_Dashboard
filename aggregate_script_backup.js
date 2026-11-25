@@ -65,6 +65,7 @@ var plotsList = []; // Store plot names for searchable dropdown
 var plotsWithPrediction = []; // Plots with yield prediction data
 var plotsWithoutPrediction = []; // Missing Data plots
 var plotsNotEnabled = []; // Not Enabled plots
+var aggUsingAllPlotsFallback = false; // true when no plot has a prediction -> aggregate uses all plots
 
 var authToken = null;
 var healthIndicatorsDisabled = false;
@@ -995,6 +996,16 @@ function renderModelCell(tVal, bVal, isTasumiLatest, isBiomassLatest, tDate, bDa
     `;
 }
 
+/**
+ * Decides which plots feed the Aggregate Level Expected / Re-estimated Yield & Harvest.
+ * - Any plot has a prediction  -> only predicted plots (or all, if "Include no prediction plots" is checked).
+ * - No plot has a prediction   -> all plots (isFallback = true), regardless of the checkbox.
+ */
+function resolveAggregatePlotScope(predictedPlotCount, includeNoPred) {
+    const isFallback = !(predictedPlotCount > 0);
+    return { useAllPlots: isFallback || !!includeNoPred, isFallback };
+}
+
 function processData(rows) {
     if (!Array.isArray(rows)) {
         console.error("processData: rows is not an array", rows);
@@ -1016,6 +1027,8 @@ function processData(rows) {
     // For calculating AI yield avg/weighted on aggregate
     let aiYieldMinWeightedSum = 0, aiYieldMaxWeightedSum = 0;
     let countWithPrediction = 0;
+    let predictedPlotCount = 0;
+    let allArea = 0, allExp = 0, allRe = 0, allPlotCount = 0;
 
     const getVal = (row, keys) => {
         for (let k of keys) {
@@ -1091,11 +1104,19 @@ function processData(rows) {
         const isZero = (h3_min === 0 || h3_min === null) && (h3_max === 0 || h3_max === null) && (y3_min === 0 || y3_min === null) && (y3_max === 0 || y3_max === null);
         const isPredictionAvailable = !isNA && !isZero;
 
+        // Totals over EVERY plot — used when no plot has a prediction (all-plots fallback)
+        allArea += areaHa;
+        allExp += h1Ton;
+        allRe += h2Ton;
+        allPlotCount++;
+
+        if (isPredictionAvailable) predictedPlotCount++;
+
         if (isPredictionAvailable || includeNoPred) {
             totalAreaHaSum += areaHa;
             expHarvestTonSum += h1Ton;
             reHarvestTonSum += h2Ton;
-            
+
             plotsWithPred.push(caName);
             countWithPrediction++;
         }
@@ -1172,9 +1193,28 @@ function processData(rows) {
     plotsNotEnabled = notEnabledPlots;
     populateSearchableDropdown(plotsWithPrediction);
 
+    // All-plots fallback: when NO plot has a prediction, the aggregate Expected / Re-estimated
+    // Yield & Harvest are computed over every plot. If any plot has a prediction, only those
+    // plots are used (unless "Include no prediction plots" is checked) — unchanged behavior.
+    const aggScope = resolveAggregatePlotScope(predictedPlotCount, includeNoPred);
+    aggUsingAllPlotsFallback = aggScope.isFallback;
+    let aggPlotCount = plotsWithPrediction.length;
+    if (aggScope.isFallback) {
+        totalAreaHaSum = allArea;
+        expHarvestTonSum = allExp;
+        reHarvestTonSum = allRe;
+        aggPlotCount = allPlotCount;
+    }
+    const collectedLabelEl = document.getElementById('agg-collected-harvest-scope');
+    if (collectedLabelEl) {
+        collectedLabelEl.textContent = aggScope.isFallback ? '(All plots — no predictions available)' : '(Predicted-available plots)';
+    }
+
     if (totalAreaHaSum > 0) {
         updateElement('agg-total-area', totalAreaHaSum.toFixed(2) + ' Ha');
-        updateElement('agg-plots-count', (plotsWithPrediction.length).toString());
+        updateElement('agg-plots-count', aggScope.isFallback
+            ? `${aggPlotCount} (no predictions — all plots)`
+            : aggPlotCount.toString());
 
         // Aggregate Harvest (Tonnes)
         updateElement('agg-exp-harvest', fmtSmart(expHarvestTonSum));
@@ -1382,14 +1422,8 @@ function showAllPlotsModal() {
     const searchInput = document.getElementById('table-search');
     if (searchInput) searchInput.value = '';
 
-    paginationState.filteredData = globalData.filter(row => {
-        if (!row._processed) return false;
-        if (showPredictionAvailable) {
-            return !row._processed.noPrediction;
-        } else {
-            return row._processed.noPrediction;
-        }
-    });
+    // Base table always lists ALL plots — no-prediction plots show '-' in the prediction columns
+    paginationState.filteredData = globalData.filter(row => !!row._processed);
 
     renderPaginatedTable();
 }
@@ -1440,20 +1474,11 @@ function filterTableData(query) {
     paginationState.currentPage = 1;
 
     if (!query.trim()) {
-        paginationState.filteredData = globalData.filter(row => {
-            if (!row._processed) return false;
-            if (showPredictionAvailable) {
-                return !row._processed.noPrediction;
-            } else {
-                return row._processed.noPrediction;
-            }
-        });
+        paginationState.filteredData = globalData.filter(row => !!row._processed);
     } else {
         paginationState.filteredData = globalData.filter(row => {
             if (!row._processed) return false;
             const d = row._processed;
-            if (showPredictionAvailable && d.noPrediction) return false;
-            if (!showPredictionAvailable && !d.noPrediction) return false;
             return d.name.toLowerCase().includes(paginationState.searchQuery) ||
                 (d.auditedArea && d.auditedArea.toString().includes(paginationState.searchQuery));
         });
@@ -1622,6 +1647,10 @@ function renderPaginatedTable() {
 
         // Extract both models comparison for prediction columns
         const modelComp = getPlotPredictionModelComparison(d, yieldUnit, harvestUnit);
+        const naCell = '<span style="color: var(--text-secondary);">-</span>';
+        const predCell = (tKey, bKey) => d.noPrediction
+            ? naCell
+            : renderModelCell(modelComp.tasumi[tKey], modelComp.biomass[bKey], modelComp.isTasumiLatest, modelComp.isBiomassLatest, modelComp.tasumi.date, modelComp.biomass.date);
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
@@ -1634,15 +1663,15 @@ function renderPaginatedTable() {
                 ${fmtSmart(h2Display)}<br>
                 <small><span class="${harvestReClass}">${harvestReArrow} ${Math.abs(harvestReDiff)}%</span></small>
             </td>
-            <td>${renderModelCell(modelComp.tasumi.harvestMin, modelComp.biomass.harvestMin, modelComp.isTasumiLatest, modelComp.isBiomassLatest, modelComp.tasumi.date, modelComp.biomass.date)}</td>
-            <td>${renderModelCell(modelComp.tasumi.harvestMax, modelComp.biomass.harvestMax, modelComp.isTasumiLatest, modelComp.isBiomassLatest, modelComp.tasumi.date, modelComp.biomass.date)}</td>
+            <td>${predCell('harvestMin', 'harvestMin')}</td>
+            <td>${predCell('harvestMax', 'harvestMax')}</td>
             <td>${fmtSmart(y1Display)}</td>
             <td>
                 ${fmtSmart(y2Display)}<br>
                 <small><span class="${yieldReClass}">${yieldReArrow} ${Math.abs(yieldReDiff)}%</span></small>
             </td>
-            <td>${renderModelCell(modelComp.tasumi.yieldMin, modelComp.biomass.yieldMin, modelComp.isTasumiLatest, modelComp.isBiomassLatest, modelComp.tasumi.date, modelComp.biomass.date)}</td>
-            <td>${renderModelCell(modelComp.tasumi.yieldMax, modelComp.biomass.yieldMax, modelComp.isTasumiLatest, modelComp.isBiomassLatest, modelComp.tasumi.date, modelComp.biomass.date)}</td>
+            <td>${predCell('yieldMin', 'yieldMin')}</td>
+            <td>${predCell('yieldMax', 'yieldMax')}</td>
             <td style="font-weight: 500; color: ${maxAttainableDisplay !== null ? 'var(--text-primary)' : 'var(--text-secondary)'};">
                 ${maxAttainableDisplay !== null ? fmtSmart(maxAttainableDisplay) : '-'}
             </td>
@@ -3099,6 +3128,7 @@ function clearAllDataUI() {
     plotsWithPrediction = [];
     plotsWithoutPrediction = [];
     plotsNotEnabled = [];
+    aggUsingAllPlotsFallback = false;
     plotsData = [];
     window.verifiedHealthPlots = [];
     userPrefs = {};
@@ -5507,7 +5537,7 @@ function renderHarvestStatus(processedPlots, tasks) {
         if (!plotTasks) return;
         
         const hasPrediction = !plot.noPrediction;
-        if (hasPrediction || includeNoPred) {
+        if (hasPrediction || includeNoPred || aggUsingAllPlotsFallback) {
             let plotAdded = false;
             let plotTotal = 0;
             let taskDetails = [];
@@ -6158,6 +6188,7 @@ window.resolveYieldPredictionRules = resolveYieldPredictionRules;
 window.sortYieldBaseData = sortYieldBaseData;
 window.getPlotPredictionModelComparison = getPlotPredictionModelComparison;
 window.renderModelCell = renderModelCell;
+window.resolveAggregatePlotScope = resolveAggregatePlotScope;
 
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
@@ -6173,6 +6204,7 @@ if (typeof module !== 'undefined' && module.exports) {
         sortYieldBaseData,
         getPlotPredictionModelComparison,
         renderModelCell,
+        resolveAggregatePlotScope,
         MASS_CONVERSIONS,
         AREA_CONVERSIONS
     };

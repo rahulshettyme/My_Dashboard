@@ -22,9 +22,16 @@
         same: '#64748b'
     };
 
+    // Which chart-point rule is active:
+    //   'rolling'      = the last maxPoints weeks, evenly spaced; each new week drops the oldest (since 2026-11-13)
+    //   'monthAnchors' = previous rule kept for an easy revert: month first-weeks + last recentWeeks never hidden
+    // To revert: set CHART_MODE = 'monthAnchors', maxPoints default back to 19, and un-hide the
+    // "Always show last weeks" input in index.html (see SOP Section 5).
+    const CHART_MODE = 'rolling';
+
     // Chart length settings (configurable: jira_config.json "chart", dashboard Edit / Trend Data,
-    // GitHub variables CHART_MAX_POINTS / CHART_RECENT_WEEKS). 19 = the point count on Oct 16, 2026.
-    const CHART_DEFAULTS = { maxPoints: 19, recentWeeks: 4 };
+    // GitHub variable CHART_MAX_POINTS). recentWeeks / CHART_RECENT_WEEKS only matter in 'monthAnchors' mode.
+    const CHART_DEFAULTS = { maxPoints: 25, recentWeeks: 4 };
     const CHART_LIMITS = { maxPoints: [4, 60], recentWeeks: [1, 12] };
 
     // Whole numbers within limits, and never fewer points than protected recent weeks
@@ -44,12 +51,25 @@
         return isNaN(d.getTime()) ? String(item.date).slice(0, 8) : `${d.getFullYear()}-${d.getMonth() + 1}`;
     };
 
-    // Which history weeks become chart points (history itself is never changed):
+    // Which history weeks become chart points (history itself is never changed). Dispatches on CHART_MODE.
+    function filterHistoryForChart(rawHistory, options) {
+        return CHART_MODE === 'monthAnchors'
+            ? filterHistoryMonthAnchors(rawHistory, options)
+            : filterHistoryRolling(rawHistory, options);
+    }
+
+    // ACTIVE rule: the last maxPoints weeks. Fewer weeks than that → all of them.
+    function filterHistoryRolling(rawHistory, options) {
+        const { maxPoints } = normalizeChartOptions(options);
+        return (rawHistory || []).slice(-maxPoints);
+    }
+
+    // PREVIOUS rule (2026-10-21 → 2026-11-13), kept intact for revert — not used while CHART_MODE = 'rolling':
     // - At most maxPoints points.
     // - Never hidden: the last recentWeeks weeks (incl. the newest) and the first week of every month.
     // - Over the limit: hide the oldest unprotected week first (in practice the previous month's week 2,
     //   then week 3, ...). If only protected weeks remain, hide the oldest point overall (left edge).
-    function filterHistoryForChart(rawHistory, options) {
+    function filterHistoryMonthAnchors(rawHistory, options) {
         const { maxPoints, recentWeeks } = normalizeChartOptions(options);
         const items = rawHistory || [];
         if (items.length <= maxPoints) return items.slice();
@@ -131,7 +151,7 @@
 
     // Chart.js config for one section's trend image. section: 'older' | 'recent'.
     // Highest = red and High = amber in both charts.
-    // chartOptions: { maxPoints, recentWeeks } — see filterHistoryForChart
+    // chartOptions: { maxPoints, recentWeeks } — see filterHistoryForChart (recentWeeks: monthAnchors mode only)
     function buildChartConfig(history, section, chartOptions) {
         const items = filterHistoryForChart(history, chartOptions);
         const key = section === 'older' ? 'older' : 'recent';
@@ -303,7 +323,7 @@
 </table>`;
     }
 
-    const api = { LAYOUT, CHART_DEFAULTS, CHART_LIMITS, normalizeChartOptions, COLORS, formatDateLabel, buildJiraUrl, buildJiraLinks, filterHistoryForChart, previousWeek, withCurrentWeek, buildChartConfig, buildEmailHtml };
+    const api = { LAYOUT, CHART_MODE, CHART_DEFAULTS, CHART_LIMITS, normalizeChartOptions, COLORS, formatDateLabel, buildJiraUrl, buildJiraLinks, filterHistoryForChart, filterHistoryRolling, filterHistoryMonthAnchors, previousWeek, withCurrentWeek, buildChartConfig, buildEmailHtml };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     else root.WebLegacyEmail = api;
 })(typeof window !== 'undefined' ? window : this);

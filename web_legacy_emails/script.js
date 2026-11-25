@@ -743,7 +743,9 @@ async function saveChartSettings() {
         el.chartMaxPoints.value = chart.maxPoints;
         el.chartRecentWeeks.value = chart.recentWeeks;
         renderDigest();
-        showToast(`✓ Chart: at most ${chart.maxPoints} points, last ${chart.recentWeeks} weeks always shown`);
+        showToast(window.WebLegacyEmail.CHART_MODE === 'monthAnchors'
+            ? `✓ Chart: at most ${chart.maxPoints} points, last ${chart.recentWeeks} weeks always shown`
+            : `✓ Chart: last ${chart.maxPoints} weeks`);
     } catch (e) {
         showToast('Error saving chart settings', true);
     }
